@@ -67,19 +67,22 @@ struct ProfileView: View {
                         ], spacing: 2) {
                             ForEach(viewModel.galleries) { gallery in
                                 NavigationLink(value: gallery.uri) {
-                                    if let photo = gallery.items?.first {
-                                        LazyImage(url: URL(string: photo.thumb)) { state in
-                                            if let image = state.image {
-                                                image
-                                                    .resizable()
-                                                    .aspectRatio(1, contentMode: .fill)
-                                            } else {
-                                                Rectangle().fill(.quaternary)
+                                    Color.clear
+                                        .aspectRatio(3.0/4.0, contentMode: .fit)
+                                        .overlay {
+                                            if let photo = gallery.items?.first {
+                                                LazyImage(url: URL(string: photo.thumb)) { state in
+                                                    if let image = state.image {
+                                                        image
+                                                            .resizable()
+                                                            .scaledToFill()
+                                                    } else {
+                                                        Rectangle().fill(.quaternary)
+                                                    }
+                                                }
                                             }
                                         }
-                                        .aspectRatio(1, contentMode: .fill)
                                         .clipped()
-                                    }
                                 }
                                 .onAppear {
                                     if gallery.id == viewModel.galleries.last?.id {
