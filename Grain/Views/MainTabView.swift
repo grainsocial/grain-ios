@@ -7,7 +7,6 @@ struct MainTabView: View {
     @State private var showCreate = false
     @State private var avatarTabImage: UIImage?
     @State private var feedRefreshID = UUID()
-
     var body: some View {
         TabView(selection: $selectedTab) {
             TabSection {

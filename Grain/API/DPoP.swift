@@ -4,7 +4,7 @@ import Security
 
 /// DPoP (Demonstration of Proof-of-Possession) proof generator using ES256.
 final class DPoP: Sendable {
-    nonisolated(unsafe) private let privateKey: P256.Signing.PrivateKey
+    private let privateKey: P256.Signing.PrivateKey
     let publicJWK: [String: String]
     let thumbprint: String
 

@@ -1,0 +1,221 @@
+import PhotosUI
+import SwiftUI
+
+struct StoryCreateView: View {
+    @Environment(AuthManager.self) private var auth
+    @Environment(\.dismiss) private var dismiss
+    let client: XRPCClient
+    var onCreated: (() -> Void)?
+
+    @State private var selectedPhoto: PhotosPickerItem?
+    @State private var photoData: Data?
+    @State private var previewImage: UIImage?
+    @State private var resolvedLocation: (h3: String, name: String, address: [String: AnyCodable]?)?
+    @State private var locationQuery = ""
+    @State private var locationSuggestions: [NominatimResult] = []
+    @State private var isSearchingLocation = false
+    @State private var locationSearchTask: Task<Void, Never>?
+    @State private var isUploading = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Photo") {
+                    PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                        if let previewImage {
+                            Image(uiImage: previewImage)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(maxHeight: 300)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                        } else {
+                            Label("Select Photo", systemImage: "camera")
+                        }
+                    }
+                }
+
+                Section("Location") {
+                    if let loc = resolvedLocation {
+                        HStack {
+                            Label(loc.name, systemImage: "mappin.and.ellipse")
+                                .font(.subheadline)
+                                .lineLimit(1)
+                            Spacer()
+                            Button {
+                                resolvedLocation = nil
+                                locationQuery = ""
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    } else {
+                        HStack {
+                            Image(systemName: "magnifyingglass")
+                                .foregroundStyle(.secondary)
+                            TextField("Search for a location...", text: $locationQuery)
+                                .textInputAutocapitalization(.never)
+                                .onChange(of: locationQuery) {
+                                    locationSearchTask?.cancel()
+                                    let query = locationQuery
+                                    locationSearchTask = Task {
+                                        try? await Task.sleep(for: .milliseconds(300))
+                                        guard !Task.isCancelled else { return }
+                                        await searchLocation(query: query)
+                                    }
+                                }
+                            if isSearchingLocation {
+                                ProgressView()
+                                    .controlSize(.small)
+                            }
+                        }
+
+                        ForEach(locationSuggestions, id: \.placeId) { result in
+                            Button {
+                                selectLocation(result)
+                            } label: {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(result.name)
+                                        .font(.subheadline)
+                                        .foregroundStyle(.primary)
+                                    if let context = result.context {
+                                        Text(context)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if let errorMessage {
+                    Section {
+                        Text(errorMessage)
+                            .foregroundStyle(.red)
+                            .font(.caption)
+                    }
+                }
+            }
+            .onChange(of: selectedPhoto) {
+                Task { await loadPhoto() }
+            }
+            .navigationTitle("New Story")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        Task { await createStory() }
+                    } label: {
+                        if isUploading {
+                            ProgressView()
+                        } else {
+                            Text("Post")
+                                .bold()
+                        }
+                    }
+                    .disabled(previewImage == nil || isUploading)
+                }
+            }
+        }
+    }
+
+    // MARK: - Photo Loading
+
+    private func loadPhoto() async {
+        guard let item = selectedPhoto,
+              let data = try? await item.loadTransferable(type: Data.self),
+              let image = UIImage(data: data) else {
+            photoData = nil
+            previewImage = nil
+            return
+        }
+        photoData = data
+        previewImage = image
+
+        resolvedLocation = nil
+        locationQuery = ""
+        locationSuggestions = []
+        if let gps = ImageProcessing.extractGPS(from: data) {
+            if let result = await LocationServices.reverseGeocode(latitude: gps.latitude, longitude: gps.longitude) {
+                selectLocation(result)
+            }
+        }
+    }
+
+    // MARK: - Create
+
+    private func createStory() async {
+        guard let authContext = auth.authContext(),
+              let repo = auth.userDID,
+              let previewImage else { return }
+
+        isUploading = true
+        errorMessage = nil
+
+        do {
+            let (resized, size) = ImageProcessing.resizeImage(previewImage, maxDimension: 2000, maxBytes: 900_000)
+            let response = try await client.uploadBlob(data: resized, mimeType: "image/jpeg", auth: authContext)
+
+            let blobDict: [String: AnyCodable] = [
+                "$type": AnyCodable(response.blob.type ?? "blob"),
+                "ref": AnyCodable(["$link": AnyCodable(response.blob.ref?.link ?? "")] as [String: AnyCodable]),
+                "mimeType": AnyCodable(response.blob.mimeType ?? "image/jpeg"),
+                "size": AnyCodable(response.blob.size ?? 0)
+            ]
+
+            var record: [String: AnyCodable] = [
+                "media": AnyCodable(blobDict),
+                "aspectRatio": AnyCodable([
+                    "width": AnyCodable(Int(size.width)),
+                    "height": AnyCodable(Int(size.height))
+                ] as [String: AnyCodable]),
+                "createdAt": AnyCodable(ISO8601DateFormatter().string(from: Date()))
+            ]
+
+            if let loc = resolvedLocation {
+                record["location"] = AnyCodable([
+                    "value": AnyCodable(loc.h3),
+                    "name": AnyCodable(loc.name)
+                ] as [String: AnyCodable])
+                if let addr = loc.address {
+                    record["address"] = AnyCodable(addr)
+                }
+            }
+
+            _ = try await client.createRecord(
+                collection: "social.grain.story",
+                repo: repo,
+                record: AnyCodable(record),
+                auth: authContext
+            )
+
+            onCreated?()
+            dismiss()
+        } catch let XRPCError.httpError(statusCode, body) {
+            let bodyStr = body.flatMap { String(data: $0, encoding: .utf8) } ?? "no body"
+            errorMessage = "HTTP \(statusCode): \(bodyStr)"
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        isUploading = false
+    }
+
+    // MARK: - Location
+
+    private func searchLocation(query: String) async {
+        isSearchingLocation = true
+        defer { isSearchingLocation = false }
+        locationSuggestions = await LocationServices.searchLocation(query: query)
+    }
+
+    private func selectLocation(_ result: NominatimResult) {
+        let h3 = LocationServices.latLonToH3(latitude: result.latitude, longitude: result.longitude)
+        resolvedLocation = (h3: h3, name: result.name, address: result.address)
+        locationQuery = ""
+        locationSuggestions = []
+    }
+}

@@ -5,11 +5,16 @@ struct FeedView: View {
     @State private var pinnedFeeds: [PinnedFeed] = PinnedFeed.defaults
     @State private var selectedFeedId: String = "recent"
     @State private var hasLoadedPreferences = false
+    @State private var storyViewModel: StoryStripViewModel
+    @State private var showStoryViewer = false
+    @State private var storyViewerStartIndex = 0
+    @State private var showStoryCreate = false
 
     let client: XRPCClient
 
     init(client: XRPCClient) {
         self.client = client
+        _storyViewModel = State(initialValue: StoryStripViewModel(client: client))
     }
 
     private var selectedFeedLabel: String {
@@ -21,7 +26,21 @@ struct FeedView: View {
             ZStack {
                 ForEach(pinnedFeeds) { feed in
                     if feed.id == selectedFeedId {
-                        FeedTabContent(client: client, pinnedFeed: feed, userDID: auth.userDID)
+                        FeedTabContent(
+                            client: client,
+                            pinnedFeed: feed,
+                            userDID: auth.userDID,
+                            storyAuthors: storyViewModel.authors,
+                            userAvatar: auth.userAvatar,
+                            onStoryAuthorTap: { _, index in
+                                storyViewerStartIndex = index
+                                showStoryViewer = true
+                            },
+                            onStoryCreateTap: { showStoryCreate = true },
+                            onRefresh: {
+                                await storyViewModel.load(auth: auth.authContext())
+                            }
+                        )
                     }
                 }
             }
@@ -57,6 +76,20 @@ struct FeedView: View {
             }
             .task {
                 await loadPreferences()
+                await storyViewModel.load(auth: auth.authContext())
+            }
+            .customFullScreenCover(isPresented: $showStoryViewer) {
+                StoryViewer(
+                    authors: storyViewModel.authors,
+                    startIndex: storyViewerStartIndex,
+                    client: client,
+                    onDismiss: { showStoryViewer = false }
+                )
+            }
+            .sheet(isPresented: $showStoryCreate) {
+                StoryCreateView(client: client) {
+                    Task { await storyViewModel.load(auth: auth.authContext()) }
+                }
             }
         }
     }
@@ -84,15 +117,35 @@ private struct FeedTabContent: View {
     @State private var selectedProfileDid: String?
     @State private var selectedHashtag: String?
     let client: XRPCClient
+    let storyAuthors: [GrainStoryAuthor]
+    let userAvatar: String?
+    let onStoryAuthorTap: (GrainStoryAuthor, Int) -> Void
+    let onStoryCreateTap: () -> Void
+    let onRefresh: (@Sendable () async -> Void)?
 
-    init(client: XRPCClient, pinnedFeed: PinnedFeed, userDID: String? = nil) {
+    init(client: XRPCClient, pinnedFeed: PinnedFeed, userDID: String? = nil, storyAuthors: [GrainStoryAuthor] = [], userAvatar: String? = nil, onStoryAuthorTap: @escaping (GrainStoryAuthor, Int) -> Void = { _, _ in }, onStoryCreateTap: @escaping () -> Void = {}, onRefresh: (@Sendable () async -> Void)? = nil) {
         self.client = client
+        self.storyAuthors = storyAuthors
+        self.userAvatar = userAvatar
+        self.onStoryAuthorTap = onStoryAuthorTap
+        self.onStoryCreateTap = onStoryCreateTap
+        self.onRefresh = onRefresh
         _viewModel = State(initialValue: FeedViewModel(client: client, pinnedFeed: pinnedFeed, userDID: userDID))
     }
 
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
+                if !storyAuthors.isEmpty {
+                    StoryStripView(
+                        authors: storyAuthors,
+                        userAvatar: userAvatar,
+                        onAuthorTap: onStoryAuthorTap,
+                        onCreateTap: onStoryCreateTap
+                    )
+                    Divider()
+                }
+
                 ForEach($viewModel.galleries) { $gallery in
                     GalleryCardView(gallery: $gallery, client: client, onNavigate: {
                         selectedUri = gallery.uri
@@ -117,7 +170,9 @@ private struct FeedTabContent: View {
             }
         }
         .refreshable {
-            await viewModel.loadInitial(auth: auth.authContext())
+            async let feedRefresh: () = viewModel.loadInitial(auth: auth.authContext())
+            async let storyRefresh: ()? = onRefresh?()
+            _ = await (feedRefresh, storyRefresh)
         }
         .navigationDestination(item: $selectedUri) { uri in
             GalleryDetailView(client: client, galleryUri: uri)

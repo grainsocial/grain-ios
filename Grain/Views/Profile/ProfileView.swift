@@ -3,6 +3,7 @@ import NukeUI
 
 struct ProfileView: View {
     @Environment(AuthManager.self) private var auth
+    @State private var showStoryViewer = false
     @State private var viewModel: ProfileDetailViewModel
     @State private var selectedGalleryUri: String?
     @State private var selectedProfileDid: String?
@@ -34,8 +35,15 @@ struct ProfileView: View {
                     VStack(spacing: 16) {
                         // Avatar + name with glass header
                         VStack(spacing: 8) {
-                            AvatarView(url: profile.avatar, size: 80)
-                                .liquidGlassCircle()
+                            StoryRingView(hasStory: !viewModel.stories.isEmpty, size: 80) {
+                                AvatarView(url: profile.avatar, size: 80)
+                                    .liquidGlassCircle()
+                            }
+                            .onTapGesture {
+                                if !viewModel.stories.isEmpty {
+                                    showStoryViewer = true
+                                }
+                            }
 
                             Text(profile.displayName ?? profile.handle)
                                 .font(.title2.bold())
@@ -142,6 +150,20 @@ struct ProfileView: View {
             }
             .navigationDestination(item: $selectedHashtag) { tag in
                 HashtagFeedView(client: client, tag: tag)
+            }
+            .customFullScreenCover(isPresented: $showStoryViewer) {
+                if let profile = viewModel.profile {
+                    StoryViewer(
+                        authors: [GrainStoryAuthor(
+                            profile: GrainProfile(cid: "", did: did, handle: profile.handle, displayName: profile.displayName, avatar: profile.avatar),
+                            storyCount: viewModel.stories.count,
+                            latestAt: viewModel.stories.first?.createdAt ?? ""
+                        )],
+                        startIndex: 0,
+                        client: client,
+                        onDismiss: { showStoryViewer = false }
+                    )
+                }
             }
             .background(Color(.systemBackground))
             .refreshable {
