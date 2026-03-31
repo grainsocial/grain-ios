@@ -1,3 +1,4 @@
+import NukeUI
 import SwiftUI
 
 struct LoginView: View {
@@ -5,70 +6,219 @@ struct LoginView: View {
     @State private var handle = ""
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var suggestions: [ActorSuggestion] = []
+    @State private var searchTask: Task<Void, Never>?
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 32) {
-                Spacer()
+        GeometryReader { geo in
+            let fullHeight = geo.size.height + geo.safeAreaInsets.top + geo.safeAreaInsets.bottom
+            ZStack {
+                Image("login-bg")
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: geo.size.width, height: fullHeight)
+                    .clipped()
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
 
-                VStack(spacing: 8) {
-                    Text("Grain")
-                        .font(.largeTitle.bold())
-                    Text("Photo sharing on AT Protocol")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
+                Color.black.opacity(0.4)
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
 
-                // Login card with glass effect
-                VStack(spacing: 16) {
-                    TextField("Enter your handle", text: $handle)
-                        .textFieldStyle(.roundedBorder)
-                        .textContentType(.username)
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
+                VStack(spacing: 0) {
+                    Spacer()
 
-                    Button {
-                        Task { await login() }
-                    } label: {
-                        if isLoading {
-                            ProgressView()
-                                .frame(maxWidth: .infinity)
-                        } else {
-                            Text("Sign In")
-                                .frame(maxWidth: .infinity)
+                    // Logo
+                    Text("grain")
+                        .font(.custom("Syne", size: 44).weight(.heavy))
+                        .foregroundStyle(.white)
+                        .padding(.bottom, 40)
+
+                    // Login card
+                    VStack(spacing: 16) {
+                        // Handle input
+                        HStack(spacing: 10) {
+                            Image(systemName: "at")
+                                .font(.body.weight(.medium))
+                                .foregroundStyle(.white.opacity(0.5))
+
+                            TextField("your-handle.bsky.social", text: $handle)
+                                .foregroundStyle(.white)
+                                .textContentType(.username)
+                                .autocorrectionDisabled()
+                                .textInputAutocapitalization(.never)
+                                .submitLabel(.go)
+                                .onSubmit {
+                                    if !handle.isEmpty { Task { await login() } }
+                                }
+                                .onChange(of: handle) {
+                                    searchTask?.cancel()
+                                    let query = handle
+                                    searchTask = Task {
+                                        try? await Task.sleep(for: .milliseconds(200))
+                                        guard !Task.isCancelled else { return }
+                                        await searchActors(query: query)
+                                    }
+                                }
                         }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(handle.isEmpty || isLoading)
-                }
-                .padding(24)
-                .liquidGlass()
-                .padding(.horizontal)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 14)
+                        .background(.white.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(.white.opacity(0.25), lineWidth: 1)
+                        )
 
-                if let errorMessage {
-                    ScrollView {
+                        // Suggestions
+                        if !suggestions.isEmpty {
+                            VStack(spacing: 0) {
+                                ForEach(suggestions) { actor in
+                                    Button {
+                                        handle = actor.handle
+                                        suggestions = []
+                                        Task { await login() }
+                                    } label: {
+                                        HStack(spacing: 10) {
+                                            if let avatar = actor.avatar, let url = URL(string: avatar) {
+                                                LazyImage(url: url) { state in
+                                                    if let image = state.image {
+                                                        image.resizable().scaledToFill()
+                                                    } else {
+                                                        Circle().fill(.white.opacity(0.2))
+                                                    }
+                                                }
+                                                .frame(width: 32, height: 32)
+                                                .clipShape(Circle())
+                                            } else {
+                                                Circle()
+                                                    .fill(.white.opacity(0.2))
+                                                    .frame(width: 32, height: 32)
+                                            }
+
+                                            VStack(alignment: .leading, spacing: 1) {
+                                                if let displayName = actor.displayName, !displayName.isEmpty {
+                                                    Text(displayName)
+                                                        .font(.subheadline.weight(.medium))
+                                                        .foregroundStyle(.white)
+                                                        .lineLimit(1)
+                                                }
+                                                Text("@\(actor.handle)")
+                                                    .font(.caption)
+                                                    .foregroundStyle(.white.opacity(0.6))
+                                                    .lineLimit(1)
+                                            }
+
+                                            Spacer()
+                                        }
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 8)
+                                        .contentShape(Rectangle())
+                                    }
+                                    .buttonStyle(.plain)
+
+                                    if actor.id != suggestions.last?.id {
+                                        Divider()
+                                            .background(.white.opacity(0.15))
+                                            .padding(.leading, 58)
+                                    }
+                                }
+                            }
+                            .padding(.vertical, 4)
+                            .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(.white.opacity(0.2), lineWidth: 1)
+                            )
+                        }
+
+                        // Sign in button
+                        Button {
+                            Task { await login() }
+                        } label: {
+                            Group {
+                                if isLoading {
+                                    ProgressView()
+                                        .tint(.black)
+                                } else {
+                                    Text("Sign In")
+                                        .font(.body.weight(.semibold))
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                        }
+                        .background(.white, in: RoundedRectangle(cornerRadius: 12))
+                        .foregroundStyle(.black)
+                        .disabled(handle.isEmpty || isLoading)
+                        .opacity(handle.isEmpty ? 0.4 : 1)
+                    }
+                    .padding(24)
+
+                    if let errorMessage {
                         Text(errorMessage)
-                            .font(.caption.monospaced())
+                            .font(.caption)
                             .foregroundStyle(.red)
-                            .textSelection(.enabled)
-                            .padding(.horizontal)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 24)
                     }
-                    .frame(maxHeight: 200)
-                }
 
-                Spacer()
+                    Spacer()
+                        .frame(height: 60)
+                }
             }
         }
+        .ignoresSafeArea(.keyboard)
     }
 
     private func login() async {
         isLoading = true
         errorMessage = nil
+        suggestions = []
         do {
             try await auth.login(handle: handle)
+        } catch let XRPCError.httpError(statusCode, body) {
+            let bodyStr = body.flatMap { String(data: $0, encoding: .utf8) } ?? "no body"
+            errorMessage = "HTTP \(statusCode): \(bodyStr)"
         } catch {
             errorMessage = String(describing: error)
         }
         isLoading = false
     }
+
+    private func searchActors(query: String) async {
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        guard trimmed.count >= 2 else {
+            suggestions = []
+            return
+        }
+
+        var components = URLComponents(string: "https://public.api.bsky.app/xrpc/app.bsky.actor.searchActorsTypeahead")!
+        components.queryItems = [
+            URLQueryItem(name: "q", value: trimmed),
+            URLQueryItem(name: "limit", value: "5"),
+        ]
+        guard let url = components.url else { return }
+
+        guard let (data, _) = try? await URLSession.shared.data(from: url),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let actors = json["actors"] as? [[String: Any]] else {
+            return
+        }
+
+        suggestions = actors.compactMap { dict in
+            guard let handle = dict["handle"] as? String else { return nil }
+            return ActorSuggestion(
+                handle: handle,
+                displayName: dict["displayName"] as? String,
+                avatar: dict["avatar"] as? String
+            )
+        }
+    }
+}
+
+private struct ActorSuggestion: Identifiable {
+    let handle: String
+    let displayName: String?
+    let avatar: String?
+    var id: String { handle }
 }

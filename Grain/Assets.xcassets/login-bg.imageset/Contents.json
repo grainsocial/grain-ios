@@ -1,0 +1,18 @@
+{
+  "images" : [
+    {
+      "filename" : "login-bg.jpg",
+      "idiom" : "universal",
+      "scale" : "1x"
+    },
+    {
+      "filename" : "login-bg@2x.jpg",
+      "idiom" : "universal",
+      "scale" : "2x"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}
