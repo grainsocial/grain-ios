@@ -6,6 +6,7 @@ struct EditProfileView: View {
     @Environment(AuthManager.self) private var auth
     @Environment(\.dismiss) private var dismiss
     let client: XRPCClient
+    var onSaved: (() -> Void)?
 
     @State private var displayName = ""
     @State private var bio = ""
@@ -216,6 +217,7 @@ struct EditProfileView: View {
                 auth: authContext
             )
 
+            onSaved?()
             dismiss()
         } catch {
             errorMessage = "Failed to save: \(error.localizedDescription)"

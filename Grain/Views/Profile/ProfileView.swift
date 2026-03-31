@@ -7,7 +7,6 @@ struct ProfileView: View {
     @State private var selectedGalleryUri: String?
     @State private var selectedProfileDid: String?
     @State private var selectedHashtag: String?
-    @State private var hasAppeared = false
     let client: XRPCClient
     let did: String
     var isRoot = false
@@ -126,7 +125,9 @@ struct ProfileView: View {
                 if did == auth.userDID {
                     ToolbarItem(placement: .topBarTrailing) {
                         NavigationLink {
-                            SettingsView(client: client)
+                            SettingsView(client: client, onProfileEdited: {
+                                Task { await viewModel.load(did: did, viewer: auth.userDID, auth: auth.authContext()) }
+                            })
                         } label: {
                             Image(systemName: "gearshape")
                         }
@@ -144,16 +145,10 @@ struct ProfileView: View {
             }
             .background(Color(.systemBackground))
             .refreshable {
-                await viewModel.load(did: did, auth: auth.authContext())
+                await viewModel.load(did: did, viewer: auth.userDID, auth: auth.authContext())
             }
             .task {
-                await viewModel.load(did: did, auth: auth.authContext())
-            }
-            .onAppear {
-                if hasAppeared {
-                    Task { await viewModel.load(did: did, auth: auth.authContext()) }
-                }
-                hasAppeared = true
+                await viewModel.load(did: did, viewer: auth.userDID, auth: auth.authContext())
             }
     }
 }

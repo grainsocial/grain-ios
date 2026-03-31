@@ -65,8 +65,10 @@ struct ProfileSearchResult: Codable, Sendable, Identifiable {
 // MARK: - Convenience Extensions
 
 extension XRPCClient {
-    func getActorProfile(actor: String, auth: AuthContext? = nil) async throws -> GrainProfileDetailed {
-        try await query("social.grain.unspecced.getActorProfile", params: ["actor": actor], auth: auth, as: GrainProfileDetailed.self)
+    func getActorProfile(actor: String, viewer: String? = nil, auth: AuthContext? = nil) async throws -> GrainProfileDetailed {
+        var params = ["actor": actor]
+        if let viewer { params["viewer"] = viewer }
+        return try await query("social.grain.unspecced.getActorProfile", params: params, auth: auth, as: GrainProfileDetailed.self)
     }
 
     func getFollowers(actor: String, limit: Int = 50, cursor: String? = nil, auth: AuthContext? = nil) async throws -> GetFollowersResponse {

@@ -4,6 +4,7 @@ struct SettingsView: View {
     @Environment(AuthManager.self) private var auth
     @Environment(\.dismiss) private var dismiss
     let client: XRPCClient
+    var onProfileEdited: (() -> Void)?
 
     var body: some View {
         List {
@@ -19,7 +20,7 @@ struct SettingsView: View {
 
             Section {
                 NavigationLink("Edit Profile") {
-                    EditProfileView(client: client)
+                    EditProfileView(client: client, onSaved: onProfileEdited)
                 }
             }
 

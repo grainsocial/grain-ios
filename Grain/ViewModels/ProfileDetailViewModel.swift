@@ -17,12 +17,12 @@ final class ProfileDetailViewModel {
         self.client = client
     }
 
-    func load(did: String, auth: AuthContext? = nil) async {
+    func load(did: String, viewer: String? = nil, auth: AuthContext? = nil) async {
         isLoading = true
         error = nil
 
         do {
-            async let profileResponse = client.getActorProfile(actor: did, auth: auth)
+            async let profileResponse = client.getActorProfile(actor: did, viewer: viewer, auth: auth)
             async let feedResponse = client.getFeed(feed: "actor", actor: did, auth: auth)
             async let storiesResponse = client.getStories(actor: did, auth: auth)
 
