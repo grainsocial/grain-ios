@@ -27,7 +27,17 @@ struct DeleteGalleryInput: Codable, Sendable {
     let rkey: String
 }
 
+struct GetRecordResponse: Codable, Sendable {
+    var uri: String?
+    var cid: String?
+    var record: AnyCodable?
+}
+
 extension XRPCClient {
+    func getRecord(uri: String, auth: AuthContext? = nil) async throws -> GetRecordResponse {
+        try await query("dev.hatk.getRecord", params: ["uri": uri], auth: auth, as: GetRecordResponse.self)
+    }
+
     func createRecord(collection: String, repo: String, record: AnyCodable, auth: AuthContext? = nil) async throws -> CreateRecordResponse {
         try await procedure("dev.hatk.createRecord", input: CreateRecordInput(collection: collection, repo: repo, record: record), auth: auth, as: CreateRecordResponse.self)
     }

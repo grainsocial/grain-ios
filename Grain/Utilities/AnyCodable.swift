@@ -49,6 +49,11 @@ struct AnyCodable: Codable, Sendable {
         }
     }
 
+    var dictValue: [String: AnyCodable]? {
+        if case .dict(let d) = storage { return d }
+        return nil
+    }
+
     func encode(to encoder: Encoder) throws {
         var container = encoder.singleValueContainer()
         switch storage {

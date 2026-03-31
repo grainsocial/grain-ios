@@ -24,6 +24,9 @@ struct CreateGalleryView: View {
     let client: XRPCClient
     var onCreated: (() -> Void)?
 
+    private let maxTitle = 100
+    private let maxDescription = 1000
+
     var body: some View {
         NavigationStack {
             Form {
@@ -44,9 +47,22 @@ struct CreateGalleryView: View {
                 }
 
                 Section("Details") {
-                    TextField("Title", text: $title)
-                    TextField("Description (optional)", text: $description, axis: .vertical)
-                        .lineLimit(3...6)
+                    VStack(alignment: .leading, spacing: 4) {
+                        TextField("Add a title...", text: $title)
+                        Text("\(title.count)/\(maxTitle)")
+                            .font(.caption2)
+                            .foregroundStyle(title.count > maxTitle ? .red : .secondary)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        TextField("Add a description. Supports @mentions, #hashtags, and links.", text: $description, axis: .vertical)
+                            .lineLimit(3...6)
+                        Text("\(description.count)/\(maxDescription)")
+                            .font(.caption2)
+                            .foregroundStyle(description.count > maxDescription ? .red : .secondary)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                    }
                 }
 
                 Section("Location") {
@@ -128,7 +144,7 @@ struct CreateGalleryView: View {
                                 .bold()
                         }
                     }
-                    .disabled(title.isEmpty || selectedPhotos.isEmpty || isUploading)
+                    .disabled(title.isEmpty || selectedPhotos.isEmpty || isUploading || title.count > maxTitle || description.count > maxDescription)
                 }
             }
         }
