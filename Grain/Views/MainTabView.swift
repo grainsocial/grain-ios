@@ -50,6 +50,7 @@ struct MainTabView: View {
         }
         .tabBarMinimizeBehavior(.onScrollDown)
         .task {
+            client = auth.makeClient()
             await auth.fetchAvatarIfNeeded()
             if let uiImage = auth.avatarImage {
                 avatarTabImage = circularAvatar(uiImage, size: 26)

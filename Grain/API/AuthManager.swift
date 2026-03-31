@@ -18,6 +18,7 @@ final class AuthManager {
     private(set) var dpop: DPoP?
     private var codeVerifier: String?
     private var client: XRPCClient?
+    private var refreshTask: Task<Void, Error>?
 
     #if DEBUG
     static let serverURL = URL(string: "http://127.0.0.1:3000")!
@@ -126,8 +127,21 @@ final class AuthManager {
         await fetchAndStoreAvatar()
     }
 
-    /// Refresh the access token using the refresh token.
+    /// Refresh the access token using the refresh token. Coalesces concurrent calls.
     func refresh() async throws {
+        if let existing = refreshTask {
+            return try await existing.value
+        }
+        let task = Task { @MainActor [weak self] in
+            guard let self else { throw XRPCError.unauthorized }
+            defer { self.refreshTask = nil }
+            try await self.performRefresh()
+        }
+        refreshTask = task
+        try await task.value
+    }
+
+    private func performRefresh() async throws {
         guard let dpop, let refreshToken = TokenStorage.refreshToken else {
             throw XRPCError.unauthorized
         }
@@ -147,7 +161,30 @@ final class AuthManager {
         let proof = try await dpop.createProof(httpMethod: "POST", url: tokenURL)
         request.setValue(proof, forHTTPHeaderField: "DPoP")
 
-        let (data, _) = try await URLSession.shared.data(for: request)
+        var (data, response) = try await URLSession.shared.data(for: request)
+
+        // Handle DPoP nonce requirement
+        if let httpResp = response as? HTTPURLResponse,
+           httpResp.statusCode == 400,
+           let nonce = httpResp.value(forHTTPHeaderField: "DPoP-Nonce") {
+            let retryProof = try await dpop.createProof(httpMethod: "POST", url: tokenURL, nonce: nonce)
+            request.setValue(retryProof, forHTTPHeaderField: "DPoP")
+            (data, response) = try await URLSession.shared.data(for: request)
+        }
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw XRPCError.unauthorized
+        }
+
+        guard (200...299).contains(httpResponse.statusCode) else {
+            let bodyStr = String(data: data, encoding: .utf8) ?? "no body"
+            logger.error("Token refresh failed (\(httpResponse.statusCode)): \(bodyStr)")
+            if httpResponse.statusCode == 401 {
+                logout()
+            }
+            throw XRPCError.unauthorized
+        }
+
         let tokenResponse = try JSONDecoder().decode(TokenResponse.self, from: data)
         storeTokens(tokenResponse)
     }
@@ -166,6 +203,14 @@ final class AuthManager {
     func authContext() -> AuthContext? {
         guard let dpop, let token = TokenStorage.accessToken else { return nil }
         return AuthContext(accessToken: token, dpop: dpop)
+    }
+
+    /// Create an XRPCClient with automatic token refresh on 401.
+    func makeClient() -> XRPCClient {
+        XRPCClient(baseURL: Self.serverURL) { [weak self] in
+            try await self?.refresh()
+            return await self?.authContext()
+        }
     }
 
     // MARK: - Private

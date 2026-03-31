@@ -22,18 +22,19 @@ enum XRPCError: Error, LocalizedError {
 }
 
 /// XRPC client for communicating with the hatk server.
-@Observable
 final class XRPCClient: Sendable {
     let baseURL: URL
     private let session: URLSession
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
+    private let onUnauthorized: (@Sendable () async throws -> AuthContext?)?
 
-    init(baseURL: URL, session: URLSession = .shared) {
+    init(baseURL: URL, session: URLSession = .shared, onUnauthorized: (@Sendable () async throws -> AuthContext?)? = nil) {
         self.baseURL = baseURL
         self.session = session
         self.decoder = JSONDecoder()
         self.encoder = JSONEncoder()
+        self.onUnauthorized = onUnauthorized
     }
 
     /// Execute an XRPC query (GET request).
@@ -121,6 +122,18 @@ final class XRPCClient: Sendable {
             var retryReq = request
             try await applyAuth(&retryReq, auth: updatedAuth)
             return try await execute(retryReq, as: type)
+        } catch XRPCError.unauthorized where retryCount < 1 {
+            if let onUnauthorized {
+                do {
+                    if let newAuth = try await onUnauthorized() {
+                        logger.info("Token refreshed, retrying request")
+                        return try await executeWithRetry(request, auth: newAuth, as: type, retryCount: retryCount + 1)
+                    }
+                } catch {
+                    logger.error("Token refresh failed: \(error)")
+                }
+            }
+            throw XRPCError.unauthorized
         }
     }
 
@@ -167,6 +180,18 @@ final class XRPCClient: Sendable {
                     throw XRPCError.httpError(statusCode: retryHttp.statusCode, body: nil)
                 }
                 return
+            }
+            // Try token refresh
+            if retryCount < 1, let onUnauthorized {
+                do {
+                    if let newAuth = try await onUnauthorized() {
+                        logger.info("Token refreshed, retrying void request")
+                        try await executeVoidWithRetry(request, auth: newAuth, retryCount: retryCount + 1)
+                        return
+                    }
+                } catch {
+                    logger.error("Token refresh failed: \(error)")
+                }
             }
             throw XRPCError.unauthorized
         }

@@ -4,10 +4,11 @@ import NukeUI
 struct ProfileView: View {
     @Environment(AuthManager.self) private var auth
     @State private var viewModel: ProfileDetailViewModel
-
+    let client: XRPCClient
     let did: String
 
     init(client: XRPCClient, did: String) {
+        self.client = client
         _viewModel = State(initialValue: ProfileDetailViewModel(client: client))
         self.did = did
     }
@@ -111,7 +112,7 @@ struct ProfileView: View {
                 }
             }
             .navigationDestination(for: String.self) { uri in
-                GalleryDetailView(client: XRPCClient(baseURL: AuthManager.serverURL), galleryUri: uri)
+                GalleryDetailView(client: client, galleryUri: uri)
             }
             .task {
                 await viewModel.load(did: did, auth: auth.authContext())
