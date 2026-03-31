@@ -25,8 +25,10 @@ struct LoginView: View {
                     .ignoresSafeArea()
                     .allowsHitTesting(false)
 
-                VStack(spacing: 0) {
+                ScrollView {
                     Spacer()
+                        .frame(minHeight: 100)
+                        .frame(maxHeight: .infinity)
 
                     // Logo
                     Text("grain")
@@ -165,10 +167,12 @@ struct LoginView: View {
                     Spacer()
                         .frame(height: 60)
                 }
+                .frame(minHeight: geo.size.height)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .scrollIndicators(.hidden)
             }
         }
-        .ignoresSafeArea(.keyboard)
-    }
 
     private func login() async {
         isLoading = true
