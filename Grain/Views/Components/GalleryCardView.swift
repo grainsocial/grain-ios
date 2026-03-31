@@ -70,13 +70,25 @@ struct GalleryCardView: View {
                         }
                         .tabViewStyle(.page(indexDisplayMode: .never))
 
-                    // Page indicator
+                    // Page indicator (abbreviated like web — max 5 visible dots)
                     if photos.count > 1 {
-                        HStack(spacing: 6) {
-                            ForEach(0..<photos.count, id: \.self) { index in
+                        HStack(spacing: 5) {
+                            let total = photos.count
+                            let maxVisible = 5
+                            let start = total <= maxVisible ? 0 : min(max(currentPage - 2, 0), total - maxVisible)
+                            let end = total <= maxVisible ? total : start + maxVisible
+
+                            ForEach(start..<end, id: \.self) { index in
+                                let distance = abs(index - currentPage)
+                                let currentIsLandscape = photos[currentPage].aspectRatio.ratio >= 1
+                                let dotColor: Color = hasPortrait && currentIsLandscape ? .secondary : .white
                                 Circle()
-                                    .fill(index == currentPage ? Color.white : Color.white.opacity(0.5))
-                                    .frame(width: 6, height: 6)
+                                    .fill(dotColor.opacity(index == currentPage ? 1.0 : distance == 1 ? 0.5 : distance == 2 ? 0.3 : 0.2))
+                                    .frame(
+                                        width: distance <= 1 ? 6 : distance == 2 ? 4 : 3,
+                                        height: distance <= 1 ? 6 : distance == 2 ? 4 : 3
+                                    )
+                                    .animation(.easeInOut(duration: 0.2), value: currentPage)
                             }
                         }
                         .padding(.vertical, 8)
