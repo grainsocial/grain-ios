@@ -273,6 +273,10 @@ final class AuthManager {
         }
     }
 
+    func refreshAvatar() async {
+        await fetchAndStoreAvatar()
+    }
+
     private func fetchAndStoreAvatar() async {
         guard let did = userDID else { return }
         let client = XRPCClient(baseURL: Self.serverURL)

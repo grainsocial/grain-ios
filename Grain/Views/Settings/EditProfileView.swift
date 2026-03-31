@@ -217,6 +217,7 @@ struct EditProfileView: View {
                 auth: authContext
             )
 
+            await auth.refreshAvatar()
             onSaved?()
             dismiss()
         } catch {
