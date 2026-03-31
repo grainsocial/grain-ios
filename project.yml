@@ -18,6 +18,9 @@ packages:
   KeychainAccess:
     url: https://github.com/kishikawakatsumi/KeychainAccess
     from: "4.2.2"
+  SwiftyH3:
+    url: https://github.com/pawelmajcher/SwiftyH3
+    from: "0.5.0"
 
 targets:
   Grain:
@@ -37,6 +40,7 @@ targets:
       - package: Nuke
         product: NukeUI
       - package: KeychainAccess
+      - package: SwiftyH3
     info:
       path: Grain/Info.plist
       properties:

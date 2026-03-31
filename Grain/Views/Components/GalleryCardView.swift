@@ -24,13 +24,21 @@ struct GalleryCardView: View {
                 AvatarView(url: gallery.creator.avatar, size: 32)
 
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(gallery.creator.displayName ?? gallery.creator.handle)
-                        .font(.subheadline.weight(.semibold))
-                        .lineLimit(1)
-                    Text("@\(gallery.creator.handle)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                    HStack(spacing: 4) {
+                        Text(gallery.creator.displayName ?? gallery.creator.handle)
+                            .font(.subheadline.weight(.semibold))
+                            .lineLimit(1)
+                        Text("@\(gallery.creator.handle)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    if let locationName = gallery.location?.name ?? gallery.address?.locality {
+                        Text(locationName)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                 }
 
                 Spacer()
@@ -43,7 +51,8 @@ struct GalleryCardView: View {
             // Photo carousel — tappable for navigation
             if let photos = gallery.items, !photos.isEmpty {
                 let hasPortrait = photos.contains { $0.aspectRatio.ratio < 1 }
-                let carouselRatio = hasPortrait
+                let hasMixedRatios = Set(photos.map { Int($0.aspectRatio.ratio * 100) }).count > 1
+                let carouselRatio = hasMixedRatios
                     ? max(photos.map(\.aspectRatio.ratio).min() ?? 1, 0.56)
                     : photos[currentPage].aspectRatio.ratio
 

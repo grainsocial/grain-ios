@@ -6,12 +6,14 @@ struct MainTabView: View {
     @State private var client = XRPCClient(baseURL: AuthManager.serverURL)
     @State private var showCreate = false
     @State private var avatarTabImage: UIImage?
+    @State private var feedRefreshID = UUID()
 
     var body: some View {
         TabView(selection: $selectedTab) {
             TabSection {
                 Tab("Feed", systemImage: "photo.on.rectangle", value: 0) {
                     FeedView(client: client)
+                        .id(feedRefreshID)
                 }
 
                 Tab("Search", systemImage: "magnifyingglass", value: 1) {
@@ -66,7 +68,10 @@ struct MainTabView: View {
         }
         .sheet(isPresented: $showCreate) {
             NavigationStack {
-                CreateGalleryView(client: client)
+                CreateGalleryView(client: client) {
+                    selectedTab = 0
+                    feedRefreshID = UUID()
+                }
             }
         }
     }
