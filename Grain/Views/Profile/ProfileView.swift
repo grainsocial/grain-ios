@@ -4,6 +4,9 @@ import NukeUI
 struct ProfileView: View {
     @Environment(AuthManager.self) private var auth
     @State private var viewModel: ProfileDetailViewModel
+    @State private var selectedGalleryUri: String?
+    @State private var selectedProfileDid: String?
+    @State private var selectedHashtag: String?
     let client: XRPCClient
     let did: String
     var isRoot = false
@@ -66,9 +69,13 @@ struct ProfileView: View {
                         }
 
                         if let description = profile.description, !description.isEmpty {
-                            Text(description)
-                                .font(.body)
-                                .padding(.horizontal)
+                            RichTextView(
+                                text: description,
+                                font: .body,
+                                onMentionTap: { did in selectedProfileDid = did },
+                                onHashtagTap: { tag in selectedHashtag = tag }
+                            )
+                            .padding(.horizontal)
                         }
 
                         // Gallery grid
@@ -78,7 +85,9 @@ struct ProfileView: View {
                             GridItem(.flexible(), spacing: 2)
                         ], spacing: 2) {
                             ForEach(viewModel.galleries) { gallery in
-                                NavigationLink(value: gallery.uri) {
+                                Button {
+                                    selectedGalleryUri = gallery.uri
+                                } label: {
                                     Color.clear
                                         .aspectRatio(3.0/4.0, contentMode: .fit)
                                         .overlay {
@@ -96,6 +105,7 @@ struct ProfileView: View {
                                         }
                                         .clipped()
                                 }
+                                .buttonStyle(.plain)
                                 .onAppear {
                                     if gallery.id == viewModel.galleries.last?.id {
                                         Task { await viewModel.loadMoreGalleries(did: did, auth: auth.authContext()) }
@@ -122,8 +132,14 @@ struct ProfileView: View {
                     }
                 }
             }
-            .navigationDestination(for: String.self) { uri in
+            .navigationDestination(item: $selectedGalleryUri) { uri in
                 GalleryDetailView(client: client, galleryUri: uri)
+            }
+            .navigationDestination(item: $selectedProfileDid) { did in
+                ProfileView(client: client, did: did)
+            }
+            .navigationDestination(item: $selectedHashtag) { tag in
+                HashtagFeedView(client: client, tag: tag)
             }
             .task {
                 await viewModel.load(did: did, auth: auth.authContext())

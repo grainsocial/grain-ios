@@ -5,6 +5,7 @@ struct GalleryDetailView: View {
     @Environment(AuthManager.self) private var auth
     @State private var viewModel: GalleryDetailViewModel
     @State private var selectedProfileDid: String?
+    @State private var selectedHashtag: String?
     @State private var commentText = ""
     @State private var isPostingComment = false
     @State private var replyingTo: GrainComment?
@@ -41,6 +42,9 @@ struct GalleryDetailView: View {
                         client: client,
                         onProfileTap: { did in
                             selectedProfileDid = did
+                        },
+                        onHashtagTap: { tag in
+                            selectedHashtag = tag
                         }
                     )
 
@@ -97,6 +101,7 @@ struct GalleryDetailView: View {
                                     isOwn: thread.root.author.did == auth.userDID,
                                     isReply: false,
                                     onProfileTap: { did in selectedProfileDid = did },
+                                    onHashtagTap: { tag in selectedHashtag = tag },
                                     onReply: { startReply(to: thread.root) },
                                     onDelete: { Task { await deleteComment(thread.root) } }
                                 )
@@ -107,6 +112,7 @@ struct GalleryDetailView: View {
                                         isOwn: reply.author.did == auth.userDID,
                                         isReply: true,
                                         onProfileTap: { did in selectedProfileDid = did },
+                                        onHashtagTap: { tag in selectedHashtag = tag },
                                         onDelete: { Task { await deleteComment(reply) } }
                                     )
                                 }
@@ -122,6 +128,9 @@ struct GalleryDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(item: $selectedProfileDid) { did in
             ProfileView(client: client, did: did)
+        }
+        .navigationDestination(item: $selectedHashtag) { tag in
+            HashtagFeedView(client: client, tag: tag)
         }
         .task {
             await viewModel.load(uri: galleryUri, auth: auth.authContext())
@@ -177,6 +186,7 @@ struct CommentRow: View {
     var isOwn: Bool = false
     var isReply: Bool = false
     var onProfileTap: ((String) -> Void)?
+    var onHashtagTap: ((String) -> Void)?
     var onReply: (() -> Void)?
     var onDelete: (() -> Void)?
 
@@ -193,8 +203,12 @@ struct CommentRow: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                Text(comment.text)
-                    .font(.subheadline)
+                RichTextView(
+                    text: comment.text,
+                    facets: comment.facets,
+                    onMentionTap: onProfileTap,
+                    onHashtagTap: onHashtagTap
+                )
 
                 // Actions
                 HStack(spacing: 16) {

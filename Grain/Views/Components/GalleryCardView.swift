@@ -10,6 +10,7 @@ struct GalleryCardView: View {
     let client: XRPCClient
     var onNavigate: () -> Void = {}
     var onProfileTap: ((String) -> Void)?
+    var onHashtagTap: ((String) -> Void)?
     @State private var isFavoriting = false
     @State private var currentPage = 0
     @State private var showingAlt = false
@@ -164,7 +165,7 @@ struct GalleryCardView: View {
                 } label: {
                     HStack(spacing: 5) {
                         Image(systemName: isFavorited ? "heart.fill" : "heart")
-                            .font(.system(size: 20))
+                            .font(.system(size: 22))
                         Text("\(gallery.favCount ?? 0)")
                     }
                 }
@@ -188,24 +189,27 @@ struct GalleryCardView: View {
             .padding(.top, 12)
             .padding(.bottom, 4)
 
-            // Title & description — tappable for navigation
-            VStack(alignment: .leading, spacing: 2) {
+            // Title & description
+            VStack(alignment: .leading, spacing: 4) {
                 Text(gallery.title ?? "")
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(1)
+                    .contentShape(Rectangle())
+                    .onTapGesture { onNavigate() }
 
                 if let description = gallery.description, !description.isEmpty {
-                    Text(description)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
+                    RichTextView(
+                        text: description,
+                        color: .secondary,
+                        onMentionTap: onProfileTap,
+                        onHashtagTap: onHashtagTap
+                    )
+                    .lineLimit(2)
                 }
             }
             .padding(.horizontal, 12)
-            .padding(.top, 4)
-            .padding(.bottom, 12)
-            .contentShape(Rectangle())
-            .onTapGesture { onNavigate() }
+            .padding(.top, 8)
+            .padding(.bottom, 16)
         }
     }
 

@@ -50,8 +50,9 @@ struct FeedView: View {
                                     .font(.caption2.weight(.bold))
                             }
                         }
-                        .foregroundStyle(.white)
+                        .foregroundColor(.primary)
                     }
+                    .tint(.primary)
                 }
             }
             .task {
@@ -81,6 +82,7 @@ private struct FeedTabContent: View {
     @State private var viewModel: FeedViewModel
     @State private var selectedUri: String?
     @State private var selectedProfileDid: String?
+    @State private var selectedHashtag: String?
     let client: XRPCClient
 
     init(client: XRPCClient, pinnedFeed: PinnedFeed, userDID: String? = nil) {
@@ -96,6 +98,8 @@ private struct FeedTabContent: View {
                         selectedUri = gallery.uri
                     }, onProfileTap: { did in
                         selectedProfileDid = did
+                    }, onHashtagTap: { tag in
+                        selectedHashtag = tag
                     })
                     .onAppear {
                         if gallery.id == viewModel.galleries.last?.id {
@@ -120,6 +124,9 @@ private struct FeedTabContent: View {
         }
         .navigationDestination(item: $selectedProfileDid) { did in
             ProfileView(client: client, did: did)
+        }
+        .navigationDestination(item: $selectedHashtag) { tag in
+            HashtagFeedView(client: client, tag: tag)
         }
         .task {
             if viewModel.galleries.isEmpty {

@@ -6,6 +6,7 @@ struct SearchView: View {
     @State private var viewModel: SearchViewModel
     @State private var searchNavigationUri: String?
     @State private var selectedProfileDid: String?
+    @State private var selectedHashtag: String?
     let client: XRPCClient
 
     init(client: XRPCClient) {
@@ -93,6 +94,8 @@ struct SearchView: View {
                                         searchNavigationUri = gallery.uri
                                     }, onProfileTap: { did in
                                         selectedProfileDid = did
+                                    }, onHashtagTap: { tag in
+                                        selectedHashtag = tag
                                     })
                                 }
                             case .profiles:
@@ -141,6 +144,9 @@ struct SearchView: View {
             }
             .navigationDestination(item: $selectedProfileDid) { did in
                 ProfileView(client: client, did: did)
+            }
+            .navigationDestination(item: $selectedHashtag) { tag in
+                HashtagFeedView(client: client, tag: tag)
             }
         }
     }
