@@ -24,6 +24,16 @@ struct SettingsView: View {
                 }
             }
 
+            Section("Legal") {
+                Link("Privacy Policy", destination: URL(string: "https://grain.social/support/privacy")!)
+                Link("Terms of Service", destination: URL(string: "https://grain.social/support/terms")!)
+                Link("Copyright Policy", destination: URL(string: "https://grain.social/support/copyright")!)
+            }
+
+            Section("About") {
+                Link("Powered by AT Protocol", destination: URL(string: "https://atproto.com")!)
+            }
+
             Section {
                 Button("Sign Out", role: .destructive) {
                     auth.logout()

@@ -44,7 +44,7 @@ struct LoginView: View {
                                 .font(.body.weight(.medium))
                                 .foregroundStyle(.white.opacity(0.5))
 
-                            TextField("your-handle.bsky.social", text: $handle)
+                            TextField("your-handle.bsky.social", text: $handle, prompt: Text("your-handle.bsky.social").foregroundStyle(.white.opacity(0.5)))
                                 .foregroundStyle(.white)
                                 .textContentType(.username)
                                 .autocorrectionDisabled()
