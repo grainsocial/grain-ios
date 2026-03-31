@@ -4,8 +4,12 @@ import NukeUI
 struct NotificationsView: View {
     @Environment(AuthManager.self) private var auth
     @State private var viewModel: NotificationsViewModel
+    @State private var selectedGalleryUri: String?
+    @State private var selectedProfileDid: String?
+    let client: XRPCClient
 
     init(client: XRPCClient) {
+        self.client = client
         _viewModel = State(initialValue: NotificationsViewModel(client: client))
     }
 
@@ -13,7 +17,24 @@ struct NotificationsView: View {
         NavigationStack {
             List {
                 ForEach(viewModel.notifications) { notification in
-                    NotificationRow(notification: notification)
+                    NotificationRow(notification: notification, onProfileTap: { did in
+                            selectedProfileDid = did
+                        })
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            if notification.reasonType == .follow {
+                                selectedProfileDid = notification.author.did
+                            } else if let galleryUri = notification.galleryUri {
+                                selectedGalleryUri = galleryUri
+                            }
+                        }
+                        .swipeActions(edge: .leading) {
+                            Button {
+                                selectedProfileDid = notification.author.did
+                            } label: {
+                                Label("Profile", systemImage: "person")
+                            }
+                        }
                         .onAppear {
                             if notification.id == viewModel.notifications.last?.id {
                                 Task { await viewModel.loadMore(auth: auth.authContext()) }
@@ -34,6 +55,12 @@ struct NotificationsView: View {
                 await viewModel.loadInitial(auth: auth.authContext())
             }
             .navigationTitle("Notifications")
+            .navigationDestination(item: $selectedGalleryUri) { uri in
+                GalleryDetailView(client: client, galleryUri: uri)
+            }
+            .navigationDestination(item: $selectedProfileDid) { did in
+                ProfileView(client: client, did: did)
+            }
             .task {
                 if viewModel.notifications.isEmpty {
                     await viewModel.loadInitial(auth: auth.authContext())
@@ -45,15 +72,18 @@ struct NotificationsView: View {
 
 struct NotificationRow: View {
     let notification: GrainNotification
+    var onProfileTap: ((String) -> Void)?
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             AvatarView(url: notification.author.avatar, size: 36)
+                .onTapGesture { onProfileTap?(notification.author.did) }
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 4) {
                     Text(notification.author.displayName ?? notification.author.handle)
                         .font(.subheadline.bold())
+                        .onTapGesture { onProfileTap?(notification.author.did) }
                     Text(reasonText)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
