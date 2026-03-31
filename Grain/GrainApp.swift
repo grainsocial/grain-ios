@@ -9,9 +9,11 @@ struct GrainApp: App {
             if authManager.isAuthenticated {
                 MainTabView()
                     .environment(authManager)
+                    .tint(Color("AccentColor"))
             } else {
                 LoginView()
                     .environment(authManager)
+                    .tint(Color("AccentColor"))
             }
         }
         .environment(authManager)

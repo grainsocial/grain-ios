@@ -26,7 +26,7 @@ struct MainTabView: View {
 
                 Tab(value: 3) {
                     if let did = auth.userDID {
-                        ProfileView(client: client, did: did)
+                        ProfileView(client: client, did: did, isRoot: true)
                     }
                 } label: {
                     if let img = avatarTabImage {

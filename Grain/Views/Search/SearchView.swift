@@ -5,6 +5,7 @@ struct SearchView: View {
     @Environment(AuthManager.self) private var auth
     @State private var viewModel: SearchViewModel
     @State private var searchNavigationUri: String?
+    @State private var selectedProfileDid: String?
     let client: XRPCClient
 
     init(client: XRPCClient) {
@@ -88,26 +89,33 @@ struct SearchView: View {
                             switch viewModel.selectedTab {
                             case .galleries:
                                 ForEach($viewModel.galleryResults) { $gallery in
-                                    GalleryCardView(gallery: $gallery, client: client) {
+                                    GalleryCardView(gallery: $gallery, client: client, onNavigate: {
                                         searchNavigationUri = gallery.uri
-                                    }
+                                    }, onProfileTap: { did in
+                                        selectedProfileDid = did
+                                    })
                                 }
                             case .profiles:
                                 ForEach(viewModel.profileResults) { profile in
-                                    HStack {
-                                        AvatarView(url: profile.avatar, size: 40)
-                                        VStack(alignment: .leading) {
-                                            Text(profile.displayName ?? profile.handle ?? "")
-                                                .font(.subheadline.bold())
-                                            if let handle = profile.handle {
-                                                Text("@\(handle)")
-                                                    .font(.caption)
-                                                    .foregroundStyle(.secondary)
+                                    Button {
+                                        selectedProfileDid = profile.did
+                                    } label: {
+                                        HStack {
+                                            AvatarView(url: profile.avatar, size: 40)
+                                            VStack(alignment: .leading) {
+                                                Text(profile.displayName ?? profile.handle ?? "")
+                                                    .font(.subheadline.bold())
+                                                if let handle = profile.handle {
+                                                    Text("@\(handle)")
+                                                        .font(.caption)
+                                                        .foregroundStyle(.secondary)
+                                                }
                                             }
+                                            Spacer()
                                         }
-                                        Spacer()
+                                        .padding(.horizontal)
                                     }
-                                    .padding(.horizontal)
+                                    .buttonStyle(.plain)
                                 }
                             }
                         }
@@ -130,6 +138,9 @@ struct SearchView: View {
             }
             .navigationDestination(item: $searchNavigationUri) { uri in
                 GalleryDetailView(client: client, galleryUri: uri)
+            }
+            .navigationDestination(item: $selectedProfileDid) { did in
+                ProfileView(client: client, did: did)
             }
         }
     }

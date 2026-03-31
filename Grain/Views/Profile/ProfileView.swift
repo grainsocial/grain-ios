@@ -6,16 +6,27 @@ struct ProfileView: View {
     @State private var viewModel: ProfileDetailViewModel
     let client: XRPCClient
     let did: String
+    var isRoot = false
 
-    init(client: XRPCClient, did: String) {
+    init(client: XRPCClient, did: String, isRoot: Bool = false) {
         self.client = client
         _viewModel = State(initialValue: ProfileDetailViewModel(client: client))
         self.did = did
+        self.isRoot = isRoot
     }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
+        if isRoot {
+            NavigationStack {
+                profileContent
+            }
+        } else {
+            profileContent
+        }
+    }
+
+    private var profileContent: some View {
+        ScrollView {
                 if let profile = viewModel.profile {
                     VStack(spacing: 16) {
                         // Avatar + name with glass header
@@ -50,7 +61,7 @@ struct ProfileView: View {
                                     .frame(maxWidth: .infinity)
                             }
                             .buttonStyle(.borderedProminent)
-                            .tint(profile.viewer?.following != nil ? .secondary : .accentColor)
+                            .tint(profile.viewer?.following != nil ? .secondary : Color("AccentColor"))
                             .padding(.horizontal)
                         }
 
@@ -117,7 +128,6 @@ struct ProfileView: View {
             .task {
                 await viewModel.load(did: did, auth: auth.authContext())
             }
-        }
     }
 }
 

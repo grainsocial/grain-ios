@@ -54,21 +54,43 @@ final class ProfileDetailViewModel {
     }
 
     func toggleFollow(auth: AuthContext?) async {
-        guard let profile, let auth else { return }
-        if let followUri = profile.viewer?.following {
-            let rkey = followUri.split(separator: "/").last.map(String.init) ?? ""
-            try? await client.deleteRecord(collection: "social.grain.graph.follow", rkey: rkey, auth: auth)
+        guard profile != nil, let auth else { return }
+
+        // Capture all values before any mutation
+        let followUri = profile?.viewer?.following
+        let prevViewer = profile?.viewer
+        let prevCount = profile?.followersCount
+        let did = profile!.did
+
+        if let followUri {
+            // Optimistic unfollow
             self.profile?.viewer?.following = nil
-            self.profile?.followersCount = (self.profile?.followersCount ?? 1) - 1
+            self.profile?.followersCount = max((prevCount ?? 1) - 1, 0)
+
+            let rkey = followUri.split(separator: "/").last.map(String.init) ?? ""
+            do {
+                try await client.deleteRecord(collection: "social.grain.graph.follow", rkey: rkey, auth: auth)
+            } catch {
+                self.profile?.viewer = prevViewer
+                self.profile?.followersCount = prevCount
+            }
         } else {
+            // Optimistic follow
+            self.profile?.viewer = ActorViewerState(following: "pending")
+            self.profile?.followersCount = (prevCount ?? 0) + 1
+
             let record = AnyCodable([
-                "subject": profile.did,
+                "subject": did,
                 "createdAt": ISO8601DateFormatter().string(from: Date())
             ])
             let repo = TokenStorage.userDID ?? ""
-            let response = try? await client.createRecord(collection: "social.grain.graph.follow", repo: repo, record: record, auth: auth)
-            self.profile?.viewer?.following = response?.uri
-            self.profile?.followersCount = (self.profile?.followersCount ?? 0) + 1
+            do {
+                let response = try await client.createRecord(collection: "social.grain.graph.follow", repo: repo, record: record, auth: auth)
+                self.profile?.viewer?.following = response.uri
+            } catch {
+                self.profile?.viewer = prevViewer
+                self.profile?.followersCount = prevCount
+            }
         }
     }
 }

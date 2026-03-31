@@ -1,6 +1,6 @@
-import SwiftUI
 import NukeUI
 import os
+import SwiftUI
 
 private let logger = Logger(subsystem: "social.grain.grain", category: "GalleryCard")
 
@@ -9,6 +9,7 @@ struct GalleryCardView: View {
     @Binding var gallery: GrainGallery
     let client: XRPCClient
     var onNavigate: () -> Void = {}
+    var onProfileTap: ((String) -> Void)?
     @State private var isFavoriting = false
     @State private var currentPage = 0
     @State private var showingAlt = false
@@ -46,7 +47,7 @@ struct GalleryCardView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .contentShape(Rectangle())
-            .onTapGesture { onNavigate() }
+            .onTapGesture { onProfileTap?(gallery.creator.did) }
 
             // Photo carousel — tappable for navigation
             if let photos = gallery.items, !photos.isEmpty {
@@ -161,22 +162,31 @@ struct GalleryCardView: View {
                         isFavoriting = false
                     }
                 } label: {
-                    Label(
-                        "\(gallery.favCount ?? 0)",
-                        systemImage: isFavorited ? "heart.fill" : "heart"
-                    )
-                    .contentTransition(.symbolEffect(.replace))
+                    HStack(spacing: 5) {
+                        Image(systemName: isFavorited ? "heart.fill" : "heart")
+                            .font(.system(size: 20))
+                        Text("\(gallery.favCount ?? 0)")
+                    }
                 }
-                .foregroundStyle(isFavorited ? .red : .secondary)
+                .foregroundStyle(isFavorited ? Color(red: 0.973, green: 0.443, blue: 0.443) : .secondary)
 
-                Label("\(gallery.commentCount ?? 0)", systemImage: "bubble.right")
-                    .foregroundStyle(.secondary)
+                Button {
+                    onNavigate()
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "bubble.right")
+                            .font(.system(size: 20))
+                        Text("\(gallery.commentCount ?? 0)")
+                    }
+                }
+                .foregroundStyle(.secondary)
 
                 Spacer()
             }
             .font(.subheadline)
             .padding(.horizontal, 12)
-            .padding(.top, 8)
+            .padding(.top, 12)
+            .padding(.bottom, 4)
 
             // Title & description — tappable for navigation
             VStack(alignment: .leading, spacing: 2) {
