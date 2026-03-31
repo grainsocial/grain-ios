@@ -10,6 +10,7 @@ struct StoryCreateView: View {
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var photoData: Data?
     @State private var previewImage: UIImage?
+    @State private var showCamera = false
     @State private var resolvedLocation: (h3: String, name: String, address: [String: AnyCodable]?)?
     @State private var locationQuery = ""
     @State private var locationSuggestions: [NominatimResult] = []
@@ -22,16 +23,22 @@ struct StoryCreateView: View {
         NavigationStack {
             Form {
                 Section("Photo") {
+                    if let previewImage {
+                        Image(uiImage: previewImage)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(maxHeight: 300)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                    }
+
                     PhotosPicker(selection: $selectedPhoto, matching: .images) {
-                        if let previewImage {
-                            Image(uiImage: previewImage)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(maxHeight: 300)
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
-                        } else {
-                            Label("Select Photo", systemImage: "camera")
-                        }
+                        Label("Choose from Library", systemImage: "photo.on.rectangle")
+                    }
+
+                    Button {
+                        showCamera = true
+                    } label: {
+                        Label("Take Photo", systemImage: "camera")
                     }
                 }
 
@@ -101,6 +108,12 @@ struct StoryCreateView: View {
             .onChange(of: selectedPhoto) {
                 Task { await loadPhoto() }
             }
+            .fullScreenCover(isPresented: $showCamera) {
+                CameraPicker { image in
+                    handleCameraImage(image)
+                }
+                .ignoresSafeArea()
+            }
             .navigationTitle("New Story")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -121,6 +134,19 @@ struct StoryCreateView: View {
                 }
             }
         }
+    }
+
+    // MARK: - Camera
+
+    private func handleCameraImage(_ image: UIImage) {
+        previewImage = image
+        if let data = image.jpegData(compressionQuality: 1.0) {
+            photoData = data
+        }
+        selectedPhoto = nil
+        resolvedLocation = nil
+        locationQuery = ""
+        locationSuggestions = []
     }
 
     // MARK: - Photo Loading
