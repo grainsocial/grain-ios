@@ -42,25 +42,33 @@ struct GalleryCardView: View {
 
             // Photo carousel — tappable for navigation
             if let photos = gallery.items, !photos.isEmpty {
-                ZStack(alignment: .bottom) {
-                    TabView(selection: $currentPage) {
-                        ForEach(Array(photos.enumerated()), id: \.element.id) { index, photo in
-                            LazyImage(url: URL(string: photo.fullsize)) { state in
-                                if let image = state.image {
-                                    image
-                                        .resizable()
-                                        .aspectRatio(photo.aspectRatio.ratio, contentMode: .fit)
-                                } else {
-                                    Rectangle()
-                                        .fill(.quaternary)
-                                        .aspectRatio(photo.aspectRatio.ratio, contentMode: .fit)
+                let hasPortrait = photos.contains { $0.aspectRatio.ratio < 1 }
+                let carouselRatio = hasPortrait
+                    ? max(photos.map(\.aspectRatio.ratio).min() ?? 1, 0.56)
+                    : photos[currentPage].aspectRatio.ratio
+
+                GeometryReader { geo in
+                    let height = geo.size.width / carouselRatio
+
+                    ZStack(alignment: .bottom) {
+                        TabView(selection: $currentPage) {
+                            ForEach(Array(photos.enumerated()), id: \.element.id) { index, photo in
+                                LazyImage(url: URL(string: photo.fullsize)) { state in
+                                    if let image = state.image {
+                                        image
+                                            .resizable()
+                                            .aspectRatio(photo.aspectRatio.ratio, contentMode: .fit)
+                                    } else {
+                                        Rectangle()
+                                            .fill(.quaternary)
+                                            .aspectRatio(photo.aspectRatio.ratio, contentMode: .fit)
+                                    }
                                 }
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                .tag(index)
                             }
-                            .tag(index)
                         }
-                    }
-                    .tabViewStyle(.page(indexDisplayMode: .never))
-                    .aspectRatio(photos[currentPage].aspectRatio.ratio, contentMode: .fit)
+                        .tabViewStyle(.page(indexDisplayMode: .never))
 
                     // Page indicator
                     if photos.count > 1 {
@@ -114,7 +122,11 @@ struct GalleryCardView: View {
                             .padding(8)
                         }
                     }
+                    }
+                    .frame(height: height)
                 }
+                .frame(height: UIScreen.main.bounds.width / carouselRatio)
+                .clipped()
                 .onChange(of: currentPage) { showingAlt = false }
             }
 
