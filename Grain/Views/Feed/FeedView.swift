@@ -5,6 +5,7 @@ struct FeedView: View {
     @State private var pinnedFeeds: [PinnedFeed] = PinnedFeed.defaults
     @State private var selectedFeedId: String = "recent"
     @State private var hasLoadedPreferences = false
+    @State private var showNavBar = true
 
     let client: XRPCClient
 
@@ -17,12 +18,20 @@ struct FeedView: View {
             ZStack {
                 ForEach(pinnedFeeds) { feed in
                     if feed.id == selectedFeedId {
-                        FeedTabContent(client: client, pinnedFeed: feed, userDID: auth.userDID)
+                        FeedTabContent(client: client, pinnedFeed: feed, userDID: auth.userDID, showNavBar: $showNavBar)
                     }
                 }
             }
-            .navigationTitle("Grain")
+            .navigationTitle("grain")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inline)
+            .toolbarVisibility(showNavBar ? .visible : .hidden, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("grain")
+                        .font(.custom("Syne", size: 20).weight(.heavy))
+                }
+            }
             .safeAreaInset(edge: .top, spacing: 0) {
                 if pinnedFeeds.count > 1 {
                     ScrollView(.horizontal, showsIndicators: false) {
@@ -78,11 +87,13 @@ private struct FeedTabContent: View {
     @Environment(AuthManager.self) private var auth
     @State private var viewModel: FeedViewModel
     @State private var selectedUri: String?
+    @Binding var showNavBar: Bool
     let client: XRPCClient
 
-    init(client: XRPCClient, pinnedFeed: PinnedFeed, userDID: String? = nil) {
+    init(client: XRPCClient, pinnedFeed: PinnedFeed, userDID: String? = nil, showNavBar: Binding<Bool>) {
         self.client = client
         _viewModel = State(initialValue: FeedViewModel(client: client, pinnedFeed: pinnedFeed, userDID: userDID))
+        _showNavBar = showNavBar
     }
 
     var body: some View {
@@ -104,6 +115,16 @@ private struct FeedTabContent: View {
                 if viewModel.isLoading {
                     ProgressView()
                         .padding()
+                }
+            }
+        }
+        .onScrollGeometryChange(for: CGFloat.self) { geo in
+            geo.contentOffset.y
+        } action: { _, newOffset in
+            let shouldShow = newOffset < 10
+            if shouldShow != showNavBar {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    showNavBar = shouldShow
                 }
             }
         }

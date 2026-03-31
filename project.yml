@@ -57,6 +57,8 @@ targets:
           - UIInterfaceOrientationLandscapeRight
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
+        UIAppFonts:
+          - Syne-Variable.ttf
         UILaunchScreen: {}
 
   GrainTests:
