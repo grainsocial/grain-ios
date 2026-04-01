@@ -56,8 +56,18 @@ struct ProfileView: View {
                         // Stats with glass pills
                         HStack(spacing: 24) {
                             StatView(count: profile.galleryCount ?? 0, label: "Galleries")
-                            StatView(count: profile.followersCount ?? 0, label: "Followers")
-                            StatView(count: profile.followsCount ?? 0, label: "Following")
+                            NavigationLink {
+                                FollowListView(client: client, did: did, mode: .followers)
+                            } label: {
+                                StatView(count: profile.followersCount ?? 0, label: "Followers")
+                            }
+                            .buttonStyle(.plain)
+                            NavigationLink {
+                                FollowListView(client: client, did: did, mode: .following)
+                            } label: {
+                                StatView(count: profile.followsCount ?? 0, label: "Following")
+                            }
+                            .buttonStyle(.plain)
                         }
                         .padding(.horizontal, 20)
                         .padding(.vertical, 12)

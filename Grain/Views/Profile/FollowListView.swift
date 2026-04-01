@@ -1,0 +1,251 @@
+import SwiftUI
+import NukeUI
+
+enum FollowListMode: Hashable {
+    case followers
+    case following
+}
+
+struct FollowListView: View {
+    @Environment(AuthManager.self) private var auth
+    let client: XRPCClient
+    let did: String
+    let mode: FollowListMode
+    @State private var items: [FollowListItem] = []
+    @State private var cursor: String?
+    @State private var totalCount: Int?
+    @State private var isLoading = false
+    @State private var hasLoaded = false
+    @State private var selectedProfileDid: String?
+
+    private var title: String {
+        mode == .followers ? "Followers" : "Following"
+    }
+
+    private var displayCount: String {
+        "\(totalCount ?? items.count) \(title.lowercased())"
+    }
+
+    var body: some View {
+        Group {
+            if !hasLoaded && isLoading {
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if hasLoaded && items.isEmpty {
+                ContentUnavailableView(
+                    "No \(title)",
+                    systemImage: mode == .followers ? "person.2" : "person.badge.plus",
+                    description: Text(mode == .followers ? "No one is following this account yet." : "This account isn't following anyone yet.")
+                )
+            } else {
+                List {
+                    Section {
+                        ForEach(items) { item in
+                            Button {
+                                selectedProfileDid = item.did
+                            } label: {
+                                rowContent(item: item)
+                            }
+                            .buttonStyle(.plain)
+                            .onAppear {
+                                if item.id == items.last?.id {
+                                    Task { await loadMore() }
+                                }
+                            }
+                        }
+
+                        if isLoading {
+                            HStack {
+                                Spacer()
+                                ProgressView()
+                                Spacer()
+                            }
+                        }
+                    } header: {
+                        Text(displayCount)
+                            .font(.subheadline)
+                    }
+                }
+                .refreshable {
+                    await reload()
+                }
+            }
+        }
+        .navigationTitle(title)
+        .navigationDestination(item: $selectedProfileDid) { did in
+            ProfileView(client: client, did: did)
+        }
+        .task {
+            await reload()
+        }
+        .onAppear {
+            if hasLoaded {
+                Task { await reload() }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func rowContent(item: FollowListItem) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            AvatarView(url: item.avatar, size: 44)
+            VStack(alignment: .leading, spacing: 2) {
+                if let displayName = item.displayName, !displayName.isEmpty {
+                    Text(displayName)
+                        .font(.subheadline.weight(.medium))
+                        .lineLimit(1)
+                }
+                if let handle = item.handle {
+                    Text("@\(handle)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                if let desc = item.description, !desc.isEmpty {
+                    Text(desc)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .padding(.top, 1)
+                }
+            }
+            Spacer()
+            if item.did != auth.userDID {
+                Button {
+                    Task { await toggleFollow(for: item.did) }
+                } label: {
+                    Text(item.followingUri != nil ? "Following" : "Follow")
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(item.followingUri != nil ? .secondary : Color("AccentColor"))
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func reload() async {
+        cursor = nil
+        do {
+            switch mode {
+            case .followers:
+                let response = try await client.getFollowers(actor: did, viewer: auth.userDID, cursor: nil, auth: auth.authContext())
+                items = (response.items ?? []).map { FollowListItem(from: $0) }
+                cursor = response.cursor
+                totalCount = response.totalCount
+            case .following:
+                let response = try await client.getFollowing(actor: did, viewer: auth.userDID, cursor: nil, auth: auth.authContext())
+                items = (response.items ?? []).map { FollowListItem(from: $0) }
+                cursor = response.cursor
+                totalCount = response.totalCount
+            }
+        } catch {
+            // keep existing items on error
+        }
+        hasLoaded = true
+    }
+
+    private func loadMore() async {
+        guard !isLoading else { return }
+        if !items.isEmpty && cursor == nil { return }
+        isLoading = true
+        defer { isLoading = false }
+
+        do {
+            let existingIDs = Set(items.map(\.id))
+            switch mode {
+            case .followers:
+                let response = try await client.getFollowers(actor: did, viewer: auth.userDID, cursor: cursor, auth: auth.authContext())
+                if let newItems = response.items {
+                    let filtered = newItems.filter { !existingIDs.contains($0.did) }
+                    items.append(contentsOf: filtered.map { FollowListItem(from: $0) })
+                }
+                cursor = response.cursor
+            case .following:
+                let response = try await client.getFollowing(actor: did, viewer: auth.userDID, cursor: cursor, auth: auth.authContext())
+                if let newItems = response.items {
+                    let filtered = newItems.filter { !existingIDs.contains($0.did) }
+                    items.append(contentsOf: filtered.map { FollowListItem(from: $0) })
+                }
+                cursor = response.cursor
+            }
+        } catch {
+            // silently fail
+        }
+    }
+
+    private func toggleFollow(for targetDid: String) async {
+        guard let authContext = auth.authContext(), let repo = auth.userDID else { return }
+        guard let index = items.firstIndex(where: { $0.did == targetDid }) else { return }
+        let item = items[index]
+
+        if let followUri = item.followingUri, followUri != "pending" {
+            let rkey = followUri.split(separator: "/").last.map(String.init) ?? ""
+            items[index].followingUri = nil
+            do {
+                try await client.deleteRecord(collection: "social.grain.graph.follow", rkey: rkey, auth: authContext)
+                if mode == .following && did == repo {
+                    if let idx = items.firstIndex(where: { $0.did == targetDid }) {
+                        items.remove(at: idx)
+                    }
+                    if let count = totalCount { totalCount = max(0, count - 1) }
+                }
+            } catch {
+                if let idx = items.firstIndex(where: { $0.did == targetDid }) {
+                    items[idx].followingUri = followUri
+                }
+            }
+        } else if item.followingUri == nil {
+            items[index].followingUri = "pending"
+            do {
+                let record = AnyCodable([
+                    "subject": item.did,
+                    "createdAt": ISO8601DateFormatter().string(from: Date())
+                ])
+                let result = try await client.createRecord(
+                    collection: "social.grain.graph.follow",
+                    repo: repo,
+                    record: record,
+                    auth: authContext
+                )
+                if let idx = items.firstIndex(where: { $0.did == targetDid }) {
+                    items[idx].followingUri = result.uri
+                }
+            } catch {
+                if let idx = items.firstIndex(where: { $0.did == targetDid }) {
+                    items[idx].followingUri = nil
+                }
+            }
+        }
+    }
+}
+
+struct FollowListItem: Identifiable {
+    let did: String
+    var handle: String?
+    var displayName: String?
+    var description: String?
+    var avatar: String?
+    var followingUri: String?
+    var id: String { did }
+
+    init(from follower: FollowerItem) {
+        self.did = follower.did
+        self.handle = follower.handle
+        self.displayName = follower.displayName
+        self.description = follower.description
+        self.avatar = follower.avatar
+        self.followingUri = follower.viewer?.following
+    }
+
+    init(from following: FollowingItem) {
+        self.did = following.did
+        self.handle = following.handle
+        self.displayName = following.displayName
+        self.description = following.description
+        self.avatar = following.avatar
+        self.followingUri = following.viewer?.following
+    }
+}

@@ -3,11 +3,13 @@ import Foundation
 /// Response types for profile-related XRPC queries.
 
 struct GetFollowersResponse: Codable, Sendable {
+    var totalCount: Int?
     var items: [FollowerItem]?
     var cursor: String?
 }
 
 struct GetFollowingResponse: Codable, Sendable {
+    var totalCount: Int?
     var items: [FollowingItem]?
     var cursor: String?
 }
@@ -31,6 +33,7 @@ struct FollowerItem: Codable, Sendable, Identifiable {
     var displayName: String?
     var description: String?
     var avatar: String?
+    var viewer: ActorViewerState?
     var id: String { did }
 }
 
@@ -40,6 +43,7 @@ struct FollowingItem: Codable, Sendable, Identifiable {
     var displayName: String?
     var description: String?
     var avatar: String?
+    var viewer: ActorViewerState?
     var id: String { did }
 }
 
@@ -71,14 +75,16 @@ extension XRPCClient {
         return try await query("social.grain.unspecced.getActorProfile", params: params, auth: auth, as: GrainProfileDetailed.self)
     }
 
-    func getFollowers(actor: String, limit: Int = 50, cursor: String? = nil, auth: AuthContext? = nil) async throws -> GetFollowersResponse {
+    func getFollowers(actor: String, viewer: String? = nil, limit: Int = 50, cursor: String? = nil, auth: AuthContext? = nil) async throws -> GetFollowersResponse {
         var params = ["actor": actor, "limit": String(limit)]
+        if let viewer { params["viewer"] = viewer }
         if let cursor { params["cursor"] = cursor }
         return try await query("social.grain.unspecced.getFollowers", params: params, auth: auth, as: GetFollowersResponse.self)
     }
 
-    func getFollowing(actor: String, limit: Int = 50, cursor: String? = nil, auth: AuthContext? = nil) async throws -> GetFollowingResponse {
+    func getFollowing(actor: String, viewer: String? = nil, limit: Int = 50, cursor: String? = nil, auth: AuthContext? = nil) async throws -> GetFollowingResponse {
         var params = ["actor": actor, "limit": String(limit)]
+        if let viewer { params["viewer"] = viewer }
         if let cursor { params["cursor"] = cursor }
         return try await query("social.grain.unspecced.getFollowing", params: params, auth: auth, as: GetFollowingResponse.self)
     }
