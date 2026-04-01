@@ -7,6 +7,15 @@ struct GetNotificationsResponse: Codable, Sendable {
 }
 
 extension XRPCClient {
+    func markNotificationsSeen(auth: AuthContext? = nil) async throws {
+        struct PutPreferenceInput: Encodable {
+            let key: String
+            let value: String
+        }
+        let input = PutPreferenceInput(key: "lastSeenNotifications", value: ISO8601DateFormatter().string(from: Date()))
+        try await procedure("dev.hatk.putPreference", input: input, auth: auth)
+    }
+
     func getNotifications(
         limit: Int = 20,
         cursor: String? = nil,

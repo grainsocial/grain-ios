@@ -10,9 +10,13 @@ final class NotificationsViewModel {
 
     private var cursor: String?
     private var hasMore = true
-    private let client: XRPCClient
+    private var client: XRPCClient
 
     init(client: XRPCClient) {
+        self.client = client
+    }
+
+    func updateClient(_ client: XRPCClient) {
         self.client = client
     }
 
@@ -48,6 +52,17 @@ final class NotificationsViewModel {
             self.error = error
         }
         isLoading = false
+    }
+
+    func markAsSeen(auth: AuthContext? = nil) async {
+        guard unseenCount > 0 else { return }
+        let previousCount = unseenCount
+        unseenCount = 0
+        do {
+            try await client.markNotificationsSeen(auth: auth)
+        } catch {
+            unseenCount = previousCount
+        }
     }
 
     func fetchUnseenCount(auth: AuthContext? = nil) async {

@@ -3,14 +3,14 @@ import NukeUI
 
 struct NotificationsView: View {
     @Environment(AuthManager.self) private var auth
-    @State private var viewModel: NotificationsViewModel
+    var viewModel: NotificationsViewModel
     @State private var selectedGalleryUri: String?
     @State private var selectedProfileDid: String?
     let client: XRPCClient
 
-    init(client: XRPCClient) {
+    init(client: XRPCClient, viewModel: NotificationsViewModel) {
         self.client = client
-        _viewModel = State(initialValue: NotificationsViewModel(client: client))
+        self.viewModel = viewModel
     }
 
     var body: some View {
@@ -65,6 +65,7 @@ struct NotificationsView: View {
                 if viewModel.notifications.isEmpty {
                     await viewModel.loadInitial(auth: auth.authContext())
                 }
+                await viewModel.markAsSeen(auth: auth.authContext())
             }
         }
     }
