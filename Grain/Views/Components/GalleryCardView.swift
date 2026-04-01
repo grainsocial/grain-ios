@@ -198,13 +198,11 @@ struct GalleryCardView: View {
                     .onTapGesture { onNavigate() }
 
                 if let description = gallery.description, !description.isEmpty {
-                    RichTextView(
+                    ExpandableDescriptionView(
                         text: description,
-                        color: .secondary,
                         onMentionTap: onProfileTap,
                         onHashtagTap: onHashtagTap
                     )
-                    .lineLimit(2)
                 }
             }
             .padding(.horizontal, 12)
