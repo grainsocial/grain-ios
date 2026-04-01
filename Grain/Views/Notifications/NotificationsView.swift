@@ -81,11 +81,7 @@ struct NotificationRow: View {
                 .onTapGesture { onProfileTap?(notification.author.did) }
 
             VStack(alignment: .leading, spacing: 4) {
-                (Text(notification.author.displayName ?? notification.author.handle)
-                    .font(.subheadline.bold()) +
-                Text(" \(reasonText)")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary))
+                Text("\(Text(notification.author.displayName ?? notification.author.handle).font(.subheadline.bold())) \(Text(reasonText).font(.subheadline).foregroundStyle(.secondary))")
 
                 if let galleryTitle = notification.galleryTitle {
                     Text(galleryTitle)

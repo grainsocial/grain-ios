@@ -8,6 +8,7 @@ struct ProfileView: View {
     @State private var selectedGalleryUri: String?
     @State private var selectedProfileDid: String?
     @State private var selectedHashtag: String?
+    @State private var deletedGalleryUri: String?
     let client: XRPCClient
     let did: String
     var isRoot = false
@@ -153,7 +154,7 @@ struct ProfileView: View {
                 }
             }
             .navigationDestination(item: $selectedGalleryUri) { uri in
-                GalleryDetailView(client: client, galleryUri: uri)
+                GalleryDetailView(client: client, galleryUri: uri, deletedGalleryUri: $deletedGalleryUri)
             }
             .navigationDestination(item: $selectedProfileDid) { did in
                 ProfileView(client: client, did: did)
@@ -181,6 +182,12 @@ struct ProfileView: View {
             }
             .task {
                 await viewModel.load(did: did, viewer: auth.userDID, auth: auth.authContext())
+            }
+            .onChange(of: deletedGalleryUri) { _, uri in
+                if let uri {
+                    viewModel.galleries.removeAll { $0.uri == uri }
+                    deletedGalleryUri = nil
+                }
             }
     }
 }

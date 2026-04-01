@@ -9,15 +9,19 @@ struct GalleryDetailView: View {
     @State private var commentText = ""
     @State private var isPostingComment = false
     @State private var replyingTo: GrainComment?
+    @State private var showDeleteConfirmation = false
     @FocusState private var commentFocused: Bool
+    @Environment(\.dismiss) private var dismiss
 
     let client: XRPCClient
     let galleryUri: String
+    @Binding var deletedGalleryUri: String?
 
-    init(client: XRPCClient, galleryUri: String) {
+    init(client: XRPCClient, galleryUri: String, deletedGalleryUri: Binding<String?> = .constant(nil)) {
         self.client = client
         _viewModel = State(initialValue: GalleryDetailViewModel(client: client))
         self.galleryUri = galleryUri
+        _deletedGalleryUri = deletedGalleryUri
     }
 
     /// Group comments into roots with their replies underneath.
@@ -132,6 +136,30 @@ struct GalleryDetailView: View {
         .navigationDestination(item: $selectedHashtag) { tag in
             HashtagFeedView(client: client, tag: tag)
         }
+        .toolbar {
+            if let gallery = viewModel.gallery, gallery.creator.did == auth.userDID {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button(role: .destructive) {
+                            showDeleteConfirmation = true
+                        } label: {
+                            Label("Delete Gallery", systemImage: "trash")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .foregroundStyle(.primary)
+                    }
+                }
+            }
+        }
+        .alert("Delete Gallery?", isPresented: $showDeleteConfirmation) {
+            Button("Delete", role: .destructive) {
+                Task { await deleteGallery() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will permanently delete this gallery and all its photos.")
+        }
         .task {
             await viewModel.load(uri: galleryUri, auth: auth.authContext())
         }
@@ -167,6 +195,18 @@ struct GalleryDetailView: View {
             // Silently fail for now
         }
         isPostingComment = false
+    }
+
+    private func deleteGallery() async {
+        guard let authContext = auth.authContext() else { return }
+        let rkey = galleryUri.split(separator: "/").last.map(String.init) ?? ""
+        do {
+            try await client.deleteGallery(rkey: rkey, auth: authContext)
+            deletedGalleryUri = galleryUri
+            dismiss()
+        } catch {
+            // Silently fail for now
+        }
     }
 
     private func deleteComment(_ comment: GrainComment) async {

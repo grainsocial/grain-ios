@@ -116,6 +116,7 @@ private struct FeedTabContent: View {
     @State private var selectedUri: String?
     @State private var selectedProfileDid: String?
     @State private var selectedHashtag: String?
+    @State private var deletedGalleryUri: String?
     let client: XRPCClient
     let storyAuthors: [GrainStoryAuthor]
     let userAvatar: String?
@@ -175,7 +176,7 @@ private struct FeedTabContent: View {
             _ = await (feedRefresh, storyRefresh)
         }
         .navigationDestination(item: $selectedUri) { uri in
-            GalleryDetailView(client: client, galleryUri: uri)
+            GalleryDetailView(client: client, galleryUri: uri, deletedGalleryUri: $deletedGalleryUri)
         }
         .navigationDestination(item: $selectedProfileDid) { did in
             ProfileView(client: client, did: did)
@@ -186,6 +187,12 @@ private struct FeedTabContent: View {
         .task {
             if viewModel.galleries.isEmpty {
                 await viewModel.loadInitial(auth: auth.authContext())
+            }
+        }
+        .onChange(of: deletedGalleryUri) { _, uri in
+            if let uri {
+                viewModel.galleries.removeAll { $0.uri == uri }
+                deletedGalleryUri = nil
             }
         }
     }
