@@ -29,16 +29,15 @@ final class AuthManager {
     static let redirectURI = "grain://oauth/callback"
 
     init() {
-        // Restore session from Keychain
-        if let token = TokenStorage.accessToken,
+        // Restore session from Keychain — allow expired tokens since we can refresh
+        if TokenStorage.accessToken != nil,
            let did = TokenStorage.userDID,
-           !TokenStorage.isExpired {
+           TokenStorage.refreshToken != nil {
             self.isAuthenticated = true
             self.userDID = did
             self.userHandle = TokenStorage.userHandle
             self.userAvatar = TokenStorage.userAvatar
             self.dpop = try? DPoP.loadOrCreate()
-            _ = token // Token is available via TokenStorage
         }
     }
 
@@ -200,8 +199,12 @@ final class AuthManager {
     }
 
     /// Build an AuthContext for making authenticated requests.
+    /// Proactively refreshes if the token expires within 60 seconds.
     func authContext() -> AuthContext? {
         guard let dpop, let token = TokenStorage.accessToken else { return nil }
+        if let expiresAt = TokenStorage.tokenExpiresAt, expiresAt.timeIntervalSinceNow < 60 {
+            Task { try? await refresh() }
+        }
         return AuthContext(accessToken: token, dpop: dpop)
     }
 
