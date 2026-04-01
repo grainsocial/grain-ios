@@ -41,8 +41,8 @@ final class AuthManager {
         }
     }
 
-    /// Start the OAuth login flow.
-    func login(handle: String) async throws {
+    /// Start the OAuth login flow. Set `createAccount` to show the sign-up page.
+    func login(handle: String = "", createAccount: Bool = false) async throws {
         let dpop = try DPoP.loadOrCreate()
         self.dpop = dpop
 
@@ -55,15 +55,24 @@ final class AuthManager {
         let challenge = generateCodeChallenge(verifier: verifier)
 
         // Step 1: Pushed Authorization Request
-        let parBody: [String: String] = [
+        var parBody: [String: String] = [
             "client_id": Self.clientID,
             "redirect_uri": Self.redirectURI,
             "response_type": "code",
             "code_challenge": challenge,
             "code_challenge_method": "S256",
-            "scope": "atproto blob:image/* repo:social.grain.gallery repo:social.grain.gallery.item repo:social.grain.photo repo:social.grain.photo.exif repo:social.grain.actor.profile repo:social.grain.graph.follow repo:social.grain.favorite repo:social.grain.comment repo:social.grain.story repo:app.bsky.feed.post?action=create",
-            "login_hint": handle
+            "scope": "atproto blob:image/* repo:social.grain.gallery repo:social.grain.gallery.item repo:social.grain.photo repo:social.grain.photo.exif repo:social.grain.actor.profile repo:social.grain.graph.follow repo:social.grain.favorite repo:social.grain.comment repo:social.grain.story repo:app.bsky.feed.post?action=create"
         ]
+        if createAccount {
+            parBody["prompt"] = "create"
+            #if DEBUG
+            parBody["login_hint"] = "localhost:2583"
+            #else
+            parBody["login_hint"] = "selfhosted.social"
+            #endif
+        } else if !handle.isEmpty {
+            parBody["login_hint"] = handle
+        }
 
         let parURL = Self.serverURL.appendingPathComponent("oauth/par")
         var parRequest = URLRequest(url: parURL)
@@ -85,10 +94,8 @@ final class AuthManager {
             (parData, parHTTPResponse) = try await URLSession.shared.data(for: parRequest)
         }
 
-        // Log response for debugging
-        if let httpResp = parHTTPResponse as? HTTPURLResponse, httpResp.statusCode != 200 && httpResp.statusCode != 201 {
-            let body = String(data: parData, encoding: .utf8) ?? "no body"
-            print("[Grain Auth] PAR failed (\(httpResp.statusCode)): \(body)")
+        if let httpResp = parHTTPResponse as? HTTPURLResponse,
+           !(200...299).contains(httpResp.statusCode) {
             throw XRPCError.httpError(statusCode: httpResp.statusCode, body: parData)
         }
 

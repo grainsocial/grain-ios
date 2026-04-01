@@ -34,7 +34,26 @@ struct LoginView: View {
                     Text("grain")
                         .font(.custom("Syne", size: 44).weight(.heavy))
                         .foregroundStyle(.white)
-                        .padding(.bottom, 40)
+                        .padding(.bottom, 60)
+
+                    // Heading
+                    Text("Log in with your internet handle")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .multilineTextAlignment(.center)
+                        .padding(.bottom, 4)
+
+                    Text("Enter the domain you use as your identity across the open social web.")
+                        .font(.subheadline)
+                        .foregroundStyle(.white.opacity(0.7))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 8)
+
+                    Link("Learn more", destination: URL(string: "https://internethandle.org")!)
+                        .font(.subheadline.weight(.medium))
+                        .underline()
+                        .foregroundStyle(.white)
+                        .padding(.bottom, 16)
 
                     // Login card
                     VStack(spacing: 16) {
@@ -44,7 +63,7 @@ struct LoginView: View {
                                 .font(.body.weight(.medium))
                                 .foregroundStyle(.white.opacity(0.5))
 
-                            TextField("your-handle.bsky.social", text: $handle, prompt: Text("your-handle.bsky.social").foregroundStyle(.white.opacity(0.5)))
+                            TextField("e.g. jasmine.garden", text: $handle, prompt: Text("e.g. jasmine.garden").foregroundStyle(.white.opacity(0.5)))
                                 .foregroundStyle(.white)
                                 .textContentType(.username)
                                 .autocorrectionDisabled()
@@ -153,6 +172,29 @@ struct LoginView: View {
                         .foregroundStyle(.black)
                         .disabled(handle.isEmpty || isLoading)
                         .opacity(handle.isEmpty ? 0.4 : 1)
+
+                        // Create account button
+                        Button {
+                            Task { await createAccount() }
+                        } label: {
+                            Text("Create Account")
+                                .font(.body.weight(.semibold))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                        }
+                        .background(.white.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(.white.opacity(0.25), lineWidth: 1)
+                        )
+                        .foregroundStyle(.white)
+                        .disabled(isLoading)
+                        // Legal links
+                        Text("By signing in you agree to our [Terms](https://grain.social/support/terms), [Privacy Policy](https://grain.social/support/privacy), and [Community Guidelines](https://grain.social/support/community-guidelines).")
+                            .font(.caption2)
+                            .foregroundStyle(.white.opacity(0.5))
+                            .tint(.white.opacity(0.7))
+                            .multilineTextAlignment(.center)
                     }
                     .padding(24)
 
@@ -173,6 +215,17 @@ struct LoginView: View {
             .scrollIndicators(.hidden)
             }
         }
+
+    private func createAccount() async {
+        isLoading = true
+        errorMessage = nil
+        do {
+            try await auth.login(createAccount: true)
+        } catch {
+            errorMessage = String(describing: error)
+        }
+        isLoading = false
+    }
 
     private func login() async {
         isLoading = true
