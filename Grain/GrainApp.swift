@@ -3,17 +3,25 @@ import SwiftUI
 @main
 struct GrainApp: App {
     @State private var authManager = AuthManager()
+    @State private var pendingDeepLink: DeepLink?
 
     var body: some Scene {
         WindowGroup {
-            if authManager.isAuthenticated {
-                MainTabView()
-                    .environment(authManager)
-                    .tint(Color("AccentColor"))
-            } else {
-                LoginView()
-                    .environment(authManager)
-                    .tint(Color("AccentColor"))
+            Group {
+                if authManager.isAuthenticated {
+                    MainTabView(pendingDeepLink: $pendingDeepLink)
+                        .environment(authManager)
+                        .tint(Color("AccentColor"))
+                } else {
+                    LoginView()
+                        .environment(authManager)
+                        .tint(Color("AccentColor"))
+                }
+            }
+            .onOpenURL { url in
+                if let deepLink = DeepLink.from(url: url) {
+                    pendingDeepLink = deepLink
+                }
             }
         }
         .environment(authManager)

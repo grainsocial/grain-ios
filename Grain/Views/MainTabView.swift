@@ -9,6 +9,7 @@ struct MainTabView: View {
     @State private var avatarTabImage: UIImage?
     @State private var feedRefreshID = UUID()
     @State private var notificationsVM = NotificationsViewModel(client: XRPCClient(baseURL: AuthManager.serverURL))
+    @Binding var pendingDeepLink: DeepLink?
 
     static let badgeAppearanceConfigured: Bool = {
         let color = UIColor(named: "AccentColor")
@@ -33,7 +34,7 @@ struct MainTabView: View {
         TabView(selection: $selectedTab) {
             TabSection {
                 Tab("Feed", systemImage: "photo.on.rectangle", value: 0) {
-                    FeedView(client: client)
+                    FeedView(client: client, pendingDeepLink: $pendingDeepLink)
                         .id(feedRefreshID)
                 }
 
@@ -91,6 +92,11 @@ struct MainTabView: View {
             if newValue == 99 {
                 selectedTab = oldValue
                 showCreate = true
+            }
+        }
+        .onChange(of: pendingDeepLink) {
+            if pendingDeepLink != nil {
+                selectedTab = 0
             }
         }
         .onChange(of: scenePhase) {

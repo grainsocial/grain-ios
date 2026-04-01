@@ -9,11 +9,16 @@ struct FeedView: View {
     @State private var showStoryViewer = false
     @State private var storyViewerStartIndex = 0
     @State private var showStoryCreate = false
+    @State private var deepLinkProfileDid: String?
+    @State private var deepLinkGalleryUri: String?
+    @State private var deepLinkStoryAuthor: GrainStoryAuthor?
 
     let client: XRPCClient
+    @Binding var pendingDeepLink: DeepLink?
 
-    init(client: XRPCClient) {
+    init(client: XRPCClient, pendingDeepLink: Binding<DeepLink?> = .constant(nil)) {
         self.client = client
+        _pendingDeepLink = pendingDeepLink
         _storyViewModel = State(initialValue: StoryStripViewModel(client: client))
     }
 
@@ -91,6 +96,59 @@ struct FeedView: View {
                     Task { await storyViewModel.load(auth: auth.authContext()) }
                 }
             }
+            .navigationDestination(item: $deepLinkProfileDid) { did in
+                ProfileView(client: client, did: did)
+            }
+            .navigationDestination(item: $deepLinkGalleryUri) { uri in
+                GalleryDetailView(client: client, galleryUri: uri)
+            }
+            .fullScreenCover(item: $deepLinkStoryAuthor) { author in
+                StoryViewer(
+                    authors: [author],
+                    client: client,
+                    onDismiss: { deepLinkStoryAuthor = nil }
+                )
+                .environment(auth)
+            }
+            .task {
+                consumeDeepLink()
+            }
+            .onChange(of: pendingDeepLink) {
+                consumeDeepLink()
+            }
+        }
+    }
+
+    private func consumeDeepLink() {
+        guard let link = pendingDeepLink else { return }
+        pendingDeepLink = nil
+        switch link {
+        case .profile(let did):
+            deepLinkProfileDid = did
+        case .gallery:
+            deepLinkGalleryUri = link.galleryUri
+        case .story(let did, _):
+            Task { await openStoryDeepLink(did: did) }
+        }
+    }
+
+    private func openStoryDeepLink(did: String) async {
+        do {
+            let response = try await client.getStories(actor: did, auth: auth.authContext())
+            let count = response.stories.count
+            if count > 0, let creator = response.stories.first?.creator {
+                deepLinkStoryAuthor = GrainStoryAuthor(
+                    profile: creator,
+                    storyCount: count,
+                    latestAt: response.stories.first?.createdAt ?? ""
+                )
+            } else {
+                // Story expired — fall back to profile
+                deepLinkProfileDid = did
+            }
+        } catch {
+            // Fall back to profile on error
+            deepLinkProfileDid = did
         }
     }
 

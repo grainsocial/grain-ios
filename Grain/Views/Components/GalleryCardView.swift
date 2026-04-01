@@ -19,6 +19,11 @@ struct GalleryCardView: View {
         gallery.viewer?.fav != nil
     }
 
+    private var galleryShareURL: URL {
+        let rkey = gallery.uri.split(separator: "/").last.map(String.init) ?? ""
+        return URL(string: "https://grain.social/profile/\(gallery.creator.did)/gallery/\(rkey)") ?? URL(string: "https://grain.social")!
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Header — tappable for navigation
@@ -148,7 +153,7 @@ struct GalleryCardView: View {
                     }
                     .frame(height: height)
                 }
-                .frame(height: UIScreen.main.bounds.width / carouselRatio)
+                .aspectRatio(carouselRatio, contentMode: .fit)
                 .clipped()
                 .onChange(of: currentPage) { showingAlt = false }
             }
@@ -179,6 +184,12 @@ struct GalleryCardView: View {
                             .font(.system(size: 20))
                         Text("\(gallery.commentCount ?? 0)")
                     }
+                }
+                .foregroundStyle(.secondary)
+
+                ShareLink(item: galleryShareURL) {
+                    Image(systemName: "paperplane")
+                        .font(.system(size: 20))
                 }
                 .foregroundStyle(.secondary)
 
