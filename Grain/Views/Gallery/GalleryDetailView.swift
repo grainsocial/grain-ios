@@ -10,6 +10,7 @@ struct GalleryDetailView: View {
     @State private var isPostingComment = false
     @State private var replyingTo: GrainComment?
     @State private var showDeleteConfirmation = false
+    @State private var showReportSheet = false
     @FocusState private var commentFocused: Bool
     @Environment(\.dismiss) private var dismiss
 
@@ -137,19 +138,28 @@ struct GalleryDetailView: View {
             HashtagFeedView(client: client, tag: tag)
         }
         .toolbar {
-            if let gallery = viewModel.gallery, gallery.creator.did == auth.userDID {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Button(role: .destructive) {
-                            showDeleteConfirmation = true
-                        } label: {
-                            Label("Delete Gallery", systemImage: "trash")
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    if let gallery = viewModel.gallery {
+                        if gallery.creator.did == auth.userDID {
+                            Button(role: .destructive) {
+                                showDeleteConfirmation = true
+                            } label: {
+                                Label("Delete Gallery", systemImage: "trash")
+                            }
+                        } else {
+                            Button {
+                                showReportSheet = true
+                            } label: {
+                                Label("Report", systemImage: "flag")
+                            }
                         }
-                    } label: {
-                        Image(systemName: "ellipsis")
-                            .foregroundStyle(.primary)
                     }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .foregroundStyle(.primary)
                 }
+                .disabled(viewModel.gallery == nil)
             }
         }
         .alert("Delete Gallery?", isPresented: $showDeleteConfirmation) {
@@ -159,6 +169,11 @@ struct GalleryDetailView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This will permanently delete this gallery and all its photos.")
+        }
+        .sheet(isPresented: $showReportSheet) {
+            if let gallery = viewModel.gallery {
+                ReportView(client: client, subjectUri: gallery.uri, subjectCid: gallery.cid)
+            }
         }
         .task {
             await viewModel.load(uri: galleryUri, auth: auth.authContext())
