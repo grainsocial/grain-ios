@@ -1,3 +1,4 @@
+import AVFoundation
 import ImageIO
 import os
 import PhotosUI
@@ -10,7 +11,6 @@ struct CreateGalleryView: View {
     @State private var title = ""
     @State private var description = ""
     @State private var selectedPhotos: [PhotosPickerItem] = []
-    @State private var photoData: [(Data, String)] = [] // (data, mimeType)
     @Environment(\.dismiss) private var dismiss
     @State private var isUploading = false
     @State private var errorMessage: String?
@@ -19,6 +19,8 @@ struct CreateGalleryView: View {
     @State private var locationSuggestions: [NominatimResult] = []
     @State private var isSearchingLocation = false
     @State private var locationSearchTask: Task<Void, Never>?
+    @State private var showCamera = false
+    @State private var photoItems: [PhotoItem] = []
 
     let client: XRPCClient
     var onCreated: (() -> Void)?
@@ -38,10 +40,14 @@ struct CreateGalleryView: View {
                         Label("Select Photos", systemImage: "photo.on.rectangle.angled")
                     }
 
-                    if !selectedPhotos.isEmpty {
-                        Text("\(selectedPhotos.count) photo(s) selected")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    Button {
+                        showCamera = true
+                    } label: {
+                        Label("Take Photo", systemImage: "camera")
+                    }
+
+                    if !photoItems.isEmpty {
+                        ReorderablePhotoStrip(items: $photoItems)
                     }
                 }
 
@@ -128,10 +134,23 @@ struct CreateGalleryView: View {
                 }
             }
             .onChange(of: selectedPhotos) {
-                Task { await detectLocation() }
+                Task {
+                    await loadPickerPhotos()
+                    await detectLocation()
+                }
+            }
+            .fullScreenCover(isPresented: $showCamera) {
+                CameraPicker { image in
+                    let thumb = PhotoItem.makeThumbnail(from: image)
+                    photoItems.append(PhotoItem(thumbnail: thumb, source: .camera(image)))
+                }
+                .ignoresSafeArea()
             }
             .navigationTitle("New Gallery")
             .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         Task { await createGallery() }
@@ -143,19 +162,48 @@ struct CreateGalleryView: View {
                                 .bold()
                         }
                     }
-                    .disabled(title.isEmpty || selectedPhotos.isEmpty || isUploading || title.count > maxTitle || description.count > maxDescription)
+                    .disabled(title.isEmpty || photoItems.isEmpty || isUploading || title.count > maxTitle || description.count > maxDescription)
                 }
             }
         }
     }
 
-    private func detectLocation() async {
-        resolvedLocation = nil
-        locationQuery = ""
-        locationSuggestions = []
+    // MARK: - Photo Loading
 
-        for item in selectedPhotos {
-            guard let data = try? await item.loadTransferable(type: Data.self),
+    private func loadPickerPhotos() async {
+        // Build set of picker item IDs currently in selectedPhotos
+        let selectedIDs = Set(selectedPhotos.compactMap(\.itemIdentifier))
+
+        // Remove picker items that are no longer in the selection
+        photoItems.removeAll { item in
+            guard case .picker(let pickerItem) = item.source else { return false }
+            guard let id = pickerItem.itemIdentifier else { return true }
+            return !selectedIDs.contains(id)
+        }
+
+        // Find which picker items are already represented
+        let existingIDs = Set(photoItems.compactMap { item -> String? in
+            guard case .picker(let pickerItem) = item.source else { return nil }
+            return pickerItem.itemIdentifier
+        })
+
+        // Only load and append truly new selections
+        for item in selectedPhotos where !(item.itemIdentifier.map { existingIDs.contains($0) } ?? false) {
+            if let data = try? await item.loadTransferable(type: Data.self),
+               let image = UIImage(data: data) {
+                let thumb = PhotoItem.makeThumbnail(from: image)
+                photoItems.append(PhotoItem(thumbnail: thumb, source: .picker(item)))
+            }
+        }
+    }
+
+    private func detectLocation() async {
+        // Don't overwrite a manually-selected location
+        guard resolvedLocation == nil else { return }
+
+        for item in photoItems {
+            guard case .picker(let pickerItem) = item.source,
+                  let data = try? await pickerItem.loadTransferable(type: Data.self),
                   let gps = ImageProcessing.extractGPS(from: data) else { continue }
 
             if let result = await LocationServices.reverseGeocode(latitude: gps.latitude, longitude: gps.longitude) {
@@ -178,13 +226,14 @@ struct CreateGalleryView: View {
         locationSuggestions = []
     }
 
+    // MARK: - Create Gallery
+
     private func createGallery() async {
         guard let authContext = auth.authContext(), let repo = auth.userDID else { return }
         isUploading = true
         errorMessage = nil
 
         do {
-            // 1. Load, extract EXIF, resize, and upload photos
             struct ProcessedPhoto {
                 let blob: BlobRef
                 let aspectRatio: AspectRatio
@@ -192,19 +241,32 @@ struct CreateGalleryView: View {
             }
 
             var processed: [ProcessedPhoto] = []
-            for item in selectedPhotos {
-                guard let data = try await item.loadTransferable(type: Data.self),
-                      let original = UIImage(data: data) else { continue }
 
-                let exif = extractExif(from: data)
-                let (resized, size) = ImageProcessing.resizeImage(original, maxDimension: 2000, maxBytes: 900_000)
-                logger.warning("Uploading \(resized.count) bytes, \(Int(size.width))x\(Int(size.height))")
-                let response = try await client.uploadBlob(data: resized, mimeType: "image/jpeg", auth: authContext)
-                processed.append(ProcessedPhoto(
-                    blob: response.blob,
-                    aspectRatio: AspectRatio(width: Int(size.width), height: Int(size.height)),
-                    exif: exif
-                ))
+            for item in photoItems {
+                switch item.source {
+                case .picker(let pickerItem):
+                    guard let data = try await pickerItem.loadTransferable(type: Data.self),
+                          let original = UIImage(data: data) else { continue }
+                    let exif = extractExif(from: data)
+                    let (resized, size) = ImageProcessing.resizeImage(original, maxDimension: 2000, maxBytes: 900_000)
+                    logger.info("Uploading \(resized.count) bytes, \(Int(size.width))x\(Int(size.height))")
+                    let response = try await client.uploadBlob(data: resized, mimeType: "image/jpeg", auth: authContext)
+                    processed.append(ProcessedPhoto(
+                        blob: response.blob,
+                        aspectRatio: AspectRatio(width: Int(size.width), height: Int(size.height)),
+                        exif: exif
+                    ))
+
+                case .camera(let image):
+                    let (resized, size) = ImageProcessing.resizeImage(image, maxDimension: 2000, maxBytes: 900_000)
+                    logger.info("Uploading camera photo \(resized.count) bytes, \(Int(size.width))x\(Int(size.height))")
+                    let response = try await client.uploadBlob(data: resized, mimeType: "image/jpeg", auth: authContext)
+                    processed.append(ProcessedPhoto(
+                        blob: response.blob,
+                        aspectRatio: AspectRatio(width: Int(size.width), height: Int(size.height)),
+                        exif: nil
+                    ))
+                }
             }
 
             // 2. Create photo records + EXIF records
@@ -363,4 +425,26 @@ struct CreateGalleryView: View {
 
         return result.isEmpty ? nil : result
     }
+}
+
+// MARK: - Photo Item Model
+
+struct PhotoItem: Identifiable {
+    let id = UUID()
+    let thumbnail: UIImage
+    let source: PhotoSource
+
+    static func makeThumbnail(from image: UIImage, maxSize: CGFloat = 150) -> UIImage {
+        let scale = min(maxSize / image.size.width, maxSize / image.size.height, 1)
+        let newSize = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+        let renderer = UIGraphicsImageRenderer(size: newSize)
+        return renderer.image { _ in
+            image.draw(in: CGRect(origin: .zero, size: newSize))
+        }
+    }
+}
+
+enum PhotoSource {
+    case picker(PhotosPickerItem)
+    case camera(UIImage)
 }

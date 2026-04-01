@@ -105,11 +105,9 @@ struct MainTabView: View {
             }
         }
         .sheet(isPresented: $showCreate) {
-            NavigationStack {
-                CreateGalleryView(client: client) {
-                    selectedTab = 0
-                    feedRefreshID = UUID()
-                }
+            CreateGalleryView(client: client) {
+                selectedTab = 0
+                feedRefreshID = UUID()
             }
         }
     }
