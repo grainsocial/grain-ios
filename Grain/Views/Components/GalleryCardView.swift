@@ -221,7 +221,7 @@ struct GalleryCardView: View {
                         Text("\(gallery.favCount ?? 0)")
                     }
                 }
-                .foregroundStyle(isFavorited ? Color(red: 0.973, green: 0.443, blue: 0.443) : .secondary)
+                .foregroundStyle(isFavorited ? Color("AccentColor") : .secondary)
 
                 Button {
                     onNavigate()
@@ -295,30 +295,30 @@ struct GalleryCardView: View {
             heartScale = 1
         }
 
-        // Inner ripple — quick bloom
-        withAnimation(.easeOut(duration: 0.35).delay(0.05)) {
+        // Inner ripple — instant start, quick bloom
+        ripple1Opacity = 0.6
+        withAnimation(.easeOut(duration: 0.35)) {
             ripple1Scale = 1.5
-            ripple1Opacity = 0.6
         }
-        withAnimation(.easeIn(duration: 0.25).delay(0.25)) {
+        withAnimation(.easeIn(duration: 0.3).delay(0.2)) {
             ripple1Opacity = 0
         }
 
-        // Middle ripple — medium bloom
-        withAnimation(.easeOut(duration: 0.4).delay(0.1)) {
+        // Middle ripple — instant start, medium bloom
+        ripple2Opacity = 0.4
+        withAnimation(.easeOut(duration: 0.4).delay(0.05)) {
             ripple2Scale = 2.0
-            ripple2Opacity = 0.4
         }
-        withAnimation(.easeIn(duration: 0.3).delay(0.3)) {
+        withAnimation(.easeIn(duration: 0.3).delay(0.25)) {
             ripple2Opacity = 0
         }
 
-        // Outer ripple — largest, slowest bloom
-        withAnimation(.easeOut(duration: 0.5).delay(0.15)) {
+        // Outer ripple — instant start, largest bloom
+        ripple3Opacity = 0.25
+        withAnimation(.easeOut(duration: 0.5).delay(0.1)) {
             ripple3Scale = 2.6
-            ripple3Opacity = 0.25
         }
-        withAnimation(.easeIn(duration: 0.35).delay(0.35)) {
+        withAnimation(.easeIn(duration: 0.35).delay(0.3)) {
             ripple3Opacity = 0
         }
 
