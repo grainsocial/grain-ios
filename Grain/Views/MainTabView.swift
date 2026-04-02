@@ -1,9 +1,13 @@
 import SwiftUI
 
+private enum AppTab: Hashable {
+    case feed, notifications, profile, search
+}
+
 struct MainTabView: View {
     @Environment(AuthManager.self) private var auth
     @Environment(\.scenePhase) private var scenePhase
-    @State private var selectedTab = 0
+    @State private var selectedTab: AppTab = .feed
     @State private var client = XRPCClient(baseURL: AuthManager.serverURL)
     @State private var showCreate = false
     @State private var avatarTabImage: UIImage?
@@ -32,32 +36,34 @@ struct MainTabView: View {
     var body: some View {
         let _ = Self.badgeAppearanceConfigured
         TabView(selection: $selectedTab) {
-            TabSection {
-                Tab("Feed", systemImage: "photo.on.rectangle", value: 0) {
-                    FeedView(client: client, pendingDeepLink: $pendingDeepLink, showCreate: $showCreate)
-                        .id(feedRefreshID)
-                }
+            Tab("Feed", systemImage: "photo.on.rectangle", value: AppTab.feed) {
+                FeedView(client: client, pendingDeepLink: $pendingDeepLink, showCreate: $showCreate)
+                    .id(feedRefreshID)
+            }
 
-                Tab("Notifications", systemImage: "bell", value: 1) {
-                    NotificationsView(client: client, viewModel: notificationsVM)
-                }
-                .badge(notificationsVM.unseenCount)
+            Tab("Search", systemImage: "magnifyingglass", value: AppTab.search) {
+                SearchView(client: client)
+            }
 
-                Tab(value: 2) {
-                    if let did = auth.userDID {
-                        ProfileView(client: client, did: did, isRoot: true)
+            Tab("Notifications", systemImage: "bell", value: AppTab.notifications) {
+                NotificationsView(client: client, viewModel: notificationsVM)
+            }
+            .badge(notificationsVM.unseenCount)
+
+            Tab(value: AppTab.profile) {
+                if let did = auth.userDID {
+                    ProfileView(client: client, did: did, isRoot: true)
+                }
+            } label: {
+                if let img = avatarTabImage {
+                    Label {
+                        Text("Profile")
+                    } icon: {
+                        Image(uiImage: img)
+                            .renderingMode(.original)
                     }
-                } label: {
-                    if let img = avatarTabImage {
-                        Label {
-                            Text("Profile")
-                        } icon: {
-                            Image(uiImage: img)
-                                .renderingMode(.original)
-                        }
-                    } else {
-                        Label("Profile", systemImage: "person")
-                    }
+                } else {
+                    Label("Profile", systemImage: "person")
                 }
             }
         }
@@ -80,7 +86,7 @@ struct MainTabView: View {
         }
         .onChange(of: pendingDeepLink) {
             if pendingDeepLink != nil {
-                selectedTab = 0
+                selectedTab = .feed
             }
         }
         .onChange(of: scenePhase) {
@@ -90,7 +96,7 @@ struct MainTabView: View {
         }
         .sheet(isPresented: $showCreate) {
             CreateGalleryView(client: client) {
-                selectedTab = 0
+                selectedTab = .feed
                 feedRefreshID = UUID()
             }
         }

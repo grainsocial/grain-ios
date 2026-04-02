@@ -28,8 +28,6 @@ struct HashtagFeedView: View {
                             Task { await loadMore() }
                         }
                     }
-
-                    Divider()
                 }
 
                 if isLoading {

@@ -10,10 +10,6 @@ struct FeedView: View {
     @State private var deepLinkProfileDid: String?
     @State private var deepLinkGalleryUri: String?
     @State private var deepLinkStoryAuthor: GrainStoryAuthor?
-    @State private var showSearch = false
-    @State private var searchText = ""
-    @State private var searchViewModel: SearchViewModel
-    @FocusState private var isSearchFocused: Bool
 
     let client: XRPCClient
     @Binding var pendingDeepLink: DeepLink?
@@ -25,54 +21,40 @@ struct FeedView: View {
         _showCreate = showCreate
         _prefsViewModel = State(initialValue: FeedPreferencesViewModel(client: client))
         _storyViewModel = State(initialValue: StoryStripViewModel(client: client))
-        _searchViewModel = State(initialValue: SearchViewModel(client: client))
     }
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                if showSearch {
-                    VStack(spacing: 0) {
-                        searchBarContent
-                            .padding(.horizontal)
-                            .padding(.vertical, 8)
-                        SearchView(viewModel: searchViewModel, client: client)
-                    }
-                } else {
-                    ForEach(prefsViewModel.pinnedFeeds) { feed in
-                        if feed.id == prefsViewModel.selectedFeedId {
-                            FeedTabContent(
-                                client: client,
-                                pinnedFeed: feed,
-                                userDID: auth.userDID,
-                                storyAuthors: storyViewModel.authors,
-                                userAvatar: auth.userAvatar,
-                                onStoryAuthorTap: { _, index in
-                                    storyViewerStartIndex = index
-                                    showStoryViewer = true
-                                },
-                                onStoryCreateTap: { showStoryCreate = true },
-                                onRefresh: {
-                                    await storyViewModel.load(auth: auth.authContext())
-                                },
-                                prefsViewModel: prefsViewModel
-                            )
-                        }
-                    }
+            ForEach(prefsViewModel.pinnedFeeds) { feed in
+                if feed.id == prefsViewModel.selectedFeedId {
+                    FeedTabContent(
+                        client: client,
+                        pinnedFeed: feed,
+                        userDID: auth.userDID,
+                        storyAuthors: storyViewModel.authors,
+                        userAvatar: auth.userAvatar,
+                        onStoryAuthorTap: { _, index in
+                            storyViewerStartIndex = index
+                            showStoryViewer = true
+                        },
+                        onStoryCreateTap: { showStoryCreate = true },
+                        onRefresh: {
+                            await storyViewModel.load(auth: auth.authContext())
+                        },
+                        prefsViewModel: prefsViewModel
+                    )
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbarTitleDisplayMode(.inline)
             .toolbar {
-                if !showSearch {
-                    ToolbarItem(placement: .topBarLeading) {
-                        leadingToolbarContent
-                    }
-                    ToolbarItem(placement: .topBarTrailing) {
-                        trailingToolbarContent
-                    }
-                    .sharedBackgroundVisibility(.hidden)
+                ToolbarItem(placement: .topBarLeading) {
+                    leadingToolbarContent
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    trailingToolbarContent
+                }
+                .sharedBackgroundVisibility(.hidden)
             }
             .task {
                 await prefsViewModel.loadIfNeeded(auth: auth.authContext())
@@ -112,103 +94,52 @@ struct FeedView: View {
                 consumeDeepLink()
             }
         }
-        .onChange(of: searchText) {
-            searchViewModel.searchText = searchText
-        }
     }
 
     @ViewBuilder
     private var leadingToolbarContent: some View {
-        if !showSearch {
-            Menu {
-                ForEach(prefsViewModel.pinnedFeeds) { feed in
-                    Button {
-                        prefsViewModel.selectedFeedId = feed.id
-                    } label: {
-                        if feed.id == prefsViewModel.selectedFeedId {
-                            Label(feed.label, systemImage: "checkmark")
-                        } else {
-                            Text(feed.label)
-                        }
+        Menu {
+            ForEach(prefsViewModel.pinnedFeeds) { feed in
+                Button {
+                    prefsViewModel.selectedFeedId = feed.id
+                } label: {
+                    if feed.id == prefsViewModel.selectedFeedId {
+                        Label(feed.label, systemImage: "checkmark")
+                    } else {
+                        Text(feed.label)
                     }
                 }
-            } label: {
-                HStack(spacing: 4) {
-                    Text(prefsViewModel.selectedFeedLabel)
-                        .font(.headline)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    if prefsViewModel.pinnedFeeds.count > 1 {
-                        Image(systemName: "chevron.down")
-                            .font(.caption2.weight(.bold))
-                            .fixedSize()
-                    }
-                }
-                .frame(maxWidth: 200, alignment: .leading)
-                .foregroundColor(.primary)
             }
-            .tint(.primary)
-        }
-    }
-
-    private var searchBarContent: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
-            TextField("Search galleries & profiles", text: $searchText)
-                .focused($isSearchFocused)
-                .submitLabel(.search)
-                .onSubmit {
-                    Task { await searchViewModel.search(auth: auth.authContext()) }
+        } label: {
+            HStack(spacing: 4) {
+                Text(prefsViewModel.selectedFeedLabel)
+                    .font(.headline)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                if prefsViewModel.pinnedFeeds.count > 1 {
+                    Image(systemName: "chevron.down")
+                        .font(.caption2.weight(.bold))
+                        .fixedSize()
                 }
-            Button {
-                withAnimation(.easeInOut(duration: 0.25)) {
-                    showSearch = false
-                    searchText = ""
-                    searchViewModel.searchText = ""
-                }
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.secondary)
             }
-            .buttonStyle(.plain)
+            .frame(maxWidth: 200, alignment: .leading)
+            .foregroundColor(.primary)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .glassEffect(.regular, in: .capsule)
+        .tint(.primary)
     }
 
     @ViewBuilder
     private var trailingToolbarContent: some View {
-        HStack(spacing: 12) {
-            Button {
-                showCreate = true
-            } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 18, weight: .medium))
-                    .foregroundStyle(.primary)
-                    .frame(width: 42, height: 42)
-                    .glassEffect(.regular.interactive(), in: .circle)
-            }
-            .buttonStyle(.plain)
-            Button {
-                withAnimation(.easeInOut(duration: 0.25)) {
-                    showSearch = true
-                }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    isSearchFocused = true
-                }
-            } label: {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 18, weight: .medium))
-                    .foregroundStyle(.primary)
-                    .frame(width: 42, height: 42)
-                    .glassEffect(.regular.interactive(), in: .circle)
-            }
-            .buttonStyle(.plain)
+        Button {
+            showCreate = true
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(.primary)
+                .frame(width: 42, height: 42)
+                .glassEffect(.regular.interactive(), in: .circle)
         }
-        .contentShape(.rect)
+        .buttonStyle(.plain)
     }
 
     private func consumeDeepLink() {
