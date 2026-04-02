@@ -51,7 +51,26 @@ struct CreateGalleryView: View {
                     }
                 }
 
-                Section("Details") {
+                if !photoItems.isEmpty {
+                    Section("Alt Text") {
+                        ForEach($photoItems) { $item in
+                            HStack(alignment: .top, spacing: 12) {
+                                Image(uiImage: item.thumbnail)
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: 60, height: 60)
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                                TextField("Describe this photo...", text: $item.alt, axis: .vertical)
+                                    .font(.subheadline)
+                                    .lineLimit(2...4)
+                            }
+                            .padding(.vertical, 4)
+                        }
+                    }
+                }
+
+                Section(header: Text("Details"), footer: Text("Title is required.")) {
                     VStack(alignment: .leading, spacing: 4) {
                         TextField("Add a title...", text: $title)
                         Text("\(title.count)/\(maxTitle)")
@@ -241,6 +260,7 @@ struct CreateGalleryView: View {
             }
 
             var processed: [ProcessedPhoto] = []
+            let altTexts = photoItems.map { $0.alt }
 
             for item in photoItems {
                 switch item.source {
@@ -272,18 +292,22 @@ struct CreateGalleryView: View {
             // 2. Create photo records + EXIF records
             let now = DateFormatting.nowISO()
             var photoUris: [String] = []
-            for photo in processed {
+            for (index, photo) in processed.enumerated() {
                 let blobDict: [String: AnyCodable] = [
                     "$type": AnyCodable(photo.blob.type ?? "blob"),
                     "ref": AnyCodable(["$link": AnyCodable(photo.blob.ref?.link ?? "")] as [String: AnyCodable]),
                     "mimeType": AnyCodable(photo.blob.mimeType ?? "image/jpeg"),
                     "size": AnyCodable(photo.blob.size ?? 0)
                 ]
-                let photoRecord: [String: AnyCodable] = [
+                var photoRecord: [String: AnyCodable] = [
                     "photo": AnyCodable(blobDict),
                     "aspectRatio": AnyCodable(["width": AnyCodable(photo.aspectRatio.width), "height": AnyCodable(photo.aspectRatio.height)] as [String: AnyCodable]),
                     "createdAt": AnyCodable(now)
                 ]
+                let alt = altTexts[index].trimmingCharacters(in: .whitespacesAndNewlines)
+                if !alt.isEmpty {
+                    photoRecord["alt"] = AnyCodable(alt)
+                }
                 let result = try await client.createRecord(
                     collection: "social.grain.photo",
                     repo: repo,
@@ -433,6 +457,7 @@ struct PhotoItem: Identifiable {
     let id = UUID()
     let thumbnail: UIImage
     let source: PhotoSource
+    var alt: String = ""
 
     static func makeThumbnail(from image: UIImage, maxSize: CGFloat = 150) -> UIImage {
         let scale = min(maxSize / image.size.width, maxSize / image.size.height, 1)
