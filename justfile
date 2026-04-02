@@ -27,7 +27,7 @@ release:
     echo "Bumped build number: $current → $next"
     xcodegen generate
     echo "Archiving..."
-    xcodebuild archive -scheme Grain -destination 'generic/platform=iOS' -archivePath /tmp/Grain.xcarchive -quiet
+    xcodebuild archive -scheme Grain -destination 'generic/platform=iOS' -archivePath /tmp/Grain.xcarchive CODE_SIGN_STYLE=Automatic -allowProvisioningUpdates -quiet
     echo "Uploading to App Store Connect..."
     cat > /tmp/ExportOptions.plist << 'PLIST'
     <?xml version="1.0" encoding="UTF-8"?>
@@ -43,5 +43,5 @@ release:
     </dict>
     </plist>
     PLIST
-    xcodebuild -exportArchive -archivePath /tmp/Grain.xcarchive -exportOptionsPlist /tmp/ExportOptions.plist -exportPath /tmp/GrainExport
+    xcodebuild -exportArchive -archivePath /tmp/Grain.xcarchive -exportOptionsPlist /tmp/ExportOptions.plist -exportPath /tmp/GrainExport -allowProvisioningUpdates
     echo "Build $next uploaded successfully!"
