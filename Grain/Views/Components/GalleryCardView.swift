@@ -3,6 +3,88 @@ import SwiftUI
 
 private let logger = Logger(subsystem: "social.grain.grain", category: "GalleryCard")
 
+// MARK: - Self-animating heart that removes itself when done
+
+private struct DoubleTapHeart: Identifiable {
+    let id = UUID()
+    let position: CGPoint
+    let rotation: Double
+}
+
+private struct DoubleTapHeartView: View {
+    let heart: DoubleTapHeart
+    var onComplete: () -> Void
+
+    @State private var heartScale: CGFloat = 0
+    @State private var ripple1Scale: CGFloat = 0.3
+    @State private var ripple1Opacity: Double = 0
+    @State private var ripple2Scale: CGFloat = 0.3
+    @State private var ripple2Opacity: Double = 0
+    @State private var ripple3Scale: CGFloat = 0.3
+    @State private var ripple3Opacity: Double = 0
+
+    var body: some View {
+        ZStack {
+            Image(systemName: "heart")
+                .font(.system(size: 80, weight: .light))
+                .foregroundStyle(Color("AccentColor"))
+                .scaleEffect(ripple3Scale)
+                .opacity(ripple3Opacity)
+                .rotationEffect(.degrees(heart.rotation * 0.6))
+
+            Image(systemName: "heart")
+                .font(.system(size: 80, weight: .ultraLight))
+                .foregroundStyle(Color("AccentColor"))
+                .scaleEffect(ripple2Scale)
+                .opacity(ripple2Opacity)
+                .rotationEffect(.degrees(heart.rotation * 0.8))
+
+            Image(systemName: "heart")
+                .font(.system(size: 80, weight: .thin))
+                .foregroundStyle(Color("AccentColor"))
+                .scaleEffect(ripple1Scale)
+                .opacity(ripple1Opacity)
+                .rotationEffect(.degrees(heart.rotation * 0.9))
+
+            Image(systemName: "heart.fill")
+                .font(.system(size: 80))
+                .foregroundStyle(Color("AccentColor"))
+                .shadow(color: Color("AccentColor").opacity(0.4), radius: 12)
+                .scaleEffect(heartScale)
+                .opacity(heartScale > 1.2 ? 0 : 1)
+                .rotationEffect(.degrees(heart.rotation))
+        }
+        .position(x: heart.position.x, y: heart.position.y)
+        .allowsHitTesting(false)
+        .onAppear { animate() }
+    }
+
+    private func animate() {
+        withAnimation(.spring(response: 0.25, dampingFraction: 0.5)) {
+            heartScale = 1
+        }
+
+        ripple1Opacity = 0.6
+        withAnimation(.easeOut(duration: 0.35)) { ripple1Scale = 1.5 }
+        withAnimation(.easeIn(duration: 0.3).delay(0.2)) { ripple1Opacity = 0 }
+
+        ripple2Opacity = 0.4
+        withAnimation(.easeOut(duration: 0.4).delay(0.05)) { ripple2Scale = 2.0 }
+        withAnimation(.easeIn(duration: 0.3).delay(0.25)) { ripple2Opacity = 0 }
+
+        ripple3Opacity = 0.25
+        withAnimation(.easeOut(duration: 0.5).delay(0.1)) { ripple3Scale = 2.6 }
+        withAnimation(.easeIn(duration: 0.35).delay(0.3)) { ripple3Opacity = 0 }
+
+        Task {
+            try? await Task.sleep(for: .milliseconds(500))
+            withAnimation(.easeInOut(duration: 0.4)) { heartScale = 1.6 }
+            try? await Task.sleep(for: .milliseconds(400))
+            onComplete()
+        }
+    }
+}
+
 struct GalleryCardView: View {
     @Environment(AuthManager.self) private var auth
     @Binding var gallery: GrainGallery
@@ -13,16 +95,7 @@ struct GalleryCardView: View {
     @State private var isFavoriting = false
     @State private var currentPage = 0
     @State private var showingAlt = false
-    @State private var showDoubleTapHeart = false
-    @State private var heartPosition: CGPoint = .zero
-    @State private var heartScale: CGFloat = 0
-    @State private var heartRotation: Double = 0
-    @State private var ripple1Scale: CGFloat = 0
-    @State private var ripple1Opacity: Double = 0
-    @State private var ripple2Scale: CGFloat = 0
-    @State private var ripple2Opacity: Double = 0
-    @State private var ripple3Scale: CGFloat = 0
-    @State private var ripple3Opacity: Double = 0
+    @State private var hearts: [DoubleTapHeart] = []
 
     private var isFavorited: Bool {
         gallery.viewer?.fav != nil
@@ -157,44 +230,11 @@ struct GalleryCardView: View {
                         }
                     }
 
-                    // Double-tap heart animation
-                    if showDoubleTapHeart {
-                        ZStack {
-                            // Outer ripple — fastest, largest
-                            Image(systemName: "heart")
-                                .font(.system(size: 80, weight: .light))
-                                .foregroundStyle(Color("AccentColor"))
-                                .scaleEffect(ripple3Scale)
-                                .opacity(ripple3Opacity)
-                                .rotationEffect(.degrees(heartRotation * 0.6))
-
-                            // Middle ripple
-                            Image(systemName: "heart")
-                                .font(.system(size: 80, weight: .ultraLight))
-                                .foregroundStyle(Color("AccentColor"))
-                                .scaleEffect(ripple2Scale)
-                                .opacity(ripple2Opacity)
-                                .rotationEffect(.degrees(heartRotation * 0.8))
-
-                            // Inner ripple — slightly ahead of main
-                            Image(systemName: "heart")
-                                .font(.system(size: 80, weight: .thin))
-                                .foregroundStyle(Color("AccentColor"))
-                                .scaleEffect(ripple1Scale)
-                                .opacity(ripple1Opacity)
-                                .rotationEffect(.degrees(heartRotation * 0.9))
-
-                            // Main solid heart
-                            Image(systemName: "heart.fill")
-                                .font(.system(size: 80))
-                                .foregroundStyle(Color("AccentColor"))
-                                .shadow(color: Color("AccentColor").opacity(0.4), radius: 12)
-                                .scaleEffect(heartScale)
-                                .opacity(heartScale > 1.2 ? 0 : 1)
-                                .rotationEffect(.degrees(heartRotation))
+                    // Double-tap heart animations
+                    ForEach(hearts) { heart in
+                        DoubleTapHeartView(heart: heart) {
+                            hearts.removeAll { $0.id == heart.id }
                         }
-                        .position(x: heartPosition.x, y: heartPosition.y)
-                        .allowsHitTesting(false)
                     }
                     }
                     .frame(height: height)
@@ -279,59 +319,11 @@ struct GalleryCardView: View {
     }
 
     private func doubleTapLike(at point: CGPoint) {
-        heartPosition = point
-        heartRotation = Double.random(in: -20...20)
-        heartScale = 0
-        ripple1Scale = 0.3
-        ripple1Opacity = 0
-        ripple2Scale = 0.3
-        ripple2Opacity = 0
-        ripple3Scale = 0.3
-        ripple3Opacity = 0
-        showDoubleTapHeart = true
+        hearts.append(DoubleTapHeart(
+            position: point,
+            rotation: Double.random(in: -20...20)
+        ))
 
-        // Main heart — bouncy pop in
-        withAnimation(.spring(response: 0.25, dampingFraction: 0.5)) {
-            heartScale = 1
-        }
-
-        // Inner ripple — instant start, quick bloom
-        ripple1Opacity = 0.6
-        withAnimation(.easeOut(duration: 0.35)) {
-            ripple1Scale = 1.5
-        }
-        withAnimation(.easeIn(duration: 0.3).delay(0.2)) {
-            ripple1Opacity = 0
-        }
-
-        // Middle ripple — instant start, medium bloom
-        ripple2Opacity = 0.4
-        withAnimation(.easeOut(duration: 0.4).delay(0.05)) {
-            ripple2Scale = 2.0
-        }
-        withAnimation(.easeIn(duration: 0.3).delay(0.25)) {
-            ripple2Opacity = 0
-        }
-
-        // Outer ripple — instant start, largest bloom
-        ripple3Opacity = 0.25
-        withAnimation(.easeOut(duration: 0.5).delay(0.1)) {
-            ripple3Scale = 2.6
-        }
-        withAnimation(.easeIn(duration: 0.35).delay(0.3)) {
-            ripple3Opacity = 0
-        }
-
-        // Main heart grow + fade out
-        Task {
-            try? await Task.sleep(for: .milliseconds(500))
-            withAnimation(.easeInOut(duration: 0.4)) {
-                heartScale = 1.6
-            }
-            try? await Task.sleep(for: .milliseconds(400))
-            showDoubleTapHeart = false
-        }
-        // Only favorite if not already favorited
         guard !isFavorited, !isFavoriting else { return }
         isFavoriting = true
         Task {
