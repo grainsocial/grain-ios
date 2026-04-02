@@ -13,7 +13,16 @@ struct GalleryCardView: View {
     @State private var isFavoriting = false
     @State private var currentPage = 0
     @State private var showingAlt = false
-    var coordinateSpace: String = "zoomContainer"
+    @State private var showDoubleTapHeart = false
+    @State private var heartPosition: CGPoint = .zero
+    @State private var heartScale: CGFloat = 0
+    @State private var heartRotation: Double = 0
+    @State private var ripple1Scale: CGFloat = 0
+    @State private var ripple1Opacity: Double = 0
+    @State private var ripple2Scale: CGFloat = 0
+    @State private var ripple2Opacity: Double = 0
+    @State private var ripple3Scale: CGFloat = 0
+    @State private var ripple3Opacity: Double = 0
 
     private var isFavorited: Bool {
         gallery.viewer?.fav != nil
@@ -76,7 +85,7 @@ struct GalleryCardView: View {
                                 ZoomableImage(
                                     url: photo.fullsize,
                                     aspectRatio: photo.aspectRatio.ratio,
-                                    coordinateSpace: coordinateSpace
+                                    onDoubleTap: { point in doubleTapLike(at: point) }
                                 )
                                 .tag(index)
                             }
@@ -146,6 +155,46 @@ struct GalleryCardView: View {
                             }
                             .padding(8)
                         }
+                    }
+
+                    // Double-tap heart animation
+                    if showDoubleTapHeart {
+                        ZStack {
+                            // Outer ripple — fastest, largest
+                            Image(systemName: "heart")
+                                .font(.system(size: 80, weight: .light))
+                                .foregroundStyle(Color("AccentColor"))
+                                .scaleEffect(ripple3Scale)
+                                .opacity(ripple3Opacity)
+                                .rotationEffect(.degrees(heartRotation * 0.6))
+
+                            // Middle ripple
+                            Image(systemName: "heart")
+                                .font(.system(size: 80, weight: .ultraLight))
+                                .foregroundStyle(Color("AccentColor"))
+                                .scaleEffect(ripple2Scale)
+                                .opacity(ripple2Opacity)
+                                .rotationEffect(.degrees(heartRotation * 0.8))
+
+                            // Inner ripple — slightly ahead of main
+                            Image(systemName: "heart")
+                                .font(.system(size: 80, weight: .thin))
+                                .foregroundStyle(Color("AccentColor"))
+                                .scaleEffect(ripple1Scale)
+                                .opacity(ripple1Opacity)
+                                .rotationEffect(.degrees(heartRotation * 0.9))
+
+                            // Main solid heart
+                            Image(systemName: "heart.fill")
+                                .font(.system(size: 80))
+                                .foregroundStyle(Color("AccentColor"))
+                                .shadow(color: Color("AccentColor").opacity(0.4), radius: 12)
+                                .scaleEffect(heartScale)
+                                .opacity(heartScale > 1.2 ? 0 : 1)
+                                .rotationEffect(.degrees(heartRotation))
+                        }
+                        .position(x: heartPosition.x, y: heartPosition.y)
+                        .allowsHitTesting(false)
                     }
                     }
                     .frame(height: height)
@@ -226,6 +275,68 @@ struct GalleryCardView: View {
             .padding(.horizontal, 12)
             .padding(.top, 8)
             .padding(.bottom, 16)
+        }
+    }
+
+    private func doubleTapLike(at point: CGPoint) {
+        heartPosition = point
+        heartRotation = Double.random(in: -20...20)
+        heartScale = 0
+        ripple1Scale = 0.3
+        ripple1Opacity = 0
+        ripple2Scale = 0.3
+        ripple2Opacity = 0
+        ripple3Scale = 0.3
+        ripple3Opacity = 0
+        showDoubleTapHeart = true
+
+        // Main heart — bouncy pop in
+        withAnimation(.spring(response: 0.25, dampingFraction: 0.5)) {
+            heartScale = 1
+        }
+
+        // Inner ripple — quick bloom
+        withAnimation(.easeOut(duration: 0.35).delay(0.05)) {
+            ripple1Scale = 1.5
+            ripple1Opacity = 0.6
+        }
+        withAnimation(.easeIn(duration: 0.25).delay(0.25)) {
+            ripple1Opacity = 0
+        }
+
+        // Middle ripple — medium bloom
+        withAnimation(.easeOut(duration: 0.4).delay(0.1)) {
+            ripple2Scale = 2.0
+            ripple2Opacity = 0.4
+        }
+        withAnimation(.easeIn(duration: 0.3).delay(0.3)) {
+            ripple2Opacity = 0
+        }
+
+        // Outer ripple — largest, slowest bloom
+        withAnimation(.easeOut(duration: 0.5).delay(0.15)) {
+            ripple3Scale = 2.6
+            ripple3Opacity = 0.25
+        }
+        withAnimation(.easeIn(duration: 0.35).delay(0.35)) {
+            ripple3Opacity = 0
+        }
+
+        // Main heart grow + fade out
+        Task {
+            try? await Task.sleep(for: .milliseconds(500))
+            withAnimation(.easeInOut(duration: 0.4)) {
+                heartScale = 1.6
+            }
+            try? await Task.sleep(for: .milliseconds(400))
+            showDoubleTapHeart = false
+        }
+        // Only favorite if not already favorited
+        guard !isFavorited, !isFavoriting else { return }
+        isFavoriting = true
+        Task {
+            await toggleFavorite()
+            isFavoriting = false
         }
     }
 
