@@ -6,7 +6,6 @@ import SwiftUI
 @Observable
 @MainActor
 final class ImageZoomState {
-    var isActive = false
     var showOverlay = false
     var scale: CGFloat = 1
     var anchor: UnitPoint = .center
@@ -55,10 +54,8 @@ struct ImageZoomOverlay: ViewModifier {
 // MARK: - UIKit gesture handler
 
 struct PinchZoomOverlay: UIViewRepresentable {
-    @Binding var scale: CGFloat
-    @Binding var anchor: UnitPoint
-    @Binding var offset: CGSize
-    @Binding var isActive: Bool
+    let zoomState: ImageZoomState
+    var onBegan: (UnitPoint) -> Void
     var onEnded: () -> Void
 
     func makeUIView(context: Context) -> UIView {
@@ -102,20 +99,22 @@ struct PinchZoomOverlay: UIViewRepresentable {
         }
 
         @objc func handlePinch(_ gesture: UIPinchGestureRecognizer) {
+            let state = parent.zoomState
             switch gesture.state {
             case .began:
-                startScale = parent.scale
+                startScale = state.scale
                 let loc = gesture.location(in: gesture.view)
                 let size = gesture.view?.bounds.size ?? CGSize(width: 1, height: 1)
-                parent.anchor = UnitPoint(
+                let anchor = UnitPoint(
                     x: loc.x / max(size.width, 1),
                     y: loc.y / max(size.height, 1)
                 )
-                parent.isActive = true
+                state.anchor = anchor
+                parent.onBegan(anchor)
             case .changed:
-                parent.scale = max(startScale * gesture.scale, 1)
+                state.scale = max(startScale * gesture.scale, 1)
             case .ended, .cancelled:
-                startScale = parent.scale
+                startScale = state.scale
                 parent.onEnded()
             default:
                 break
@@ -125,9 +124,9 @@ struct PinchZoomOverlay: UIViewRepresentable {
         @objc func handlePan(_ gesture: UIPanGestureRecognizer) {
             switch gesture.state {
             case .changed:
-                guard parent.scale > 1 else { return }
+                guard parent.zoomState.scale > 1 else { return }
                 let t = gesture.translation(in: gesture.view)
-                parent.offset = CGSize(width: t.x, height: t.y)
+                parent.zoomState.offset = CGSize(width: t.x, height: t.y)
             case .ended, .cancelled:
                 parent.onEnded()
             default:
@@ -146,10 +145,6 @@ struct ZoomableImage: View {
     @Environment(ImageZoomState.self) private var zoomState
 
     @State private var snapBackTask: Task<Void, Never>?
-    @State private var localScale: CGFloat = 1
-    @State private var localAnchor: UnitPoint = .center
-    @State private var localOffset: CGSize = .zero
-    @State private var localActive = false
 
     var body: some View {
         LazyImage(url: URL(string: url)) { state in
@@ -164,43 +159,31 @@ struct ZoomableImage: View {
             }
         }
         .opacity(zoomState.showOverlay && zoomState.imageURL == url ? 0 : 1)
-        .background {
+        .overlay {
             GeometryReader { geo in
-                Color.clear
-                    .onChange(of: localActive) {
-                        if localActive {
-                            let frame = geo.frame(in: .named(coordinateSpace))
-                            zoomState.sourceFrame = frame
-                            zoomState.imageURL = url
-                            zoomState.aspectRatio = aspectRatio
-                            zoomState.showOverlay = true
-                        }
-                    }
-                    .onChange(of: localScale) {
-                        zoomState.scale = localScale
-                        zoomState.anchor = localAnchor
-                        zoomState.offset = localOffset
-                    }
-                    .onChange(of: localOffset) {
-                        zoomState.offset = localOffset
-                    }
+                Color.clear.onAppear {}
+                    .preference(key: FrameKey.self, value: geo.frame(in: .named(coordinateSpace)))
             }
         }
         .overlay {
             PinchZoomOverlay(
-                scale: $localScale,
-                anchor: $localAnchor,
-                offset: $localOffset,
-                isActive: $localActive,
-                onEnded: {
-                    scheduleSnapBack()
-                }
+                zoomState: zoomState,
+                onBegan: { anchor in
+                    zoomState.imageURL = url
+                    zoomState.aspectRatio = aspectRatio
+                    zoomState.anchor = anchor
+                    zoomState.showOverlay = true
+                },
+                onEnded: { scheduleSnapBack() }
             )
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onChange(of: url) {
-            resetZoom()
+        .onPreferenceChange(FrameKey.self) { frame in
+            if zoomState.showOverlay && zoomState.imageURL == url {
+                zoomState.sourceFrame = frame
+            }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onChange(of: url) { resetZoom() }
     }
 
     private func scheduleSnapBack() {
@@ -214,11 +197,7 @@ struct ZoomableImage: View {
 
     private func resetZoom() {
         snapBackTask?.cancel()
-        localActive = false
-        zoomState.isActive = false
         withAnimation(.easeOut(duration: 0.1)) {
-            localScale = 1
-            localOffset = .zero
             zoomState.scale = 1
             zoomState.offset = .zero
         }
@@ -226,5 +205,14 @@ struct ZoomableImage: View {
             try? await Task.sleep(for: .milliseconds(120))
             zoomState.showOverlay = false
         }
+    }
+}
+
+// MARK: - Preference key for frame tracking
+
+private struct FrameKey: @preconcurrency PreferenceKey {
+    static let defaultValue: CGRect = .zero
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        value = nextValue()
     }
 }
