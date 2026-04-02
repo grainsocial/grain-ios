@@ -31,6 +31,31 @@ struct GrainExif: Codable, Sendable {
     var lensModel: String?
     var make: String?
     var model: String?
+
+    var cameraName: String? {
+        let parts = [make, model].compactMap { $0 }.filter { !$0.isEmpty }
+        return parts.isEmpty ? nil : parts.joined(separator: " ")
+    }
+
+    var lensName: String? {
+        if let lensModel, !lensModel.isEmpty { return lensModel }
+        let parts = [lensMake, lensModel].compactMap { $0 }.filter { !$0.isEmpty }
+        return parts.isEmpty ? nil : parts.joined(separator: " ")
+    }
+
+    var settingsLine: String? {
+        let parts = [
+            focalLengthIn35mmFormat,
+            fNumber,
+            exposureTime,
+            iSO.map { "ISO \($0)" }
+        ].compactMap { $0 }.filter { !$0.isEmpty }
+        return parts.isEmpty ? nil : parts.joined(separator: "  ·  ")
+    }
+
+    var hasDisplayableData: Bool {
+        cameraName != nil || lensName != nil || settingsLine != nil
+    }
 }
 
 /// social.grain.photo.defs#galleryState

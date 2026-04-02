@@ -204,6 +204,15 @@ struct GalleryCardView: View {
             .padding(.top, 12)
             .padding(.bottom, 4)
 
+            // EXIF info
+            if let photos = gallery.items, !photos.isEmpty,
+               let exif = photos[currentPage].exif,
+               exif.hasDisplayableData {
+                ExifInfoView(exif: exif)
+                    .padding(.horizontal, 12)
+                    .padding(.top, 8)
+            }
+
             // Title & description
             VStack(alignment: .leading, spacing: 4) {
                 Text(gallery.title ?? "")

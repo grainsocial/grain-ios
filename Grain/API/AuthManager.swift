@@ -20,7 +20,7 @@ final class AuthManager {
     private var client: XRPCClient?
     private var refreshTask: Task<Void, Error>?
 
-    #if DEBUG
+    #if targetEnvironment(simulator)
     static let serverURL = URL(string: "http://127.0.0.1:3000")!
     #else
     static let serverURL = URL(string: "https://grain.social")!

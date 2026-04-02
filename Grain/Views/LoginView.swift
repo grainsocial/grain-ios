@@ -25,35 +25,43 @@ struct LoginView: View {
                     .ignoresSafeArea()
                     .allowsHitTesting(false)
 
+                ScrollViewReader { proxy in
                 ScrollView {
-                    Spacer()
-                        .frame(minHeight: 100)
-                        .frame(maxHeight: .infinity)
+                    if suggestions.isEmpty {
+                        Spacer()
+                            .frame(minHeight: 100)
+                            .frame(maxHeight: .infinity)
+                    } else {
+                        Spacer()
+                            .frame(height: 60)
+                    }
 
                     // Logo
                     Text("grain")
                         .font(.custom("Syne", size: 44).weight(.heavy))
                         .foregroundStyle(.white)
-                        .padding(.bottom, 60)
+                        .padding(.bottom, suggestions.isEmpty ? 60 : 20)
 
-                    // Heading
-                    Text("Log in with your internet handle")
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .multilineTextAlignment(.center)
-                        .padding(.bottom, 4)
+                    if suggestions.isEmpty {
+                        // Heading
+                        Text("Log in with your internet handle")
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .multilineTextAlignment(.center)
+                            .padding(.bottom, 4)
 
-                    Text("Enter the domain you use as your identity across the open social web.")
-                        .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.7))
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 8)
+                        Text("Enter the domain you use as your identity across the open social web.")
+                            .font(.subheadline)
+                            .foregroundStyle(.white.opacity(0.7))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 8)
 
-                    Link("Learn more", destination: URL(string: "https://internethandle.org")!)
-                        .font(.subheadline.weight(.medium))
-                        .underline()
-                        .foregroundStyle(.white)
-                        .padding(.bottom, 16)
+                        Link("Learn more", destination: URL(string: "https://internethandle.org")!)
+                            .font(.subheadline.weight(.medium))
+                            .underline()
+                            .foregroundStyle(.white)
+                            .padding(.bottom, 16)
+                    }
 
                     // Login card
                     VStack(spacing: 16) {
@@ -150,6 +158,7 @@ struct LoginView: View {
                                 RoundedRectangle(cornerRadius: 12)
                                     .stroke(.white.opacity(0.2), lineWidth: 1)
                             )
+                            .id("suggestions")
                         }
 
                         // Sign in button
@@ -210,11 +219,19 @@ struct LoginView: View {
                         .frame(height: 60)
                 }
                 .frame(minHeight: geo.size.height)
+                .onChange(of: suggestions) {
+                    if !suggestions.isEmpty {
+                        withAnimation {
+                            proxy.scrollTo("suggestions", anchor: .bottom)
+                        }
+                    }
+                }
             }
             .scrollDismissesKeyboard(.interactively)
             .scrollIndicators(.hidden)
-            }
+            } // ScrollViewReader
         }
+    }
 
     private func createAccount() async {
         isLoading = true
@@ -273,7 +290,7 @@ struct LoginView: View {
     }
 }
 
-private struct ActorSuggestion: Identifiable {
+private struct ActorSuggestion: Identifiable, Equatable {
     let handle: String
     let displayName: String?
     let avatar: String?

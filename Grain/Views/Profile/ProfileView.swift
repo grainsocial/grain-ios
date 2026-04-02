@@ -9,6 +9,7 @@ struct ProfileView: View {
     @Namespace private var viewModeNS
     @Environment(AuthManager.self) private var auth
     @State private var showStoryViewer = false
+    @State private var showAvatarOverlay = false
     @State private var viewModel: ProfileDetailViewModel
     @State private var selectedGalleryUri: String?
     @State private var selectedProfileDid: String?
@@ -49,6 +50,8 @@ struct ProfileView: View {
                             .onTapGesture {
                                 if !viewModel.stories.isEmpty {
                                     showStoryViewer = true
+                                } else if profile.avatar != nil {
+                                    showAvatarOverlay = true
                                 }
                             }
 
@@ -234,6 +237,13 @@ struct ProfileView: View {
                     )
                 }
             }
+            .fullScreenCover(isPresented: $showAvatarOverlay) {
+                if let avatar = viewModel.profile?.avatar {
+                    AvatarOverlay(url: avatar) {
+                        showAvatarOverlay = false
+                    }
+                }
+            }
             .background(Color(.systemBackground))
             .refreshable {
                 await viewModel.load(did: did, viewer: auth.userDID, auth: auth.authContext())
@@ -247,6 +257,33 @@ struct ProfileView: View {
                     deletedGalleryUri = nil
                 }
             }
+    }
+}
+
+private struct AvatarOverlay: View {
+    let url: String
+    let onDismiss: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.85)
+                .ignoresSafeArea()
+                .onTapGesture { onDismiss() }
+
+            LazyImage(url: URL(string: url)) { state in
+                if let image = state.image {
+                    image
+                        .resizable()
+                        .scaledToFit()
+                        .clipShape(.circle)
+                        .padding(40)
+                } else {
+                    ProgressView()
+                }
+            }
+        }
+        .transition(.opacity)
+        .animation(.easeInOut(duration: 0.2), value: true)
     }
 }
 

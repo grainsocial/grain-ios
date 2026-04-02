@@ -2,9 +2,7 @@ import SwiftUI
 
 struct FeedView: View {
     @Environment(AuthManager.self) private var auth
-    @State private var pinnedFeeds: [PinnedFeed] = PinnedFeed.defaults
-    @State private var selectedFeedId: String = "recent"
-    @State private var hasLoadedPreferences = false
+    @State private var prefsViewModel: FeedPreferencesViewModel
     @State private var storyViewModel: StoryStripViewModel
     @State private var showStoryViewer = false
     @State private var storyViewerStartIndex = 0
@@ -25,12 +23,9 @@ struct FeedView: View {
         self.client = client
         _pendingDeepLink = pendingDeepLink
         _showCreate = showCreate
+        _prefsViewModel = State(initialValue: FeedPreferencesViewModel(client: client))
         _storyViewModel = State(initialValue: StoryStripViewModel(client: client))
         _searchViewModel = State(initialValue: SearchViewModel(client: client))
-    }
-
-    private var selectedFeedLabel: String {
-        pinnedFeeds.first(where: { $0.id == selectedFeedId })?.label ?? "Feed"
     }
 
     var body: some View {
@@ -44,8 +39,8 @@ struct FeedView: View {
                         SearchView(viewModel: searchViewModel, client: client)
                     }
                 } else {
-                    ForEach(pinnedFeeds) { feed in
-                        if feed.id == selectedFeedId {
+                    ForEach(prefsViewModel.pinnedFeeds) { feed in
+                        if feed.id == prefsViewModel.selectedFeedId {
                             FeedTabContent(
                                 client: client,
                                 pinnedFeed: feed,
@@ -59,7 +54,8 @@ struct FeedView: View {
                                 onStoryCreateTap: { showStoryCreate = true },
                                 onRefresh: {
                                     await storyViewModel.load(auth: auth.authContext())
-                                }
+                                },
+                                prefsViewModel: prefsViewModel
                             )
                         }
                     }
@@ -79,7 +75,7 @@ struct FeedView: View {
                 }
             }
             .task {
-                await loadPreferences()
+                await prefsViewModel.loadIfNeeded(auth: auth.authContext())
                 await storyViewModel.load(auth: auth.authContext())
             }
             .customFullScreenCover(isPresented: $showStoryViewer) {
@@ -125,11 +121,11 @@ struct FeedView: View {
     private var leadingToolbarContent: some View {
         if !showSearch {
             Menu {
-                ForEach(pinnedFeeds) { feed in
+                ForEach(prefsViewModel.pinnedFeeds) { feed in
                     Button {
-                        selectedFeedId = feed.id
+                        prefsViewModel.selectedFeedId = feed.id
                     } label: {
-                        if feed.id == selectedFeedId {
+                        if feed.id == prefsViewModel.selectedFeedId {
                             Label(feed.label, systemImage: "checkmark")
                         } else {
                             Text(feed.label)
@@ -138,13 +134,17 @@ struct FeedView: View {
                 }
             } label: {
                 HStack(spacing: 4) {
-                    Text(selectedFeedLabel)
+                    Text(prefsViewModel.selectedFeedLabel)
                         .font(.headline)
-                    if pinnedFeeds.count > 1 {
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    if prefsViewModel.pinnedFeeds.count > 1 {
                         Image(systemName: "chevron.down")
                             .font(.caption2.weight(.bold))
+                            .fixedSize()
                     }
                 }
+                .frame(maxWidth: 200, alignment: .leading)
                 .foregroundColor(.primary)
             }
             .tint(.primary)
@@ -181,34 +181,34 @@ struct FeedView: View {
 
     @ViewBuilder
     private var trailingToolbarContent: some View {
-        GlassEffectContainer(spacing: 0) {
-            HStack(spacing: 12) {
-                    Button {
-                        showCreate = true
-                    } label: {
-                        Image(systemName: "plus")
-                            .font(.system(size: 18, weight: .medium))
-                            .foregroundStyle(.primary)
-                            .frame(width: 42, height: 42)
-                            .glassEffect(.regular.interactive(), in: .circle)
-                    }
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.25)) {
-                            showSearch = true
-                        }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                            isSearchFocused = true
-                        }
-                    } label: {
-                        Image(systemName: "magnifyingglass")
-                            .font(.system(size: 18, weight: .medium))
-                            .foregroundStyle(.primary)
-                            .frame(width: 42, height: 42)
-                            .glassEffect(.regular.interactive(), in: .circle)
-                    }
-                }
-                .buttonStyle(.plain)
+        HStack(spacing: 12) {
+            Button {
+                showCreate = true
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(.primary)
+                    .frame(width: 42, height: 42)
+                    .glassEffect(.regular.interactive(), in: .circle)
             }
+            .buttonStyle(.plain)
+            Button {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    showSearch = true
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    isSearchFocused = true
+                }
+            } label: {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(.primary)
+                    .frame(width: 42, height: 42)
+                    .glassEffect(.regular.interactive(), in: .circle)
+            }
+            .buttonStyle(.plain)
+        }
+        .contentShape(.rect)
     }
 
     private func consumeDeepLink() {
@@ -244,20 +244,6 @@ struct FeedView: View {
         }
     }
 
-    private func loadPreferences() async {
-        guard !hasLoadedPreferences else { return }
-        hasLoadedPreferences = true
-
-        do {
-            let response = try await client.getPreferences(auth: auth.authContext())
-            if let feeds = response.preferences.pinnedFeeds, !feeds.isEmpty {
-                pinnedFeeds = feeds
-                selectedFeedId = feeds.first?.id ?? "recent"
-            }
-        } catch {
-            // Fall back to defaults, already set
-        }
-    }
 }
 
 private struct FeedTabContent: View {
@@ -273,28 +259,28 @@ private struct FeedTabContent: View {
     let onStoryAuthorTap: (GrainStoryAuthor, Int) -> Void
     let onStoryCreateTap: () -> Void
     let onRefresh: (@Sendable () async -> Void)?
+    let prefsViewModel: FeedPreferencesViewModel
 
-    init(client: XRPCClient, pinnedFeed: PinnedFeed, userDID: String? = nil, storyAuthors: [GrainStoryAuthor] = [], userAvatar: String? = nil, onStoryAuthorTap: @escaping (GrainStoryAuthor, Int) -> Void = { _, _ in }, onStoryCreateTap: @escaping () -> Void = {}, onRefresh: (@Sendable () async -> Void)? = nil) {
+    init(client: XRPCClient, pinnedFeed: PinnedFeed, userDID: String? = nil, storyAuthors: [GrainStoryAuthor] = [], userAvatar: String? = nil, onStoryAuthorTap: @escaping (GrainStoryAuthor, Int) -> Void = { _, _ in }, onStoryCreateTap: @escaping () -> Void = {}, onRefresh: (@Sendable () async -> Void)? = nil, prefsViewModel: FeedPreferencesViewModel) {
         self.client = client
         self.storyAuthors = storyAuthors
         self.userAvatar = userAvatar
         self.onStoryAuthorTap = onStoryAuthorTap
         self.onStoryCreateTap = onStoryCreateTap
         self.onRefresh = onRefresh
+        self.prefsViewModel = prefsViewModel
         _viewModel = State(initialValue: FeedViewModel(client: client, pinnedFeed: pinnedFeed, userDID: userDID))
     }
 
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
-                if !storyAuthors.isEmpty {
-                    StoryStripView(
-                        authors: storyAuthors,
-                        userAvatar: userAvatar,
-                        onAuthorTap: onStoryAuthorTap,
-                        onCreateTap: onStoryCreateTap
-                    )
-                }
+                StoryStripView(
+                    authors: storyAuthors,
+                    userAvatar: userAvatar,
+                    onAuthorTap: onStoryAuthorTap,
+                    onCreateTap: onStoryCreateTap
+                )
 
                 ForEach($viewModel.galleries) { $gallery in
                     GalleryCardView(gallery: $gallery, client: client, onNavigate: {
@@ -318,8 +304,11 @@ private struct FeedTabContent: View {
             }
         }
         .refreshable {
-            await viewModel.loadInitial(auth: auth.authContext())
-            await onRefresh?()
+            let auth = auth.authContext()
+            async let feed: () = viewModel.loadInitial(auth: auth)
+            async let stories: ()? = onRefresh?()
+            async let prefs: () = prefsViewModel.refresh(auth: auth)
+            _ = await (feed, stories, prefs)
         }
         .navigationDestination(item: $selectedUri) { uri in
             GalleryDetailView(client: client, galleryUri: uri, deletedGalleryUri: $deletedGalleryUri)
