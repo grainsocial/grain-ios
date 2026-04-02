@@ -11,6 +11,7 @@ struct GalleryDetailView: View {
     @State private var replyingTo: GrainComment?
     @State private var showDeleteConfirmation = false
     @State private var showReportSheet = false
+    @State private var showCommentSheet = false
     @FocusState private var commentFocused: Bool
     @Environment(\.dismiss) private var dismiss
 
@@ -53,49 +54,21 @@ struct GalleryDetailView: View {
                         }
                     )
 
-                    Divider()
-
-                    // Reply indicator
-                    if let replyTarget = replyingTo {
+                    // Add comment button
+                    Button {
+                        showCommentSheet = true
+                    } label: {
                         HStack {
-                            Text("Replying to @\(replyTarget.author.handle)")
-                                .font(.caption)
+                            Image(systemName: "bubble.left")
+                            Text("Add a comment...")
                                 .foregroundStyle(.secondary)
                             Spacer()
-                            Button {
-                                replyingTo = nil
-                            } label: {
-                                Image(systemName: "xmark")
-                                    .font(.caption.weight(.bold))
-                                    .foregroundStyle(.white)
-                            }
                         }
+                        .font(.subheadline)
                         .padding(.horizontal, 12)
-                        .padding(.top, 8)
+                        .padding(.vertical, 12)
                     }
-
-                    // Comment input
-                    HStack(spacing: 8) {
-                        TextField(replyingTo != nil ? "Reply..." : "Add a comment...", text: $commentText)
-                            .textFieldStyle(.plain)
-                            .font(.subheadline)
-                            .focused($commentFocused)
-
-                        if !commentText.isEmpty {
-                            Button {
-                                Task { await postComment() }
-                            } label: {
-                                Text("Post")
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(Color("AccentColor"))
-                            }
-                            .disabled(isPostingComment)
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
-
-                    Divider()
+                    .buttonStyle(.plain)
 
                     // Threaded comments
                     if !viewModel.comments.isEmpty {
@@ -175,6 +148,61 @@ struct GalleryDetailView: View {
                 ReportView(client: client, subjectUri: gallery.uri, subjectCid: gallery.cid)
             }
         }
+        .sheet(isPresented: $showCommentSheet) {
+            NavigationStack {
+                VStack(spacing: 0) {
+                    if let replyTarget = replyingTo {
+                        HStack {
+                            Text("Replying to @\(replyTarget.author.handle)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Button {
+                                replyingTo = nil
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .padding(.horizontal)
+                        .padding(.top, 8)
+                    }
+
+                    TextField(replyingTo != nil ? "Reply..." : "Write a comment...", text: $commentText, axis: .vertical)
+                        .textFieldStyle(.plain)
+                        .font(.body)
+                        .focused($commentFocused)
+                        .padding()
+                        .lineLimit(5...10)
+
+                    Spacer()
+                }
+                .navigationTitle(replyingTo != nil ? "Reply" : "Comment")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") {
+                            showCommentSheet = false
+                            commentText = ""
+                            replyingTo = nil
+                        }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Post") {
+                            Task {
+                                await postComment()
+                                showCommentSheet = false
+                            }
+                        }
+                        .disabled(commentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isPostingComment)
+                    }
+                }
+            }
+            .presentationDetents([.medium])
+            .onAppear {
+                commentFocused = true
+            }
+        }
         .task {
             await viewModel.load(uri: galleryUri, auth: auth.authContext())
         }
@@ -182,7 +210,7 @@ struct GalleryDetailView: View {
 
     private func startReply(to comment: GrainComment) {
         replyingTo = comment
-        commentFocused = true
+        showCommentSheet = true
     }
 
     private func postComment() async {
@@ -193,7 +221,7 @@ struct GalleryDetailView: View {
         var recordDict: [String: String] = [
             "text": text,
             "subject": galleryUri,
-            "createdAt": ISO8601DateFormatter().string(from: Date())
+            "createdAt": DateFormatting.nowISO()
         ]
         if let replyTarget = replyingTo {
             recordDict["replyTo"] = replyTarget.uri
@@ -254,7 +282,7 @@ struct CommentRow: View {
                 HStack(spacing: 4) {
                     Text(comment.author.displayName ?? comment.author.handle)
                         .font(.subheadline.weight(.semibold))
-                    Text(relativeTime(comment.createdAt))
+                    Text(DateFormatting.relativeTime(comment.createdAt))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -296,15 +324,4 @@ struct CommentRow: View {
         .padding(.vertical, 8)
     }
 
-    private func relativeTime(_ dateString: String) -> String {
-        let formatter = ISO8601DateFormatter()
-        guard let date = formatter.date(from: dateString) else { return "" }
-        let interval = Date().timeIntervalSince(date)
-
-        if interval < 60 { return "now" }
-        if interval < 3600 { return "\(Int(interval / 60))m" }
-        if interval < 86400 { return "\(Int(interval / 3600))h" }
-        if interval < 604800 { return "\(Int(interval / 86400))d" }
-        return "\(Int(interval / 604800))w"
-    }
 }

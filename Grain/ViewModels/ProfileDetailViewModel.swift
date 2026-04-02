@@ -22,11 +22,9 @@ final class ProfileDetailViewModel {
         error = nil
 
         do {
-            async let profileResponse = client.getActorProfile(actor: did, viewer: viewer, auth: auth)
-            async let feedResponse = client.getFeed(feed: "actor", actor: did, auth: auth)
-            async let storiesResponse = client.getStories(actor: did, auth: auth)
-
-            let (p, f, s) = try await (profileResponse, feedResponse, storiesResponse)
+            let p = try await client.getActorProfile(actor: did, viewer: viewer, auth: auth)
+            let f = try await client.getFeed(feed: "actor", actor: did, auth: auth)
+            let s = try await client.getStories(actor: did, auth: auth)
             profile = p
             galleries = f.items ?? []
             galleryCursor = f.cursor
@@ -81,7 +79,7 @@ final class ProfileDetailViewModel {
 
             let record = AnyCodable([
                 "subject": did,
-                "createdAt": ISO8601DateFormatter().string(from: Date())
+                "createdAt": DateFormatting.nowISO()
             ])
             let repo = TokenStorage.userDID ?? ""
             do {

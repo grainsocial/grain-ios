@@ -270,7 +270,7 @@ struct CreateGalleryView: View {
             }
 
             // 2. Create photo records + EXIF records
-            let now = ISO8601DateFormatter().string(from: Date())
+            let now = DateFormatting.nowISO()
             var photoUris: [String] = []
             for photo in processed {
                 let blobDict: [String: AnyCodable] = [

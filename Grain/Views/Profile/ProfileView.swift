@@ -1,7 +1,12 @@
 import SwiftUI
 import NukeUI
 
+enum ProfileViewMode: String, CaseIterable {
+    case grid, list
+}
+
 struct ProfileView: View {
+    @Namespace private var viewModeNS
     @Environment(AuthManager.self) private var auth
     @State private var showStoryViewer = false
     @State private var viewModel: ProfileDetailViewModel
@@ -9,6 +14,7 @@ struct ProfileView: View {
     @State private var selectedProfileDid: String?
     @State private var selectedHashtag: String?
     @State private var deletedGalleryUri: String?
+    @State private var viewMode: ProfileViewMode = .grid
     let client: XRPCClient
     let did: String
     var isRoot = false
@@ -97,37 +103,89 @@ struct ProfileView: View {
                             .padding(.horizontal)
                         }
 
-                        // Gallery grid
-                        LazyVGrid(columns: [
-                            GridItem(.flexible(), spacing: 2),
-                            GridItem(.flexible(), spacing: 2),
-                            GridItem(.flexible(), spacing: 2)
-                        ], spacing: 2) {
-                            ForEach(viewModel.galleries) { gallery in
+                        // View mode toggle
+                        GlassEffectContainer(spacing: 8) {
+                            HStack(spacing: 8) {
                                 Button {
-                                    selectedGalleryUri = gallery.uri
+                                    withAnimation { viewMode = .grid }
                                 } label: {
-                                    Color.clear
-                                        .aspectRatio(3.0/4.0, contentMode: .fit)
-                                        .overlay {
-                                            if let photo = gallery.items?.first {
-                                                LazyImage(url: URL(string: photo.thumb)) { state in
-                                                    if let image = state.image {
-                                                        image
-                                                            .resizable()
-                                                            .scaledToFill()
-                                                    } else {
-                                                        Rectangle().fill(.quaternary)
+                                    Image(systemName: "square.grid.2x2")
+                                        .font(.system(size: 16, weight: .medium))
+                                        .foregroundStyle(viewMode == .grid ? .primary : .secondary)
+                                        .frame(width: 44, height: 36)
+                                        .glassEffect(
+                                            viewMode == .grid ? .regular.interactive() : .clear.interactive(),
+                                            in: .capsule
+                                        )
+                                        .glassEffectID("viewToggle", in: viewModeNS)
+                                }
+                                Button {
+                                    withAnimation { viewMode = .list }
+                                } label: {
+                                    Image(systemName: "list.bullet")
+                                        .font(.system(size: 16, weight: .medium))
+                                        .foregroundStyle(viewMode == .list ? .primary : .secondary)
+                                        .frame(width: 44, height: 36)
+                                        .glassEffect(
+                                            viewMode == .list ? .regular.interactive() : .clear.interactive(),
+                                            in: .capsule
+                                        )
+                                        .glassEffectID("viewToggle", in: viewModeNS)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        // Galleries
+                        if viewMode == .grid {
+                            LazyVGrid(columns: [
+                                GridItem(.flexible(), spacing: 2),
+                                GridItem(.flexible(), spacing: 2),
+                                GridItem(.flexible(), spacing: 2)
+                            ], spacing: 2) {
+                                ForEach(viewModel.galleries) { gallery in
+                                    Button {
+                                        selectedGalleryUri = gallery.uri
+                                    } label: {
+                                        Color.clear
+                                            .aspectRatio(3.0/4.0, contentMode: .fit)
+                                            .overlay {
+                                                if let photo = gallery.items?.first {
+                                                    LazyImage(url: URL(string: photo.thumb)) { state in
+                                                        if let image = state.image {
+                                                            image
+                                                                .resizable()
+                                                                .scaledToFill()
+                                                        } else {
+                                                            Rectangle().fill(.quaternary)
+                                                        }
                                                     }
                                                 }
                                             }
+                                            .clipped()
+                                    }
+                                    .buttonStyle(.plain)
+                                    .onAppear {
+                                        if gallery.id == viewModel.galleries.last?.id {
+                                            Task { await viewModel.loadMoreGalleries(did: did, auth: auth.authContext()) }
                                         }
-                                        .clipped()
+                                    }
                                 }
-                                .buttonStyle(.plain)
-                                .onAppear {
-                                    if gallery.id == viewModel.galleries.last?.id {
-                                        Task { await viewModel.loadMoreGalleries(did: did, auth: auth.authContext()) }
+                            }
+                        } else {
+                            LazyVStack(spacing: 0) {
+                                ForEach($viewModel.galleries) { $gallery in
+                                    GalleryCardView(
+                                        gallery: $gallery,
+                                        client: client,
+                                        onNavigate: { selectedGalleryUri = gallery.uri },
+                                        onProfileTap: { did in selectedProfileDid = did },
+                                        onHashtagTap: { tag in selectedHashtag = tag }
+                                    )
+                                    .onAppear {
+                                        if gallery.id == viewModel.galleries.last?.id {
+                                            Task { await viewModel.loadMoreGalleries(did: did, auth: auth.authContext()) }
+                                        }
                                     }
                                 }
                             }

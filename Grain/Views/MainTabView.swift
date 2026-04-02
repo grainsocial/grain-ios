@@ -34,20 +34,16 @@ struct MainTabView: View {
         TabView(selection: $selectedTab) {
             TabSection {
                 Tab("Feed", systemImage: "photo.on.rectangle", value: 0) {
-                    FeedView(client: client, pendingDeepLink: $pendingDeepLink)
+                    FeedView(client: client, pendingDeepLink: $pendingDeepLink, showCreate: $showCreate)
                         .id(feedRefreshID)
                 }
 
-                Tab("Search", systemImage: "magnifyingglass", value: 1) {
-                    SearchView(client: client)
-                }
-
-                Tab("Notifications", systemImage: "bell", value: 2) {
+                Tab("Notifications", systemImage: "bell", value: 1) {
                     NotificationsView(client: client, viewModel: notificationsVM)
                 }
                 .badge(notificationsVM.unseenCount)
 
-                Tab(value: 3) {
+                Tab(value: 2) {
                     if let did = auth.userDID {
                         ProfileView(client: client, did: did, isRoot: true)
                     }
@@ -63,12 +59,6 @@ struct MainTabView: View {
                         Label("Profile", systemImage: "person")
                     }
                 }
-            }
-
-            Tab(value: 99, role: .search) {
-                Color.clear
-            } label: {
-                Label("Create", systemImage: "plus")
             }
         }
         .tabBarMinimizeBehavior(.onScrollDown)
@@ -86,12 +76,6 @@ struct MainTabView: View {
         .onChange(of: auth.avatarImage) {
             if let uiImage = auth.avatarImage {
                 avatarTabImage = circularAvatar(uiImage, size: 26)
-            }
-        }
-        .onChange(of: selectedTab) { oldValue, newValue in
-            if newValue == 99 {
-                selectedTab = oldValue
-                showCreate = true
             }
         }
         .onChange(of: pendingDeepLink) {

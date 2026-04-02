@@ -12,14 +12,21 @@ struct FeedView: View {
     @State private var deepLinkProfileDid: String?
     @State private var deepLinkGalleryUri: String?
     @State private var deepLinkStoryAuthor: GrainStoryAuthor?
+    @State private var showSearch = false
+    @State private var searchText = ""
+    @State private var searchViewModel: SearchViewModel
+    @FocusState private var isSearchFocused: Bool
 
     let client: XRPCClient
     @Binding var pendingDeepLink: DeepLink?
+    @Binding var showCreate: Bool
 
-    init(client: XRPCClient, pendingDeepLink: Binding<DeepLink?> = .constant(nil)) {
+    init(client: XRPCClient, pendingDeepLink: Binding<DeepLink?> = .constant(nil), showCreate: Binding<Bool> = .constant(false)) {
         self.client = client
         _pendingDeepLink = pendingDeepLink
+        _showCreate = showCreate
         _storyViewModel = State(initialValue: StoryStripViewModel(client: client))
+        _searchViewModel = State(initialValue: SearchViewModel(client: client))
     }
 
     private var selectedFeedLabel: String {
@@ -29,54 +36,46 @@ struct FeedView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                ForEach(pinnedFeeds) { feed in
-                    if feed.id == selectedFeedId {
-                        FeedTabContent(
-                            client: client,
-                            pinnedFeed: feed,
-                            userDID: auth.userDID,
-                            storyAuthors: storyViewModel.authors,
-                            userAvatar: auth.userAvatar,
-                            onStoryAuthorTap: { _, index in
-                                storyViewerStartIndex = index
-                                showStoryViewer = true
-                            },
-                            onStoryCreateTap: { showStoryCreate = true },
-                            onRefresh: {
-                                await storyViewModel.load(auth: auth.authContext())
-                            }
-                        )
+                if showSearch {
+                    VStack(spacing: 0) {
+                        searchBarContent
+                            .padding(.horizontal)
+                            .padding(.vertical, 8)
+                        SearchView(viewModel: searchViewModel, client: client)
+                    }
+                } else {
+                    ForEach(pinnedFeeds) { feed in
+                        if feed.id == selectedFeedId {
+                            FeedTabContent(
+                                client: client,
+                                pinnedFeed: feed,
+                                userDID: auth.userDID,
+                                storyAuthors: storyViewModel.authors,
+                                userAvatar: auth.userAvatar,
+                                onStoryAuthorTap: { _, index in
+                                    storyViewerStartIndex = index
+                                    showStoryViewer = true
+                                },
+                                onStoryCreateTap: { showStoryCreate = true },
+                                onRefresh: {
+                                    await storyViewModel.load(auth: auth.authContext())
+                                }
+                            )
+                        }
                     }
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Menu {
-                        ForEach(pinnedFeeds) { feed in
-                            Button {
-                                selectedFeedId = feed.id
-                            } label: {
-                                if feed.id == selectedFeedId {
-                                    Label(feed.label, systemImage: "checkmark")
-                                } else {
-                                    Text(feed.label)
-                                }
-                            }
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Text("grain")
-                                .font(.custom("Syne", size: 20).weight(.heavy))
-                            if pinnedFeeds.count > 1 {
-                                Image(systemName: "chevron.down")
-                                    .font(.caption2.weight(.bold))
-                            }
-                        }
-                        .foregroundColor(.primary)
+                if !showSearch {
+                    ToolbarItem(placement: .topBarLeading) {
+                        leadingToolbarContent
                     }
-                    .tint(.primary)
+                    ToolbarItem(placement: .topBarTrailing) {
+                        trailingToolbarContent
+                    }
+                    .sharedBackgroundVisibility(.hidden)
                 }
             }
             .task {
@@ -117,6 +116,99 @@ struct FeedView: View {
                 consumeDeepLink()
             }
         }
+        .onChange(of: searchText) {
+            searchViewModel.searchText = searchText
+        }
+    }
+
+    @ViewBuilder
+    private var leadingToolbarContent: some View {
+        if !showSearch {
+            Menu {
+                ForEach(pinnedFeeds) { feed in
+                    Button {
+                        selectedFeedId = feed.id
+                    } label: {
+                        if feed.id == selectedFeedId {
+                            Label(feed.label, systemImage: "checkmark")
+                        } else {
+                            Text(feed.label)
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(selectedFeedLabel)
+                        .font(.headline)
+                    if pinnedFeeds.count > 1 {
+                        Image(systemName: "chevron.down")
+                            .font(.caption2.weight(.bold))
+                    }
+                }
+                .foregroundColor(.primary)
+            }
+            .tint(.primary)
+        }
+    }
+
+    private var searchBarContent: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            TextField("Search galleries & profiles", text: $searchText)
+                .focused($isSearchFocused)
+                .submitLabel(.search)
+                .onSubmit {
+                    Task { await searchViewModel.search(auth: auth.authContext()) }
+                }
+            Button {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    showSearch = false
+                    searchText = ""
+                    searchViewModel.searchText = ""
+                }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .glassEffect(.regular, in: .capsule)
+    }
+
+    @ViewBuilder
+    private var trailingToolbarContent: some View {
+        GlassEffectContainer(spacing: 0) {
+            HStack(spacing: 12) {
+                    Button {
+                        showCreate = true
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundStyle(.primary)
+                            .frame(width: 42, height: 42)
+                            .glassEffect(.regular.interactive(), in: .circle)
+                    }
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            showSearch = true
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            isSearchFocused = true
+                        }
+                    } label: {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundStyle(.primary)
+                            .frame(width: 42, height: 42)
+                            .glassEffect(.regular.interactive(), in: .circle)
+                    }
+                }
+                .buttonStyle(.plain)
+            }
     }
 
     private func consumeDeepLink() {
@@ -202,7 +294,6 @@ private struct FeedTabContent: View {
                         onAuthorTap: onStoryAuthorTap,
                         onCreateTap: onStoryCreateTap
                     )
-                    Divider()
                 }
 
                 ForEach($viewModel.galleries) { $gallery in
@@ -218,8 +309,6 @@ private struct FeedTabContent: View {
                             Task { await viewModel.loadMore(auth: auth.authContext()) }
                         }
                     }
-
-                    Divider()
                 }
 
                 if viewModel.isLoading {
@@ -229,9 +318,8 @@ private struct FeedTabContent: View {
             }
         }
         .refreshable {
-            async let feedRefresh: () = viewModel.loadInitial(auth: auth.authContext())
-            async let storyRefresh: ()? = onRefresh?()
-            _ = await (feedRefresh, storyRefresh)
+            await viewModel.loadInitial(auth: auth.authContext())
+            await onRefresh?()
         }
         .navigationDestination(item: $selectedUri) { uri in
             GalleryDetailView(client: client, galleryUri: uri, deletedGalleryUri: $deletedGalleryUri)

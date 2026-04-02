@@ -12,7 +12,7 @@ extension XRPCClient {
             let key: String
             let value: String
         }
-        let input = PutPreferenceInput(key: "lastSeenNotifications", value: ISO8601DateFormatter().string(from: Date()))
+        let input = PutPreferenceInput(key: "lastSeenNotifications", value: DateFormatting.nowISO())
         try await procedure("dev.hatk.putPreference", input: input, auth: auth)
     }
 

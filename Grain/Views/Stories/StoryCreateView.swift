@@ -200,7 +200,7 @@ struct StoryCreateView: View {
                     "width": AnyCodable(Int(size.width)),
                     "height": AnyCodable(Int(size.height))
                 ] as [String: AnyCodable]),
-                "createdAt": AnyCodable(ISO8601DateFormatter().string(from: Date()))
+                "createdAt": AnyCodable(DateFormatting.nowISO())
             ]
 
             if let loc = resolvedLocation {

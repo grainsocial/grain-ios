@@ -39,6 +39,10 @@ struct GalleryCardView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
+                        Text("· \(DateFormatting.relativeTime(gallery.createdAt ?? gallery.indexedAt))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize()
                     }
                     if let locationName = gallery.location?.name ?? gallery.address?.locality {
                         Text(locationName)
@@ -247,7 +251,7 @@ struct GalleryCardView: View {
 
             let record = AnyCodable([
                 "subject": gallery.uri,
-                "createdAt": ISO8601DateFormatter().string(from: Date()),
+                "createdAt": DateFormatting.nowISO(),
             ])
             let repo = TokenStorage.userDID ?? ""
             do {

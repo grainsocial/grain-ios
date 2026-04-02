@@ -193,7 +193,7 @@ struct EditProfileView: View {
             }
 
             var record: [String: AnyCodable] = [
-                "createdAt": AnyCodable(ISO8601DateFormatter().string(from: Date()))
+                "createdAt": AnyCodable(DateFormatting.nowISO())
             ]
 
             let trimmedName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)

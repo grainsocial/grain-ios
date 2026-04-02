@@ -39,33 +39,30 @@ struct FollowListView: View {
                 )
             } else {
                 List {
-                    Section {
-                        ForEach(items) { item in
-                            Button {
-                                selectedProfileDid = item.did
-                            } label: {
-                                rowContent(item: item)
-                            }
-                            .buttonStyle(.plain)
-                            .onAppear {
-                                if item.id == items.last?.id {
-                                    Task { await loadMore() }
-                                }
+                    ForEach(items) { item in
+                        Button {
+                            selectedProfileDid = item.did
+                        } label: {
+                            rowContent(item: item)
+                        }
+                        .buttonStyle(.plain)
+                        .listRowSeparator(.visible)
+                        .onAppear {
+                            if item.id == items.last?.id {
+                                Task { await loadMore() }
                             }
                         }
+                    }
 
-                        if isLoading {
-                            HStack {
-                                Spacer()
-                                ProgressView()
-                                Spacer()
-                            }
+                    if isLoading {
+                        HStack {
+                            Spacer()
+                            ProgressView()
+                            Spacer()
                         }
-                    } header: {
-                        Text(displayCount)
-                            .font(.subheadline)
                     }
                 }
+                .listStyle(.plain)
                 .refreshable {
                     await reload()
                 }
@@ -87,43 +84,30 @@ struct FollowListView: View {
 
     @ViewBuilder
     private func rowContent(item: FollowListItem) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            AvatarView(url: item.avatar, size: 44)
+        HStack(alignment: .center, spacing: 14) {
+            AvatarView(url: item.avatar, size: 50)
             VStack(alignment: .leading, spacing: 2) {
                 if let displayName = item.displayName, !displayName.isEmpty {
                     Text(displayName)
-                        .font(.subheadline.weight(.medium))
+                        .font(.body.weight(.semibold))
                         .lineLimit(1)
                 }
                 if let handle = item.handle {
-                    Text("@\(handle)")
-                        .font(.caption)
+                    Text(handle)
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
                 if let desc = item.description, !desc.isEmpty {
                     Text(desc)
-                        .font(.caption)
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
-                        .padding(.top, 1)
                 }
             }
             Spacer()
-            if item.did != auth.userDID {
-                Button {
-                    Task { await toggleFollow(for: item.did) }
-                } label: {
-                    Text(item.followingUri != nil ? "Following" : "Follow")
-                        .font(.caption.weight(.semibold))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(item.followingUri != nil ? .secondary : Color("AccentColor"))
-            }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 4)
     }
 
     private func reload() async {
@@ -202,7 +186,7 @@ struct FollowListView: View {
             do {
                 let record = AnyCodable([
                     "subject": item.did,
-                    "createdAt": ISO8601DateFormatter().string(from: Date())
+                    "createdAt": DateFormatting.nowISO()
                 ])
                 let result = try await client.createRecord(
                     collection: "social.grain.graph.follow",
