@@ -250,8 +250,7 @@ private struct FeedTabContent: View {
             }
         }
         .environment(zoomState)
-        .coordinateSpace(name: "zoomContainer")
-        .modifier(ImageZoomOverlay(zoomState: zoomState, coordinateSpace: "zoomContainer"))
+        .modifier(ImageZoomOverlay(zoomState: zoomState))
         .refreshable {
             let auth = auth.authContext()
             async let feed: () = viewModel.loadInitial(auth: auth)

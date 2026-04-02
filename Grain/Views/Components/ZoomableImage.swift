@@ -19,16 +19,15 @@ final class ImageZoomState {
 
 struct ImageZoomOverlay: ViewModifier {
     let zoomState: ImageZoomState
-    let coordinateSpace: String
 
     func body(content: Content) -> some View {
         content
             .overlay {
                 if zoomState.showOverlay {
                     GeometryReader { geo in
-                        let containerOrigin = geo.frame(in: .named(coordinateSpace)).origin
-                        let localX = zoomState.sourceFrame.midX - containerOrigin.x
-                        let localY = zoomState.sourceFrame.midY - containerOrigin.y
+                        let overlayGlobal = geo.frame(in: .global).origin
+                        let localX = zoomState.sourceFrame.midX - overlayGlobal.x
+                        let localY = zoomState.sourceFrame.midY - overlayGlobal.y
 
                         LazyImage(url: URL(string: zoomState.imageURL)) { state in
                             if let image = state.image {
@@ -55,8 +54,9 @@ struct ImageZoomOverlay: ViewModifier {
 
 struct PinchZoomOverlay: UIViewRepresentable {
     let zoomState: ImageZoomState
-    var onBegan: (UnitPoint) -> Void
+    var onBegan: (UnitPoint, CGRect) -> Void
     var onEnded: () -> Void
+    var onDoubleTap: ((CGPoint) -> Void)?
 
     func makeUIView(context: Context) -> UIView {
         let view = UIView()
@@ -71,6 +71,10 @@ struct PinchZoomOverlay: UIViewRepresentable {
         pan.maximumNumberOfTouches = 2
         pan.delegate = context.coordinator
         view.addGestureRecognizer(pan)
+
+        let doubleTap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleDoubleTap))
+        doubleTap.numberOfTapsRequired = 2
+        view.addGestureRecognizer(doubleTap)
 
         return view
     }
@@ -110,7 +114,8 @@ struct PinchZoomOverlay: UIViewRepresentable {
                     y: loc.y / max(size.height, 1)
                 )
                 state.anchor = anchor
-                parent.onBegan(anchor)
+                let globalFrame = gesture.view?.convert(gesture.view?.bounds ?? .zero, to: nil) ?? .zero
+                parent.onBegan(anchor, globalFrame)
             case .changed:
                 state.scale = max(startScale * gesture.scale, 1)
             case .ended, .cancelled:
@@ -119,6 +124,11 @@ struct PinchZoomOverlay: UIViewRepresentable {
             default:
                 break
             }
+        }
+
+        @objc func handleDoubleTap(_ gesture: UITapGestureRecognizer) {
+            let loc = gesture.location(in: gesture.view)
+            parent.onDoubleTap?(loc)
         }
 
         @objc func handlePan(_ gesture: UIPanGestureRecognizer) {
@@ -141,8 +151,8 @@ struct PinchZoomOverlay: UIViewRepresentable {
 struct ZoomableImage: View {
     let url: String
     let aspectRatio: CGFloat
-    let coordinateSpace: String
-    @Environment(ImageZoomState.self) private var zoomState
+    var onDoubleTap: ((CGPoint) -> Void)?
+    @Environment(ImageZoomState.self) private var zoomState: ImageZoomState?
 
     @State private var snapBackTask: Task<Void, Never>?
 
@@ -158,28 +168,21 @@ struct ZoomableImage: View {
                     .aspectRatio(aspectRatio, contentMode: .fit)
             }
         }
-        .opacity(zoomState.showOverlay && zoomState.imageURL == url ? 0 : 1)
+        .opacity(zoomState?.showOverlay == true && zoomState?.imageURL == url ? 0 : 1)
         .overlay {
-            GeometryReader { geo in
-                Color.clear.onAppear {}
-                    .preference(key: FrameKey.self, value: geo.frame(in: .named(coordinateSpace)))
-            }
-        }
-        .overlay {
-            PinchZoomOverlay(
-                zoomState: zoomState,
-                onBegan: { anchor in
-                    zoomState.imageURL = url
-                    zoomState.aspectRatio = aspectRatio
-                    zoomState.anchor = anchor
-                    zoomState.showOverlay = true
-                },
-                onEnded: { scheduleSnapBack() }
-            )
-        }
-        .onPreferenceChange(FrameKey.self) { frame in
-            if zoomState.showOverlay && zoomState.imageURL == url {
-                zoomState.sourceFrame = frame
+            if let zoomState {
+                PinchZoomOverlay(
+                    zoomState: zoomState,
+                    onBegan: { anchor, frame in
+                        zoomState.imageURL = url
+                        zoomState.aspectRatio = aspectRatio
+                        zoomState.anchor = anchor
+                        zoomState.sourceFrame = frame
+                        zoomState.showOverlay = true
+                    },
+                    onEnded: { scheduleSnapBack() },
+                    onDoubleTap: onDoubleTap
+                )
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -196,6 +199,7 @@ struct ZoomableImage: View {
     }
 
     private func resetZoom() {
+        guard let zoomState else { return }
         snapBackTask?.cancel()
         withAnimation(.easeOut(duration: 0.1)) {
             zoomState.scale = 1
@@ -208,11 +212,3 @@ struct ZoomableImage: View {
     }
 }
 
-// MARK: - Preference key for frame tracking
-
-private struct FrameKey: @preconcurrency PreferenceKey {
-    static let defaultValue: CGRect = .zero
-    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
-        value = nextValue()
-    }
-}
