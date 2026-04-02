@@ -198,6 +198,7 @@ private struct FeedTabContent: View {
     @State private var selectedProfileDid: String?
     @State private var selectedHashtag: String?
     @State private var deletedGalleryUri: String?
+    @State private var zoomState = ImageZoomState()
     let client: XRPCClient
     let storyAuthors: [GrainStoryAuthor]
     let userAvatar: String?
@@ -248,6 +249,9 @@ private struct FeedTabContent: View {
                 }
             }
         }
+        .environment(zoomState)
+        .coordinateSpace(name: "zoomContainer")
+        .modifier(ImageZoomOverlay(zoomState: zoomState, coordinateSpace: "zoomContainer"))
         .refreshable {
             let auth = auth.authContext()
             async let feed: () = viewModel.loadInitial(auth: auth)

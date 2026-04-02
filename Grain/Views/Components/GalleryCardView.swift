@@ -14,11 +14,7 @@ struct GalleryCardView: View {
     @State private var isFavoriting = false
     @State private var currentPage = 0
     @State private var showingAlt = false
-    @State private var isZoomed = false
-    @State private var showZoomOverlay = false
-    @State private var zoomScale: CGFloat = 1
-    @State private var zoomAnchor: UnitPoint = .center
-    @State private var zoomOffset: CGSize = .zero
+    var coordinateSpace: String = "zoomContainer"
 
     private var isFavorited: Bool {
         gallery.viewer?.fav != nil
@@ -81,11 +77,7 @@ struct GalleryCardView: View {
                                 ZoomableImage(
                                     url: photo.fullsize,
                                     aspectRatio: photo.aspectRatio.ratio,
-                                    isZoomed: $isZoomed,
-                                    showOverlay: $showZoomOverlay,
-                                    zoomScale: $zoomScale,
-                                    zoomAnchor: $zoomAnchor,
-                                    zoomOffset: $zoomOffset
+                                    coordinateSpace: coordinateSpace
                                 )
                                 .tag(index)
                             }
@@ -160,10 +152,8 @@ struct GalleryCardView: View {
                     .frame(height: height)
                 }
                 .aspectRatio(carouselRatio, contentMode: .fit)
-                .zIndex(isZoomed ? 1 : 0)
                 .onChange(of: currentPage) {
                     showingAlt = false
-                    isZoomed = false
                 }
             }
 
@@ -238,31 +228,6 @@ struct GalleryCardView: View {
             .padding(.top, 8)
             .padding(.bottom, 16)
         }
-        .overlay {
-            if showZoomOverlay, let photos = gallery.items, photos.indices.contains(currentPage) {
-                let photo = photos[currentPage]
-                GeometryReader { geo in
-                    LazyImage(url: URL(string: photo.fullsize)) { state in
-                        if let image = state.image {
-                            image
-                                .resizable()
-                                .aspectRatio(photo.aspectRatio.ratio, contentMode: .fit)
-                        }
-                    }
-                    .frame(width: geo.size.width)
-                    .position(x: geo.size.width / 2, y: geo.size.height / 2)
-                    .scaleEffect(zoomScale, anchor: zoomAnchor)
-                    .offset(zoomOffset)
-                }
-                .allowsHitTesting(false)
-            }
-        }
-        .onChange(of: isZoomed) {
-            if isZoomed {
-                showZoomOverlay = true
-            }
-        }
-        .zIndex(showZoomOverlay ? 1 : 0)
     }
 
     private func toggleFavorite() async {

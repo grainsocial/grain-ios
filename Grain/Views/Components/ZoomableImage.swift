@@ -1,7 +1,58 @@
 import NukeUI
 import SwiftUI
 
-// MARK: - UIKit gesture handler for proper pinch + pan
+// MARK: - Shared zoom state
+
+@Observable
+@MainActor
+final class ImageZoomState {
+    var isActive = false
+    var showOverlay = false
+    var scale: CGFloat = 1
+    var anchor: UnitPoint = .center
+    var offset: CGSize = .zero
+    var imageURL: String = ""
+    var aspectRatio: CGFloat = 1
+    var sourceFrame: CGRect = .zero
+}
+
+// MARK: - Overlay rendered above ScrollView
+
+struct ImageZoomOverlay: ViewModifier {
+    let zoomState: ImageZoomState
+    let coordinateSpace: String
+
+    func body(content: Content) -> some View {
+        content
+            .overlay {
+                if zoomState.showOverlay {
+                    GeometryReader { geo in
+                        let containerOrigin = geo.frame(in: .named(coordinateSpace)).origin
+                        let localX = zoomState.sourceFrame.midX - containerOrigin.x
+                        let localY = zoomState.sourceFrame.midY - containerOrigin.y
+
+                        LazyImage(url: URL(string: zoomState.imageURL)) { state in
+                            if let image = state.image {
+                                image
+                                    .resizable()
+                                    .aspectRatio(zoomState.aspectRatio, contentMode: .fit)
+                            }
+                        }
+                        .frame(
+                            width: zoomState.sourceFrame.width,
+                            height: zoomState.sourceFrame.height
+                        )
+                        .scaleEffect(zoomState.scale, anchor: zoomState.anchor)
+                        .offset(zoomState.offset)
+                        .position(x: localX, y: localY)
+                    }
+                    .allowsHitTesting(false)
+                }
+            }
+    }
+}
+
+// MARK: - UIKit gesture handler
 
 struct PinchZoomOverlay: UIViewRepresentable {
     @Binding var scale: CGFloat
@@ -46,8 +97,6 @@ struct PinchZoomOverlay: UIViewRepresentable {
             _ gestureRecognizer: UIGestureRecognizer,
             shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
         ) -> Bool {
-            // Allow pinch + pan to work together
-            // But don't interfere with scroll view or tab view gestures
             let dominated = otherGestureRecognizer.view is UIScrollView
             return !dominated
         }
@@ -93,13 +142,14 @@ struct PinchZoomOverlay: UIViewRepresentable {
 struct ZoomableImage: View {
     let url: String
     let aspectRatio: CGFloat
-    @Binding var isZoomed: Bool
-    @Binding var showOverlay: Bool
-    @Binding var zoomScale: CGFloat
-    @Binding var zoomAnchor: UnitPoint
-    @Binding var zoomOffset: CGSize
+    let coordinateSpace: String
+    @Environment(ImageZoomState.self) private var zoomState
 
     @State private var snapBackTask: Task<Void, Never>?
+    @State private var localScale: CGFloat = 1
+    @State private var localAnchor: UnitPoint = .center
+    @State private var localOffset: CGSize = .zero
+    @State private var localActive = false
 
     var body: some View {
         LazyImage(url: URL(string: url)) { state in
@@ -113,13 +163,35 @@ struct ZoomableImage: View {
                     .aspectRatio(aspectRatio, contentMode: .fit)
             }
         }
-        .opacity(showOverlay ? 0 : 1)
+        .opacity(zoomState.showOverlay && zoomState.imageURL == url ? 0 : 1)
+        .background {
+            GeometryReader { geo in
+                Color.clear
+                    .onChange(of: localActive) {
+                        if localActive {
+                            let frame = geo.frame(in: .named(coordinateSpace))
+                            zoomState.sourceFrame = frame
+                            zoomState.imageURL = url
+                            zoomState.aspectRatio = aspectRatio
+                            zoomState.showOverlay = true
+                        }
+                    }
+                    .onChange(of: localScale) {
+                        zoomState.scale = localScale
+                        zoomState.anchor = localAnchor
+                        zoomState.offset = localOffset
+                    }
+                    .onChange(of: localOffset) {
+                        zoomState.offset = localOffset
+                    }
+            }
+        }
         .overlay {
             PinchZoomOverlay(
-                scale: $zoomScale,
-                anchor: $zoomAnchor,
-                offset: $zoomOffset,
-                isActive: $isZoomed,
+                scale: $localScale,
+                anchor: $localAnchor,
+                offset: $localOffset,
+                isActive: $localActive,
                 onEnded: {
                     scheduleSnapBack()
                 }
@@ -134,7 +206,7 @@ struct ZoomableImage: View {
     private func scheduleSnapBack() {
         snapBackTask?.cancel()
         snapBackTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(150))
+            try? await Task.sleep(for: .milliseconds(112))
             guard !Task.isCancelled else { return }
             resetZoom()
         }
@@ -142,15 +214,17 @@ struct ZoomableImage: View {
 
     private func resetZoom() {
         snapBackTask?.cancel()
-        isZoomed = false
-        withAnimation(.easeOut(duration: 0.2)) {
-            zoomScale = 1
-            zoomOffset = .zero
+        localActive = false
+        zoomState.isActive = false
+        withAnimation(.easeOut(duration: 0.1)) {
+            localScale = 1
+            localOffset = .zero
+            zoomState.scale = 1
+            zoomState.offset = .zero
         }
-        // Keep overlay visible during snap-back animation, then hide
         Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(220))
-            showOverlay = false
+            try? await Task.sleep(for: .milliseconds(120))
+            zoomState.showOverlay = false
         }
     }
 }
