@@ -5,12 +5,15 @@ struct HashtagFeedView: View {
     @State private var galleries: [GrainGallery] = []
     @State private var cursor: String?
     @State private var isLoading = false
+    @State private var isPinned = false
     @State private var selectedUri: String?
     @State private var selectedProfileDid: String?
     @State private var selectedHashtag: String?
 
     let client: XRPCClient
     let tag: String
+
+    private var feedId: String { "hashtag:\(tag)" }
 
     var body: some View {
         ScrollView {
@@ -38,6 +41,24 @@ struct HashtagFeedView: View {
         }
         .navigationTitle("#\(tag)")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button {
+                        Task { await togglePin() }
+                    } label: {
+                        Label(isPinned ? "Unpin Feed" : "Pin Feed",
+                              systemImage: isPinned ? "pin.slash" : "pin")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 16, weight: .medium))
+                }
+            }
+        }
+        .task {
+            await checkPinned()
+        }
         .navigationDestination(item: $selectedUri) { uri in
             GalleryDetailView(client: client, galleryUri: uri)
         }
@@ -73,5 +94,26 @@ struct HashtagFeedView: View {
             self.cursor = response.cursor
         } catch {}
         isLoading = false
+    }
+
+    private func checkPinned() async {
+        do {
+            let response = try await client.getPreferences(auth: auth.authContext())
+            isPinned = response.preferences.pinnedFeeds?.contains(where: { $0.id == feedId }) ?? false
+        } catch {}
+    }
+
+    private func togglePin() async {
+        do {
+            let response = try await client.getPreferences(auth: auth.authContext())
+            var feeds = response.preferences.pinnedFeeds ?? PinnedFeed.defaults
+            if isPinned {
+                feeds.removeAll { $0.id == feedId }
+            } else {
+                feeds.append(PinnedFeed(id: feedId, label: tag, type: "hashtag", path: "/hashtags/\(tag)"))
+            }
+            try await client.putPinnedFeeds(feeds, auth: auth.authContext())
+            isPinned.toggle()
+        } catch {}
     }
 }

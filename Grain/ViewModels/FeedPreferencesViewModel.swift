@@ -36,4 +36,33 @@ final class FeedPreferencesViewModel {
             // Fall back to defaults, already set
         }
     }
+
+    func isPinned(_ id: String) -> Bool {
+        pinnedFeeds.contains(where: { $0.id == id })
+    }
+
+    func pinFeed(_ feed: PinnedFeed, auth: AuthContext?) async {
+        guard !isPinned(feed.id) else { return }
+        let updated = pinnedFeeds + [feed]
+        pinnedFeeds = updated
+        do {
+            try await client.putPinnedFeeds(updated, auth: auth)
+        } catch {
+            pinnedFeeds.removeAll { $0.id == feed.id }
+        }
+    }
+
+    func unpinFeed(_ id: String, auth: AuthContext?) async {
+        let original = pinnedFeeds
+        pinnedFeeds.removeAll { $0.id == id }
+        if selectedFeedId == id {
+            selectedFeedId = pinnedFeeds.first?.id ?? "recent"
+        }
+        do {
+            try await client.putPinnedFeeds(pinnedFeeds, auth: auth)
+        } catch {
+            pinnedFeeds = original
+            selectedFeedId = id
+        }
+    }
 }

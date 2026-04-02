@@ -60,6 +60,9 @@ struct FeedView: View {
                 await prefsViewModel.loadIfNeeded(auth: auth.authContext())
                 await storyViewModel.load(auth: auth.authContext())
             }
+            .onAppear {
+                Task { await prefsViewModel.refresh(auth: auth.authContext()) }
+            }
             .customFullScreenCover(isPresented: $showStoryViewer) {
                 StoryViewer(
                     authors: storyViewModel.authors,
@@ -108,6 +111,17 @@ struct FeedView: View {
                     } else {
                         Text(feed.label)
                     }
+                }
+            }
+
+            if !PinnedFeed.defaults.contains(where: { $0.id == prefsViewModel.selectedFeedId }) {
+                Divider()
+                Button(role: .destructive) {
+                    Task {
+                        await prefsViewModel.unpinFeed(prefsViewModel.selectedFeedId, auth: auth.authContext())
+                    }
+                } label: {
+                    Label("Unpin", systemImage: "pin.slash")
                 }
             }
         } label: {

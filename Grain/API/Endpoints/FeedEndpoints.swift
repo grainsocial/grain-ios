@@ -100,6 +100,14 @@ extension XRPCClient {
         return try await query("social.grain.unspecced.getGalleryThread", params: params, auth: auth, as: GetGalleryThreadResponse.self)
     }
 
+    func putPinnedFeeds(_ feeds: [PinnedFeed], auth: AuthContext? = nil) async throws {
+        struct Input: Encodable {
+            let key: String
+            let value: [PinnedFeed]
+        }
+        try await procedure("dev.hatk.putPreference", input: Input(key: "pinnedFeeds", value: feeds), auth: auth)
+    }
+
     func searchGalleries(
         query q: String,
         limit: Int = 30,
