@@ -12,11 +12,12 @@ final class StoryStripViewModel {
         self.client = client
     }
 
-    func load(auth: AuthContext? = nil) async {
+    func load(auth: AuthContext? = nil, storyStatusCache: StoryStatusCache? = nil) async {
         isLoading = true
         do {
             let response = try await client.getStoryAuthors(auth: auth)
             authors = response.authors
+            storyStatusCache?.update(from: response.authors)
         } catch {
             // Silently fail — strip just won't show
         }

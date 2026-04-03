@@ -3,6 +3,7 @@ import SwiftUI
 @main
 struct GrainApp: App {
     @State private var authManager = AuthManager()
+    @State private var storyStatusCache = StoryStatusCache()
     @State private var pendingDeepLink: DeepLink?
 
     var body: some Scene {
@@ -11,6 +12,7 @@ struct GrainApp: App {
                 if authManager.isAuthenticated {
                     MainTabView(pendingDeepLink: $pendingDeepLink)
                         .environment(authManager)
+                        .environment(storyStatusCache)
                         .tint(Color("AccentColor"))
                 } else {
                     LoginView()
