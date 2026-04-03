@@ -8,6 +8,7 @@ struct SearchView: View {
     @State private var searchNavigationUri: String?
     @State private var selectedProfileDid: String?
     @State private var selectedHashtag: String?
+    @State private var selectedLocation: LocationDestination?
     @State private var zoomState = ImageZoomState()
     @State private var cardStoryAuthor: GrainStoryAuthor?
     let client: XRPCClient
@@ -34,6 +35,8 @@ struct SearchView: View {
                                         selectedProfileDid = did
                                     }, onHashtagTap: { tag in
                                         selectedHashtag = tag
+                                    }, onLocationTap: { h3, name in
+                                        selectedLocation = LocationDestination(h3Index: h3, name: name)
                                     }, onStoryTap: { author in
                                         cardStoryAuthor = author
                                     })
@@ -96,6 +99,9 @@ struct SearchView: View {
             }
             .navigationDestination(item: $selectedHashtag) { tag in
                 HashtagFeedView(client: client, tag: tag)
+            }
+            .navigationDestination(item: $selectedLocation) { loc in
+                LocationFeedView(client: client, h3Index: loc.h3Index, locationName: loc.name)
             }
             .fullScreenCover(item: $cardStoryAuthor) { author in
                 StoryViewer(

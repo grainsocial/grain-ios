@@ -72,6 +72,15 @@ enum LocationServices {
         return cell.description
     }
 
+    /// Coarsen an H3 index to city level (resolution 5).
+    static func h3ToCity(_ h3Index: String) -> String {
+        guard let cell = H3Cell(h3Index),
+              let res = try? cell.resolution,
+              res.rawValue > 5,
+              let parent = try? cell.parent(at: .res5) else { return h3Index }
+        return parent.description
+    }
+
     /// Reverse geocode coordinates via Nominatim.
     static func reverseGeocode(latitude: Double, longitude: Double) async -> NominatimResult? {
         var components = URLComponents(string: "https://nominatim.openstreetmap.org/reverse")!

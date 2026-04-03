@@ -99,6 +99,7 @@ struct GalleryCardView: View {
     var onNavigate: () -> Void = {}
     var onProfileTap: ((String) -> Void)?
     var onHashtagTap: ((String) -> Void)?
+    var onLocationTap: ((String, String) -> Void)?
     var onStoryTap: ((GrainStoryAuthor) -> Void)?
     @State private var isFavoriting = false
     @State private var currentPage = 0
@@ -135,7 +136,7 @@ struct GalleryCardView: View {
                     onProfileTap?(gallery.creator.did)
                 }
 
-                VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 4) {
                         Text(gallery.creator.displayName ?? gallery.creator.handle)
                             .font(.subheadline.weight(.semibold))
@@ -149,11 +150,14 @@ struct GalleryCardView: View {
                             .foregroundStyle(.secondary)
                             .fixedSize()
                     }
-                    if let locationName = gallery.location?.name ?? gallery.address?.locality {
+                    if let location = gallery.location, let locationName = location.name ?? gallery.address?.locality {
                         Text(locationName)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
+                            .onTapGesture {
+                                onLocationTap?(LocationServices.h3ToCity(location.value), locationName)
+                            }
                     }
                 }
 

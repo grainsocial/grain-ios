@@ -206,6 +206,7 @@ private struct FeedTabContent: View {
     @State private var selectedUri: String?
     @State private var selectedProfileDid: String?
     @State private var selectedHashtag: String?
+    @State private var selectedLocation: LocationDestination?
     @State private var deletedGalleryUri: String?
     @State private var zoomState = ImageZoomState()
     @State private var cardStoryAuthor: GrainStoryAuthor?
@@ -230,7 +231,7 @@ private struct FeedTabContent: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(spacing: 0) {
+            LazyVStack(spacing: 12) {
                 StoryStripView(
                     authors: storyAuthors,
                     userAvatar: userAvatar,
@@ -246,6 +247,8 @@ private struct FeedTabContent: View {
                         selectedProfileDid = did
                     }, onHashtagTap: { tag in
                         selectedHashtag = tag
+                    }, onLocationTap: { h3, name in
+                        selectedLocation = LocationDestination(h3Index: h3, name: name)
                     }, onStoryTap: { author in
                         cardStoryAuthor = author
                     })
@@ -279,6 +282,9 @@ private struct FeedTabContent: View {
         }
         .navigationDestination(item: $selectedHashtag) { tag in
             HashtagFeedView(client: client, tag: tag)
+        }
+        .navigationDestination(item: $selectedLocation) { loc in
+            LocationFeedView(client: client, h3Index: loc.h3Index, locationName: loc.name)
         }
         .fullScreenCover(item: $cardStoryAuthor) { author in
             StoryViewer(

@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct HashtagFeedView: View {
+struct LocationFeedView: View {
     @Environment(AuthManager.self) private var auth
     @State private var galleries: [GrainGallery] = []
     @State private var cursor: String?
@@ -9,14 +9,14 @@ struct HashtagFeedView: View {
     @State private var selectedUri: String?
     @State private var selectedProfileDid: String?
     @State private var selectedHashtag: String?
-    @State private var selectedLocation: LocationDestination?
     @State private var zoomState = ImageZoomState()
     @State private var cardStoryAuthor: GrainStoryAuthor?
 
     let client: XRPCClient
-    let tag: String
+    let h3Index: String
+    let locationName: String
 
-    private var feedId: String { "hashtag:\(tag)" }
+    private var feedId: String { "location:\(h3Index)" }
 
     var body: some View {
         ScrollView {
@@ -28,8 +28,6 @@ struct HashtagFeedView: View {
                         selectedProfileDid = did
                     }, onHashtagTap: { tag in
                         selectedHashtag = tag
-                    }, onLocationTap: { h3, name in
-                        selectedLocation = LocationDestination(h3Index: h3, name: name)
                     }, onStoryTap: { author in
                         cardStoryAuthor = author
                     })
@@ -48,7 +46,7 @@ struct HashtagFeedView: View {
         }
         .environment(zoomState)
         .modifier(ImageZoomOverlay(zoomState: zoomState))
-        .navigationTitle("#\(tag)")
+        .navigationTitle(locationName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -78,9 +76,6 @@ struct HashtagFeedView: View {
         .navigationDestination(item: $selectedHashtag) { tag in
             HashtagFeedView(client: client, tag: tag)
         }
-        .navigationDestination(item: $selectedLocation) { loc in
-            LocationFeedView(client: client, h3Index: loc.h3Index, locationName: loc.name)
-        }
         .fullScreenCover(item: $cardStoryAuthor) { author in
             StoryViewer(
                 authors: [author],
@@ -103,7 +98,7 @@ struct HashtagFeedView: View {
     private func loadInitial() async {
         isLoading = true
         do {
-            let response = try await client.getFeed(feed: "hashtag", tag: tag, auth: auth.authContext())
+            let response = try await client.getFeed(feed: "location", location: h3Index, auth: auth.authContext())
             galleries = response.items ?? []
             cursor = response.cursor
         } catch {}
@@ -114,7 +109,7 @@ struct HashtagFeedView: View {
         guard !isLoading, let cursor else { return }
         isLoading = true
         do {
-            let response = try await client.getFeed(feed: "hashtag", cursor: cursor, tag: tag, auth: auth.authContext())
+            let response = try await client.getFeed(feed: "location", cursor: cursor, location: h3Index, auth: auth.authContext())
             galleries.append(contentsOf: response.items ?? [])
             self.cursor = response.cursor
         } catch {}
@@ -135,10 +130,16 @@ struct HashtagFeedView: View {
             if isPinned {
                 feeds.removeAll { $0.id == feedId }
             } else {
-                feeds.append(PinnedFeed(id: feedId, label: tag, type: "hashtag", path: "/hashtags/\(tag)"))
+                feeds.append(PinnedFeed(id: feedId, label: locationName, type: "location", path: "/location/\(h3Index)"))
             }
             try await client.putPinnedFeeds(feeds, auth: auth.authContext())
             isPinned.toggle()
         } catch {}
     }
+}
+
+struct LocationDestination: Hashable, Identifiable {
+    let h3Index: String
+    let name: String
+    var id: String { h3Index }
 }
