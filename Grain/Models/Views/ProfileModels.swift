@@ -30,6 +30,7 @@ struct GrainProfileDetailed: Codable, Sendable, Identifiable {
     var createdAt: String?
     var viewer: ActorViewerState?
     var labels: [ATLabel]?
+    var messageMe: MessageMe?
 
     var id: String { did }
 }
@@ -38,4 +39,10 @@ struct GrainProfileDetailed: Codable, Sendable, Identifiable {
 struct ActorViewerState: Codable, Sendable {
     var following: String?
     var followedBy: String?
+}
+
+/// Germ Network messageMe declaration
+struct MessageMe: Codable, Sendable {
+    let showButtonTo: String
+    let messageMeUrl: String
 }

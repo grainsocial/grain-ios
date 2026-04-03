@@ -100,17 +100,40 @@ struct ProfileView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal)
 
-                        // Follow button
+                        // Follow + Germ DM buttons
                         if did != auth.userDID {
-                            Button {
-                                Task { await viewModel.toggleFollow(auth: auth.authContext()) }
-                            } label: {
-                                Text(profile.viewer?.following != nil ? "Following" : "Follow")
-                                    .font(.subheadline.weight(.semibold))
-                                    .frame(maxWidth: .infinity)
+                            HStack(spacing: 8) {
+                                followButton(profile: profile)
+
+                                if let germUrl = germDMUrl(profile: profile) {
+                                    Link(destination: germUrl) {
+                                        HStack(spacing: 4) {
+                                            Image("germ-logo")
+                                                .resizable()
+                                                .frame(width: 14, height: 14)
+                                            Text("Germ DM")
+                                                .font(.subheadline.weight(.semibold))
+                                        }
+                                        .frame(maxWidth: .infinity)
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .tint(Color(red: 0.52, green: 0.63, blue: 1.0))
+                                }
                             }
-                            .buttonStyle(.borderedProminent)
-                            .tint(profile.viewer?.following != nil ? .secondary : Color("AccentColor"))
+                            .padding(.horizontal)
+                        } else if let germUrl = germDMUrl(profile: profile) {
+                            Link(destination: germUrl) {
+                                HStack(spacing: 4) {
+                                    Image("germ-logo")
+                                        .resizable()
+                                        .frame(width: 14, height: 14)
+                                    Text("Germ DM")
+                                        .font(.subheadline.weight(.semibold))
+                                }
+                                .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(Color(red: 0.52, green: 0.63, blue: 1.0))
                             .padding(.horizontal)
                         }
 
@@ -242,6 +265,46 @@ struct ProfileView: View {
                     deletedGalleryUri = nil
                 }
             }
+    }
+
+    @ViewBuilder
+    private func followButton(profile: GrainProfileDetailed) -> some View {
+        if profile.viewer?.following != nil {
+            Button {
+                Task { await viewModel.toggleFollow(auth: auth.authContext()) }
+            } label: {
+                Text("Following")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .tint(.primary)
+        } else {
+            Button {
+                Task { await viewModel.toggleFollow(auth: auth.authContext()) }
+            } label: {
+                Text("Follow")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Color("AccentColor"))
+        }
+    }
+
+    private func germDMUrl(profile: GrainProfileDetailed) -> URL? {
+        guard let messageMe = profile.messageMe,
+              let viewerDid = auth.userDID else { return nil }
+        let isOwn = did == viewerDid
+        if !isOwn {
+            switch messageMe.showButtonTo {
+            case "everyone": break
+            case "usersIFollow":
+                guard profile.viewer?.followedBy != nil else { return nil }
+            default: return nil
+            }
+        }
+        return URL(string: "\(messageMe.messageMeUrl)/web#\(did)+\(viewerDid)")
     }
 }
 
