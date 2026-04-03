@@ -19,13 +19,16 @@ struct ProfileView: View {
     @State private var zoomState = ImageZoomState()
     @State private var cardStoryAuthor: GrainStoryAuthor?
     let client: XRPCClient
-    let did: String
+    let actor: String
     var isRoot = false
+
+    /// Resolved DID from the loaded profile, or the original actor identifier
+    private var did: String { viewModel.profile?.did ?? actor }
 
     init(client: XRPCClient, did: String, isRoot: Bool = false) {
         self.client = client
         _viewModel = State(initialValue: ProfileDetailViewModel(client: client))
-        self.did = did
+        self.actor = did
         self.isRoot = isRoot
     }
 
@@ -197,7 +200,7 @@ struct ProfileView: View {
                     ToolbarItem(placement: .topBarTrailing) {
                         NavigationLink {
                             SettingsView(client: client, onProfileEdited: {
-                                Task { await viewModel.load(did: did, viewer: auth.userDID, auth: auth.authContext()) }
+                                Task { await viewModel.load(did: actor, viewer: auth.userDID, auth: auth.authContext()) }
                             })
                         } label: {
                             Image(systemName: "gearshape")
@@ -254,10 +257,10 @@ struct ProfileView: View {
             }
             .background(Color(.systemBackground))
             .refreshable {
-                await viewModel.load(did: did, viewer: auth.userDID, auth: auth.authContext())
+                await viewModel.load(did: actor, viewer: auth.userDID, auth: auth.authContext())
             }
             .task {
-                await viewModel.load(did: did, viewer: auth.userDID, auth: auth.authContext())
+                await viewModel.load(did: actor, viewer: auth.userDID, auth: auth.authContext())
             }
             .onChange(of: deletedGalleryUri) { _, uri in
                 if let uri {
