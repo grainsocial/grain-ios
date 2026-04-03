@@ -2,7 +2,9 @@ import SwiftUI
 
 @main
 struct GrainApp: App {
+    @UIApplicationDelegateAdaptor private var appDelegate: AppDelegate
     @State private var authManager = AuthManager()
+    @State private var pushManager = PushManager()
     @State private var storyStatusCache = StoryStatusCache()
     @State private var labelDefsCache = LabelDefinitionsCache()
     @State private var pendingDeepLink: DeepLink?
@@ -13,9 +15,21 @@ struct GrainApp: App {
                 if authManager.isAuthenticated {
                     MainTabView(pendingDeepLink: $pendingDeepLink)
                         .environment(authManager)
+                        .environment(pushManager)
                         .environment(storyStatusCache)
                         .environment(labelDefsCache)
                         .tint(Color("AccentColor"))
+                        .onAppear {
+                            pushManager.configure(authManager: authManager)
+                            appDelegate.pushManager = pushManager
+                            appDelegate.onNotificationTap = { deepLink in
+                                pendingDeepLink = deepLink
+                            }
+                            authManager.onLogout = { [pushManager] in
+                                pushManager.unregisterToken()
+                            }
+                            pushManager.registerIfNeeded()
+                        }
                 } else {
                     LoginView()
                         .environment(authManager)

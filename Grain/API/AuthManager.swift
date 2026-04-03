@@ -195,8 +195,12 @@ final class AuthManager {
         storeTokens(tokenResponse)
     }
 
+    /// Callback invoked before credentials are cleared on logout.
+    var onLogout: (() -> Void)?
+
     /// Log out and clear all stored credentials.
     func logout() {
+        onLogout?()
         TokenStorage.clear()
         try? DPoP.clearKey()
         isAuthenticated = false
