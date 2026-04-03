@@ -16,6 +16,14 @@ build:
 install: build
     xcrun simctl install booted ~/Library/Developer/Xcode/DerivedData/Grain-gnyldzofconssnfxpuxpctdsmehu/Build/Products/Debug-iphonesimulator/Grain.app
 
+# Build and install to a plugged-in iOS device
+device device_id:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Building for device {{device_id}}..."
+    xcodebuild build -scheme Grain -destination 'platform=iOS,id={{device_id}}' CODE_SIGN_STYLE=Automatic -allowProvisioningUpdates -quiet
+    echo "Installed to device {{device_id}}!"
+
 # Bump build number, regenerate project, archive, and upload to App Store Connect
 release:
     #!/usr/bin/env bash
