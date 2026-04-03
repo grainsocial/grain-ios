@@ -12,6 +12,8 @@ struct GalleryDetailView: View {
     @State private var showDeleteConfirmation = false
     @State private var showReportSheet = false
     @State private var showCommentSheet = false
+    @State private var zoomState = ImageZoomState()
+    @State private var cardStoryAuthor: GrainStoryAuthor?
     @FocusState private var commentFocused: Bool
     @Environment(\.dismiss) private var dismiss
 
@@ -46,11 +48,18 @@ struct GalleryDetailView: View {
                             set: { viewModel.gallery = $0 }
                         ),
                         client: client,
+                        onNavigate: {
+                            replyingTo = nil
+                            showCommentSheet = true
+                        },
                         onProfileTap: { did in
                             selectedProfileDid = did
                         },
                         onHashtagTap: { tag in
                             selectedHashtag = tag
+                        },
+                        onStoryTap: { author in
+                            cardStoryAuthor = author
                         }
                     )
 
@@ -80,6 +89,7 @@ struct GalleryDetailView: View {
                                     isReply: false,
                                     onProfileTap: { did in selectedProfileDid = did },
                                     onHashtagTap: { tag in selectedHashtag = tag },
+                                    onStoryTap: { author in cardStoryAuthor = author },
                                     onReply: { startReply(to: thread.root) },
                                     onDelete: { Task { await deleteComment(thread.root) } }
                                 )
@@ -91,6 +101,8 @@ struct GalleryDetailView: View {
                                         isReply: true,
                                         onProfileTap: { did in selectedProfileDid = did },
                                         onHashtagTap: { tag in selectedHashtag = tag },
+                                        onStoryTap: { author in cardStoryAuthor = author },
+                                        onReply: { startReplyToReply(reply, root: thread.root) },
                                         onDelete: { Task { await deleteComment(reply) } }
                                     )
                                 }
@@ -103,6 +115,8 @@ struct GalleryDetailView: View {
                     .padding(.top, 100)
             }
         }
+        .environment(zoomState)
+        .modifier(ImageZoomOverlay(zoomState: zoomState))
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(item: $selectedProfileDid) { did in
             ProfileView(client: client, did: did)
@@ -130,8 +144,8 @@ struct GalleryDetailView: View {
                     }
                 } label: {
                     Image(systemName: "ellipsis")
-                        .foregroundStyle(.primary)
                 }
+                .tint(.primary)
                 .disabled(viewModel.gallery == nil)
             }
         }
@@ -147,6 +161,18 @@ struct GalleryDetailView: View {
             if let gallery = viewModel.gallery {
                 ReportView(client: client, subjectUri: gallery.uri, subjectCid: gallery.cid)
             }
+        }
+        .fullScreenCover(item: $cardStoryAuthor) { author in
+            StoryViewer(
+                authors: [author],
+                client: client,
+                onProfileTap: { did in
+                    cardStoryAuthor = nil
+                    selectedProfileDid = did
+                },
+                onDismiss: { cardStoryAuthor = nil }
+            )
+            .environment(auth)
         }
         .sheet(isPresented: $showCommentSheet) {
             NavigationStack {
@@ -210,6 +236,13 @@ struct GalleryDetailView: View {
 
     private func startReply(to comment: GrainComment) {
         replyingTo = comment
+        commentText = ""
+        showCommentSheet = true
+    }
+
+    private func startReplyToReply(_ reply: GrainComment, root: GrainComment) {
+        replyingTo = root
+        commentText = "@\(reply.author.handle) "
         showCommentSheet = true
     }
 
@@ -265,18 +298,32 @@ struct GalleryDetailView: View {
 }
 
 struct CommentRow: View {
+    @Environment(StoryStatusCache.self) private var storyStatusCache
     let comment: GrainComment
     var isOwn: Bool = false
     var isReply: Bool = false
     var onProfileTap: ((String) -> Void)?
     var onHashtagTap: ((String) -> Void)?
+    var onStoryTap: ((GrainStoryAuthor) -> Void)?
     var onReply: (() -> Void)?
     var onDelete: (() -> Void)?
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
-            AvatarView(url: comment.author.avatar, size: isReply ? 24 : 28)
-                .onTapGesture { onProfileTap?(comment.author.did) }
+            let avatarSize: CGFloat = isReply ? 24 : 28
+            StoryRingView(hasStory: storyStatusCache.hasStory(for: comment.author.did), size: avatarSize) {
+                AvatarView(url: comment.author.avatar, size: avatarSize)
+            }
+            .onTapGesture {
+                if let author = storyStatusCache.author(for: comment.author.did) {
+                    onStoryTap?(author)
+                } else {
+                    onProfileTap?(comment.author.did)
+                }
+            }
+            .onLongPressGesture {
+                onProfileTap?(comment.author.did)
+            }
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
@@ -295,7 +342,7 @@ struct CommentRow: View {
 
                 // Actions
                 HStack(spacing: 16) {
-                    if !isReply, onReply != nil {
+                    if onReply != nil {
                         Button {
                             onReply?()
                         } label: {
