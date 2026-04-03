@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Grain Logo Options</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<style>
+  body {
+    margin: 0;
+    padding: 40px;
+    background: #1a1a1a;
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+  h1 {
+    text-align: center;
+    color: #555;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 4px;
+    margin: 0 0 30px;
+  }
+  .grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 40px;
+    justify-content: center;
+  }
+  .option {
+    text-align: center;
+  }
+  .option h2 {
+    margin: 0 0 12px;
+    font-size: 15px;
+    font-weight: 500;
+    color: #aaa;
+  }
+  .option p {
+    margin: 8px 0 0;
+    font-size: 12px;
+    color: #555;
+    max-width: 256px;
+  }
+  .icon-border {
+    width: 256px;
+    height: 256px;
+    border-radius: 56px;
+    border: 2px solid #333;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    background: #111;
+  }
+  .icon-border svg {
+    width: 200px;
+    height: 200px;
+  }
+  .divider {
+    width: 100%;
+    margin: 30px 0;
+  }
+</style>
+</head>
+<body>
+
+<h1>G-based options (Syne 800)</h1>
+<div class="grid">
+
+  <div class="option">
+    <h2>1 — White G</h2>
+    <div class="icon-border">
+      <svg viewBox="0 0 512 512">
+        <text x="256" y="420" font-family="Syne, sans-serif" font-weight="800" font-size="550" text-anchor="middle" fill="white">g</text>
+      </svg>
+    </div>
+  </div>
+
+  <div class="option">
+    <h2>2 — Gradient G (story ring)</h2>
+    <div class="icon-border">
+      <svg viewBox="0 0 512 512">
+        <defs>
+          <linearGradient id="g2" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#c97cf8"/>
+            <stop offset="50%" stop-color="#85a1ff"/>
+            <stop offset="100%" stop-color="#5bf0d6"/>
+          </linearGradient>
+        </defs>
+        <text x="256" y="420" font-family="Syne, sans-serif" font-weight="800" font-size="550" text-anchor="middle" fill="url(#g2)">g</text>
+      </svg>
+    </div>
+  </div>
+
+  <div class="option">
+    <h2>3 — Blue→Purple G</h2>
+    <div class="icon-border">
+      <svg viewBox="0 0 512 512">
+        <defs>
+          <linearGradient id="g3" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#4A5DF9"/>
+            <stop offset="100%" stop-color="#c97cf8"/>
+          </linearGradient>
+        </defs>
+        <text x="256" y="420" font-family="Syne, sans-serif" font-weight="800" font-size="550" text-anchor="middle" fill="url(#g3)">g</text>
+      </svg>
+    </div>
+  </div>
+
+  <div class="option">
+    <h2>4 — Brand Blue G</h2>
+    <div class="icon-border">
+      <svg viewBox="0 0 512 512">
+        <text x="256" y="420" font-family="Syne, sans-serif" font-weight="800" font-size="550" text-anchor="middle" fill="#4A5DF9">g</text>
+      </svg>
+    </div>
+  </div>
+
+</div>
+
+  <div class="option">
+    <h2>4b — Film Grain G</h2>
+    <div class="icon-border">
+      <svg viewBox="0 0 1024 1024">
+        <defs>
+          <filter id="fgP" x="0%" y="0%" width="100%" height="100%">
+            <feTurbulence type="fractalNoise" baseFrequency="1.8" numOctaves="6" seed="2" stitchTiles="stitch" result="noise"/>
+            <feComponentTransfer in="noise" result="processed">
+              <feFuncR type="discrete" tableValues="0 0 0 0 0.3 0.5 0.65 0.8 0.9 1"/>
+              <feFuncG type="discrete" tableValues="0 0 0 0 0.3 0.5 0.65 0.8 0.9 1"/>
+              <feFuncB type="discrete" tableValues="0 0 0 0 0.3 0.5 0.65 0.8 0.9 1"/>
+              <feFuncA type="table" tableValues="0 0.6 0.8 0.9 1 1 1 1 1 1"/>
+            </feComponentTransfer>
+          </filter>
+          <clipPath id="gClipP">
+            <text x="512" y="820" font-family="Syne, sans-serif" font-weight="800" font-size="1080" text-anchor="middle">g</text>
+          </clipPath>
+        </defs>
+        <g clip-path="url(#gClipP)">
+          <rect width="1024" height="1024" filter="url(#fgP)" fill="white"/>
+        </g>
+      </svg>
+    </div>
+    <p>True film grain noise clipped to G</p>
+  </div>
+
+</div>
+
+<div class="divider"></div>
+<h1>Non-G concepts</h1>
+<div class="grid">
+
+  <div class="option">
+    <h2>5 — Grain Field</h2>
+    <div class="icon-border">
+      <svg viewBox="0 0 512 512">
+        <!-- Scattered grain dots — dense center, sparse edges -->
+        <g fill="white">
+          <circle cx="256" cy="256" r="16" opacity="1"/>
+          <circle cx="225" cy="238" r="12" opacity="0.95"/>
+          <circle cx="285" cy="243" r="14" opacity="0.9"/>
+          <circle cx="248" cy="282" r="11" opacity="0.9"/>
+          <circle cx="270" cy="224" r="10" opacity="0.85"/>
+          <circle cx="232" cy="272" r="13" opacity="0.88"/>
+          <circle cx="278" cy="278" r="10" opacity="0.85"/>
+          <circle cx="256" cy="214" r="9" opacity="0.8"/>
+          <circle cx="198" cy="220" r="10" opacity="0.7"/>
+          <circle cx="312" cy="230" r="11" opacity="0.7"/>
+          <circle cx="188" cy="264" r="9" opacity="0.65"/>
+          <circle cx="322" cy="268" r="9" opacity="0.65"/>
+          <circle cx="214" cy="302" r="10" opacity="0.6"/>
+          <circle cx="296" cy="306" r="8" opacity="0.6"/>
+          <circle cx="306" cy="200" r="8" opacity="0.6"/>
+          <circle cx="210" cy="196" r="8" opacity="0.55"/>
+          <circle cx="266" cy="186" r="7" opacity="0.55"/>
+          <circle cx="240" cy="320" r="9" opacity="0.55"/>
+          <circle cx="280" cy="326" r="7" opacity="0.5"/>
+          <circle cx="178" cy="236" r="8" opacity="0.5"/>
+          <circle cx="164" cy="200" r="7" opacity="0.4"/>
+          <circle cx="346" cy="240" r="7" opacity="0.35"/>
+          <circle cx="154" cy="280" r="6" opacity="0.35"/>
+          <circle cx="350" cy="280" r="6" opacity="0.3"/>
+          <circle cx="176" cy="320" r="7" opacity="0.3"/>
+          <circle cx="336" cy="316" r="6" opacity="0.3"/>
+          <circle cx="230" cy="170" r="6" opacity="0.3"/>
+          <circle cx="290" cy="166" r="5" opacity="0.25"/>
+          <circle cx="336" cy="196" r="5" opacity="0.25"/>
+          <circle cx="170" cy="176" r="5" opacity="0.2"/>
+          <circle cx="360" cy="210" r="4" opacity="0.2"/>
+          <circle cx="250" cy="350" r="6" opacity="0.2"/>
+          <circle cx="200" cy="346" r="5" opacity="0.18"/>
+          <circle cx="316" cy="340" r="4" opacity="0.15"/>
+          <circle cx="140" cy="246" r="4" opacity="0.15"/>
+          <circle cx="370" cy="256" r="4" opacity="0.12"/>
+        </g>
+      </svg>
+    </div>
+    <p>Literal film grain particles</p>
+  </div>
+
+  <div class="option">
+    <h2>6 — Viewfinder</h2>
+    <div class="icon-border">
+      <svg viewBox="0 0 512 512">
+        <g stroke="white" stroke-width="16" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M 140 210 L 140 140 L 210 140"/>
+          <path d="M 302 140 L 372 140 L 372 210"/>
+          <path d="M 372 302 L 372 372 L 302 372"/>
+          <path d="M 210 372 L 140 372 L 140 302"/>
+        </g>
+        <circle cx="256" cy="256" r="10" fill="white"/>
+        <line x1="256" y1="195" x2="256" y2="235" stroke="white" stroke-width="4" opacity="0.5"/>
+        <line x1="256" y1="277" x2="256" y2="317" stroke="white" stroke-width="4" opacity="0.5"/>
+        <line x1="195" y1="256" x2="235" y2="256" stroke="white" stroke-width="4" opacity="0.5"/>
+        <line x1="277" y1="256" x2="317" y2="256" stroke="white" stroke-width="4" opacity="0.5"/>
+      </svg>
+    </div>
+    <p>Camera viewfinder brackets</p>
+  </div>
+
+  <div class="option">
+    <h2>7 — Signal Rings</h2>
+    <div class="icon-border">
+      <svg viewBox="0 0 512 512">
+        <defs>
+          <linearGradient id="g7" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#4A5DF9"/>
+            <stop offset="50%" stop-color="#85a1ff"/>
+            <stop offset="100%" stop-color="#c97cf8"/>
+          </linearGradient>
+        </defs>
+        <g transform="translate(256,256)" fill="none" stroke="url(#g7)" stroke-linecap="round">
+          <circle r="30" stroke-width="22" opacity="1"/>
+          <circle r="72" stroke-width="16" opacity="0.8" stroke-dasharray="310 142" stroke-dashoffset="30"/>
+          <circle r="116" stroke-width="14" opacity="0.55" stroke-dasharray="480 249" stroke-dashoffset="80"/>
+          <circle r="160" stroke-width="12" opacity="0.35" stroke-dasharray="660 345" stroke-dashoffset="140"/>
+          <circle r="204" stroke-width="10" opacity="0.18" stroke-dasharray="850 432" stroke-dashoffset="210"/>
+        </g>
+      </svg>
+    </div>
+    <p>Expanding ripple / broadcast rings</p>
+  </div>
+
+  <div class="option">
+    <h2>8 — Wheat Stalk</h2>
+    <div class="icon-border">
+      <svg viewBox="0 0 512 512">
+        <defs>
+          <linearGradient id="g8" x1="50%" y1="0%" x2="50%" y2="100%">
+            <stop offset="0%" stop-color="#5bf0d6"/>
+            <stop offset="40%" stop-color="#85a1ff"/>
+            <stop offset="100%" stop-color="#c97cf8"/>
+          </linearGradient>
+        </defs>
+        <g transform="translate(256,256)" stroke="url(#g8)" fill="none" stroke-linecap="round">
+          <line x1="0" y1="175" x2="0" y2="-150" stroke-width="8"/>
+          <ellipse cx="-32" cy="-110" rx="28" ry="12" transform="rotate(-25,-32,-110)" stroke-width="6" opacity="0.9"/>
+          <ellipse cx="32" cy="-84" rx="28" ry="12" transform="rotate(25,32,-84)" stroke-width="6" opacity="0.85"/>
+          <ellipse cx="-30" cy="-58" rx="26" ry="11" transform="rotate(-20,-30,-58)" stroke-width="6" opacity="0.8"/>
+          <ellipse cx="30" cy="-32" rx="26" ry="11" transform="rotate(20,30,-32)" stroke-width="6" opacity="0.75"/>
+          <ellipse cx="-28" cy="-6" rx="24" ry="10" transform="rotate(-15,-28,-6)" stroke-width="6" opacity="0.7"/>
+          <ellipse cx="28" cy="20" rx="24" ry="10" transform="rotate(15,28,20)" stroke-width="6" opacity="0.65"/>
+          <ellipse cx="-24" cy="46" rx="22" ry="10" transform="rotate(-10,-24,46)" stroke-width="6" opacity="0.6"/>
+          <ellipse cx="24" cy="72" rx="22" ry="10" transform="rotate(10,24,72)" stroke-width="6" opacity="0.55"/>
+          <path d="M 0 -150 C -6 -180, -16 -196, -12 -210" stroke-width="5" opacity="0.9"/>
+          <path d="M 0 -150 C 6 -176, 14 -190, 10 -206" stroke-width="5" opacity="0.9"/>
+        </g>
+      </svg>
+    </div>
+    <p>Wheat stalk — literal grain</p>
+  </div>
+
+  <div class="option">
+    <h2>9 — Aperture Iris</h2>
+    <div class="icon-border">
+      <svg viewBox="0 0 512 512">
+        <defs>
+          <linearGradient id="g9" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#c97cf8"/>
+            <stop offset="100%" stop-color="#4A5DF9"/>
+          </linearGradient>
+        </defs>
+        <g transform="translate(256,256)" fill="url(#g9)">
+          <ellipse cx="0" cy="-68" rx="30" ry="68" opacity="0.9"/>
+          <ellipse cx="0" cy="-68" rx="30" ry="68" opacity="0.8" transform="rotate(45)"/>
+          <ellipse cx="0" cy="-68" rx="30" ry="68" opacity="0.7" transform="rotate(90)"/>
+          <ellipse cx="0" cy="-68" rx="30" ry="68" opacity="0.6" transform="rotate(135)"/>
+          <ellipse cx="0" cy="-68" rx="30" ry="68" opacity="0.9" transform="rotate(180)"/>
+          <ellipse cx="0" cy="-68" rx="30" ry="68" opacity="0.8" transform="rotate(225)"/>
+          <ellipse cx="0" cy="-68" rx="30" ry="68" opacity="0.7" transform="rotate(270)"/>
+          <ellipse cx="0" cy="-68" rx="30" ry="68" opacity="0.6" transform="rotate(315)"/>
+        </g>
+        <circle cx="256" cy="256" r="26" fill="#111"/>
+      </svg>
+    </div>
+    <p>Camera iris from seed/petal shapes</p>
+  </div>
+
+  <div class="option">
+    <h2>10 — Film Frames</h2>
+    <div class="icon-border">
+      <svg viewBox="0 0 512 512">
+        <defs>
+          <linearGradient id="g10a" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#5bf0d6"/>
+            <stop offset="100%" stop-color="#85a1ff"/>
+          </linearGradient>
+          <linearGradient id="g10b" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#85a1ff"/>
+            <stop offset="100%" stop-color="#c97cf8"/>
+          </linearGradient>
+        </defs>
+        <rect x="148" y="118" width="230" height="264" rx="14" fill="none" stroke="url(#g10a)" stroke-width="8" opacity="0.35" transform="rotate(-8,256,256)"/>
+        <rect x="148" y="118" width="230" height="264" rx="14" fill="none" stroke="url(#g10b)" stroke-width="8" opacity="0.6" transform="rotate(3,256,256)"/>
+        <rect x="148" y="118" width="230" height="264" rx="14" fill="none" stroke="white" stroke-width="10"/>
+        <!-- Sprocket holes left -->
+        <g fill="white" opacity="0.35">
+          <rect x="154" y="136" width="16" height="22" rx="3"/>
+          <rect x="154" y="168" width="16" height="22" rx="3"/>
+          <rect x="154" y="200" width="16" height="22" rx="3"/>
+          <rect x="154" y="232" width="16" height="22" rx="3"/>
+          <rect x="154" y="264" width="16" height="22" rx="3"/>
+          <rect x="154" y="296" width="16" height="22" rx="3"/>
+          <rect x="154" y="328" width="16" height="22" rx="3"/>
+          <rect x="154" y="354" width="16" height="22" rx="3"/>
+        </g>
+        <!-- Sprocket holes right -->
+        <g fill="white" opacity="0.35">
+          <rect x="356" y="136" width="16" height="22" rx="3"/>
+          <rect x="356" y="168" width="16" height="22" rx="3"/>
+          <rect x="356" y="200" width="16" height="22" rx="3"/>
+          <rect x="356" y="232" width="16" height="22" rx="3"/>
+          <rect x="356" y="264" width="16" height="22" rx="3"/>
+          <rect x="356" y="296" width="16" height="22" rx="3"/>
+          <rect x="356" y="328" width="16" height="22" rx="3"/>
+          <rect x="356" y="354" width="16" height="22" rx="3"/>
+        </g>
+      </svg>
+    </div>
+    <p>Stacked film frames with sprocket holes</p>
+  </div>
+
+  <div class="option">
+    <h2>11 — Grain Drop</h2>
+    <div class="icon-border">
+      <svg viewBox="0 0 512 512">
+        <path d="
+          M 256 100
+          C 316 165, 358 235, 358 290
+          C 358 356, 316 414, 256 414
+          C 196 414, 154 356, 154 290
+          C 154 235, 196 165, 256 100
+          Z
+        " fill="none" stroke="white" stroke-width="16"/>
+        <ellipse cx="240" cy="260" rx="30" ry="52" fill="white" opacity="0.07" transform="rotate(-15,240,260)"/>
+      </svg>
+    </div>
+    <p>Single grain / seed drop — minimal, iconic</p>
+  </div>
+
+  <div class="option">
+    <h2>12 — Social Graph</h2>
+    <div class="icon-border">
+      <svg viewBox="0 0 512 512">
+        <defs>
+          <linearGradient id="g12" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#c97cf8"/>
+            <stop offset="50%" stop-color="#85a1ff"/>
+            <stop offset="100%" stop-color="#5bf0d6"/>
+          </linearGradient>
+        </defs>
+        <g stroke="url(#g12)" stroke-width="4" opacity="0.3">
+          <line x1="256" y1="170" x2="190" y2="250"/>
+          <line x1="256" y1="170" x2="330" y2="236"/>
+          <line x1="190" y1="250" x2="210" y2="330"/>
+          <line x1="330" y1="236" x2="306" y2="336"/>
+          <line x1="190" y1="250" x2="330" y2="236"/>
+          <line x1="210" y1="330" x2="306" y2="336"/>
+          <line x1="256" y1="170" x2="176" y2="178"/>
+          <line x1="256" y1="170" x2="342" y2="170"/>
+          <line x1="176" y1="178" x2="190" y2="250"/>
+          <line x1="342" y1="170" x2="330" y2="236"/>
+        </g>
+        <g fill="url(#g12)">
+          <circle cx="256" cy="170" r="22"/>
+          <circle cx="190" cy="250" r="18"/>
+          <circle cx="330" cy="236" r="19"/>
+          <circle cx="210" cy="330" r="15"/>
+          <circle cx="306" cy="336" r="16"/>
+          <circle cx="176" cy="178" r="12" opacity="0.6"/>
+          <circle cx="342" cy="170" r="13" opacity="0.6"/>
+        </g>
+      </svg>
+    </div>
+    <p>Connected nodes — social / community</p>
+  </div>
+
+</div>
+
+</body>
+</html>
