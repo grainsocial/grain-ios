@@ -42,9 +42,9 @@ struct ProfileView: View {
     private var profileContent: some View {
         ScrollView {
                 if let profile = viewModel.profile {
-                    VStack(spacing: 16) {
-                        // Avatar + name with glass header
-                        VStack(spacing: 8) {
+                    VStack(spacing: 12) {
+                        // Avatar + stats row
+                        HStack(alignment: .center, spacing: 16) {
                             StoryRingView(hasStory: !viewModel.stories.isEmpty, size: 80) {
                                 AvatarView(url: profile.avatar, size: 80)
                                     .liquidGlassCircle()
@@ -57,33 +57,48 @@ struct ProfileView: View {
                                 }
                             }
 
+                            HStack(spacing: 0) {
+                                StatView(count: profile.galleryCount ?? 0, label: "Galleries")
+                                    .frame(maxWidth: .infinity)
+                                NavigationLink {
+                                    FollowListView(client: client, did: did, mode: .followers)
+                                } label: {
+                                    StatView(count: profile.followersCount ?? 0, label: "Followers")
+                                }
+                                .buttonStyle(.plain)
+                                .frame(maxWidth: .infinity)
+                                NavigationLink {
+                                    FollowListView(client: client, did: did, mode: .following)
+                                } label: {
+                                    StatView(count: profile.followsCount ?? 0, label: "Following")
+                                }
+                                .buttonStyle(.plain)
+                                .frame(maxWidth: .infinity)
+                            }
+                        }
+                        .padding(.horizontal)
+                        .padding(.top, 8)
+
+                        // Name + handle + bio
+                        VStack(alignment: .leading, spacing: 4) {
                             Text(profile.displayName ?? profile.handle)
-                                .font(.title2.bold())
+                                .font(.subheadline.bold())
                             Text("@\(profile.handle)")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
-                        }
-                        .padding(.vertical)
 
-                        // Stats with glass pills
-                        HStack(spacing: 24) {
-                            StatView(count: profile.galleryCount ?? 0, label: "Galleries")
-                            NavigationLink {
-                                FollowListView(client: client, did: did, mode: .followers)
-                            } label: {
-                                StatView(count: profile.followersCount ?? 0, label: "Followers")
+                            if let description = profile.description, !description.isEmpty {
+                                RichTextView(
+                                    text: description,
+                                    font: .subheadline,
+                                    onMentionTap: { did in selectedProfileDid = did },
+                                    onHashtagTap: { tag in selectedHashtag = tag }
+                                )
+                                .padding(.top, 2)
                             }
-                            .buttonStyle(.plain)
-                            NavigationLink {
-                                FollowListView(client: client, did: did, mode: .following)
-                            } label: {
-                                StatView(count: profile.followsCount ?? 0, label: "Following")
-                            }
-                            .buttonStyle(.plain)
                         }
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 12)
-                        .liquidGlass()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal)
 
                         // Follow button
                         if did != auth.userDID {
@@ -91,6 +106,7 @@ struct ProfileView: View {
                                 Task { await viewModel.toggleFollow(auth: auth.authContext()) }
                             } label: {
                                 Text(profile.viewer?.following != nil ? "Following" : "Follow")
+                                    .font(.subheadline.weight(.semibold))
                                     .frame(maxWidth: .infinity)
                             }
                             .buttonStyle(.borderedProminent)
@@ -98,51 +114,7 @@ struct ProfileView: View {
                             .padding(.horizontal)
                         }
 
-                        if let description = profile.description, !description.isEmpty {
-                            RichTextView(
-                                text: description,
-                                font: .body,
-                                onMentionTap: { did in selectedProfileDid = did },
-                                onHashtagTap: { tag in selectedHashtag = tag }
-                            )
-                            .padding(.horizontal)
-                        }
-
-                        // View mode toggle
-                        GlassEffectContainer(spacing: 8) {
-                            HStack(spacing: 8) {
-                                Button {
-                                    withAnimation { viewMode = .grid }
-                                } label: {
-                                    Image(systemName: "square.grid.2x2")
-                                        .font(.system(size: 16, weight: .medium))
-                                        .foregroundStyle(viewMode == .grid ? .primary : .secondary)
-                                        .frame(width: 44, height: 36)
-                                        .glassEffect(
-                                            viewMode == .grid ? .regular.interactive() : .clear.interactive(),
-                                            in: .capsule
-                                        )
-                                        .glassEffectID("viewToggle", in: viewModeNS)
-                                }
-                                Button {
-                                    withAnimation { viewMode = .list }
-                                } label: {
-                                    Image(systemName: "list.bullet")
-                                        .font(.system(size: 16, weight: .medium))
-                                        .foregroundStyle(viewMode == .list ? .primary : .secondary)
-                                        .frame(width: 44, height: 36)
-                                        .glassEffect(
-                                            viewMode == .list ? .regular.interactive() : .clear.interactive(),
-                                            in: .capsule
-                                        )
-                                        .glassEffectID("viewToggle", in: viewModeNS)
-                                }
-                            }
-                            .buttonStyle(.plain)
-                        }
-
                         // Galleries
-                        if viewMode == .grid {
                             LazyVGrid(columns: [
                                 GridItem(.flexible(), spacing: 2),
                                 GridItem(.flexible(), spacing: 2),
@@ -168,6 +140,16 @@ struct ProfileView: View {
                                                 }
                                             }
                                             .clipped()
+                                            .overlay(alignment: .topTrailing) {
+                                                if (gallery.items?.count ?? 0) > 1 {
+                                                    Image(systemName: "square.on.square.fill")
+                                                        .font(.system(size: 14))
+                                                        .rotationEffect(.degrees(180))
+                                                        .foregroundStyle(.white)
+                                                        .shadow(color: .black.opacity(0.5), radius: 2, x: 0, y: 1)
+                                                        .padding(6)
+                                                }
+                                            }
                                     }
                                     .buttonStyle(.plain)
                                     .onAppear {
@@ -177,25 +159,6 @@ struct ProfileView: View {
                                     }
                                 }
                             }
-                        } else {
-                            LazyVStack(spacing: 0) {
-                                ForEach($viewModel.galleries) { $gallery in
-                                    GalleryCardView(
-                                        gallery: $gallery,
-                                        client: client,
-                                        onNavigate: { selectedGalleryUri = gallery.uri },
-                                        onProfileTap: { did in selectedProfileDid = did },
-                                        onHashtagTap: { tag in selectedHashtag = tag },
-                                        onStoryTap: { author in cardStoryAuthor = author }
-                                    )
-                                    .onAppear {
-                                        if gallery.id == viewModel.galleries.last?.id {
-                                            Task { await viewModel.loadMoreGalleries(did: did, auth: auth.authContext()) }
-                                        }
-                                    }
-                                }
-                            }
-                        }
                     }
                 } else if viewModel.isLoading {
                     ProgressView()

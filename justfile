@@ -22,6 +22,9 @@ device device_id:
     set -euo pipefail
     echo "Building for device {{device_id}}..."
     xcodebuild build -scheme Grain -destination 'platform=iOS,id={{device_id}}' CODE_SIGN_STYLE=Automatic -allowProvisioningUpdates -quiet
+    APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData/Grain-*/Build/Products/Debug-iphoneos -name "Grain.app" -type d | head -1)
+    echo "Installing $APP_PATH..."
+    xcrun devicectl device install app --device {{device_id}} "$APP_PATH"
     echo "Installed to device {{device_id}}!"
 
 # Bump build number, regenerate project, archive, and upload to App Store Connect

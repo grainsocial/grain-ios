@@ -318,6 +318,7 @@ struct StoryViewer: View {
 
     private func relativeTime(_ dateString: String) -> String {
         let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         guard let date = formatter.date(from: dateString) else { return "" }
         let interval = Date().timeIntervalSince(date)
         if interval < 60 { return "now" }
