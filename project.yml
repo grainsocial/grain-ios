@@ -74,5 +74,8 @@ targets:
     platform: iOS
     sources:
       - path: GrainTests
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: Grain
