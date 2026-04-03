@@ -39,7 +39,7 @@ targets:
         INFOPLIST_FILE: Grain/Info.plist
         PRODUCT_BUNDLE_IDENTIFIER: social.grain.grain
         MARKETING_VERSION: "1.0.0"
-        CURRENT_PROJECT_VERSION: "33"
+        CURRENT_PROJECT_VERSION: "34"
     dependencies:
       - package: Nuke
         product: Nuke
