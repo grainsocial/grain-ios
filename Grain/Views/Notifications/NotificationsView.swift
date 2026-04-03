@@ -6,6 +6,7 @@ struct NotificationsView: View {
     var viewModel: NotificationsViewModel
     @State private var selectedGalleryUri: String?
     @State private var selectedProfileDid: String?
+    @State private var cardStoryAuthor: GrainStoryAuthor?
     let client: XRPCClient
 
     init(client: XRPCClient, viewModel: NotificationsViewModel) {
@@ -19,6 +20,8 @@ struct NotificationsView: View {
                 ForEach(viewModel.notifications) { notification in
                     NotificationRow(notification: notification, onProfileTap: { did in
                             selectedProfileDid = did
+                        }, onStoryTap: { author in
+                            cardStoryAuthor = author
                         })
                         .contentShape(Rectangle())
                         .onTapGesture {
@@ -61,6 +64,18 @@ struct NotificationsView: View {
             .navigationDestination(item: $selectedProfileDid) { did in
                 ProfileView(client: client, did: did)
             }
+            .fullScreenCover(item: $cardStoryAuthor) { author in
+                StoryViewer(
+                    authors: [author],
+                    client: client,
+                    onProfileTap: { did in
+                        cardStoryAuthor = nil
+                        selectedProfileDid = did
+                    },
+                    onDismiss: { cardStoryAuthor = nil }
+                )
+                .environment(auth)
+            }
             .task {
                 if viewModel.notifications.isEmpty {
                     await viewModel.loadInitial(auth: auth.authContext())
@@ -72,13 +87,26 @@ struct NotificationsView: View {
 }
 
 struct NotificationRow: View {
+    @Environment(StoryStatusCache.self) private var storyStatusCache
     let notification: GrainNotification
     var onProfileTap: ((String) -> Void)?
+    var onStoryTap: ((GrainStoryAuthor) -> Void)?
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            AvatarView(url: notification.author.avatar, size: 36)
-                .onTapGesture { onProfileTap?(notification.author.did) }
+            StoryRingView(hasStory: storyStatusCache.hasStory(for: notification.author.did), size: 36) {
+                AvatarView(url: notification.author.avatar, size: 36)
+            }
+            .onTapGesture {
+                if let author = storyStatusCache.author(for: notification.author.did) {
+                    onStoryTap?(author)
+                } else {
+                    onProfileTap?(notification.author.did)
+                }
+            }
+            .onLongPressGesture {
+                onProfileTap?(notification.author.did)
+            }
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("\(Text(notification.author.displayName ?? notification.author.handle).font(.subheadline.bold())) \(Text(reasonText).font(.subheadline).foregroundStyle(.secondary))")

@@ -17,6 +17,8 @@ struct FollowListView: View {
     @State private var isLoading = false
     @State private var hasLoaded = false
     @State private var selectedProfileDid: String?
+    @State private var cardStoryAuthor: GrainStoryAuthor?
+    @Environment(StoryStatusCache.self) private var storyStatusCache
 
     private var title: String {
         mode == .followers ? "Followers" : "Following"
@@ -72,6 +74,18 @@ struct FollowListView: View {
         .navigationDestination(item: $selectedProfileDid) { did in
             ProfileView(client: client, did: did)
         }
+        .fullScreenCover(item: $cardStoryAuthor) { author in
+            StoryViewer(
+                authors: [author],
+                client: client,
+                onProfileTap: { did in
+                    cardStoryAuthor = nil
+                    selectedProfileDid = did
+                },
+                onDismiss: { cardStoryAuthor = nil }
+            )
+            .environment(auth)
+        }
         .task {
             await reload()
         }
@@ -85,7 +99,19 @@ struct FollowListView: View {
     @ViewBuilder
     private func rowContent(item: FollowListItem) -> some View {
         HStack(alignment: .center, spacing: 14) {
-            AvatarView(url: item.avatar, size: 50)
+            StoryRingView(hasStory: storyStatusCache.hasStory(for: item.did), size: 50) {
+                AvatarView(url: item.avatar, size: 50)
+            }
+            .onTapGesture {
+                if let author = storyStatusCache.author(for: item.did) {
+                    cardStoryAuthor = author
+                } else {
+                    selectedProfileDid = item.did
+                }
+            }
+            .onLongPressGesture {
+                selectedProfileDid = item.did
+            }
             VStack(alignment: .leading, spacing: 2) {
                 if let displayName = item.displayName, !displayName.isEmpty {
                     Text(displayName)

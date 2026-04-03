@@ -4,9 +4,10 @@ struct StoryStripView: View {
     let authors: [GrainStoryAuthor]
     let userAvatar: String?
     let onAuthorTap: (GrainStoryAuthor, Int) -> Void
+    var onAuthorLongPress: ((String) -> Void)?
     let onCreateTap: () -> Void
 
-    private let avatarSize: CGFloat = 56
+    private let avatarSize: CGFloat = 68
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -40,6 +41,7 @@ struct StoryStripView: View {
                             .frame(width: avatarSize + 8)
                     }
                     .onTapGesture { onAuthorTap(author, index) }
+                    .onLongPressGesture { onAuthorLongPress?(author.profile.did) }
                 }
             }
             .padding(.horizontal)

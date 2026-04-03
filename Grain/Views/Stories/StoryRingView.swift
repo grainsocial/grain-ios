@@ -20,9 +20,9 @@ struct StoryRingView<Content: View>: View {
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             ),
-                            lineWidth: 2.5
+                            lineWidth: size <= 28 ? 1.5 : size <= 40 ? 2.5 : 3.5
                         )
-                        .frame(width: size + 6, height: size + 6)
+                        .frame(width: size + (size <= 28 ? 4 : size <= 40 ? 6 : 8), height: size + (size <= 28 ? 4 : size <= 40 ? 6 : 8))
                 }
             }
     }

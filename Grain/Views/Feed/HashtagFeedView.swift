@@ -9,6 +9,8 @@ struct HashtagFeedView: View {
     @State private var selectedUri: String?
     @State private var selectedProfileDid: String?
     @State private var selectedHashtag: String?
+    @State private var zoomState = ImageZoomState()
+    @State private var cardStoryAuthor: GrainStoryAuthor?
 
     let client: XRPCClient
     let tag: String
@@ -25,6 +27,8 @@ struct HashtagFeedView: View {
                         selectedProfileDid = did
                     }, onHashtagTap: { tag in
                         selectedHashtag = tag
+                    }, onStoryTap: { author in
+                        cardStoryAuthor = author
                     })
                     .onAppear {
                         if gallery.id == galleries.last?.id {
@@ -39,6 +43,8 @@ struct HashtagFeedView: View {
                 }
             }
         }
+        .environment(zoomState)
+        .modifier(ImageZoomOverlay(zoomState: zoomState))
         .navigationTitle("#\(tag)")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -54,6 +60,7 @@ struct HashtagFeedView: View {
                     Image(systemName: "ellipsis")
                         .font(.system(size: 16, weight: .medium))
                 }
+                .tint(.primary)
             }
         }
         .task {
@@ -67,6 +74,18 @@ struct HashtagFeedView: View {
         }
         .navigationDestination(item: $selectedHashtag) { tag in
             HashtagFeedView(client: client, tag: tag)
+        }
+        .fullScreenCover(item: $cardStoryAuthor) { author in
+            StoryViewer(
+                authors: [author],
+                client: client,
+                onProfileTap: { did in
+                    cardStoryAuthor = nil
+                    selectedProfileDid = did
+                },
+                onDismiss: { cardStoryAuthor = nil }
+            )
+            .environment(auth)
         }
         .task {
             if galleries.isEmpty {

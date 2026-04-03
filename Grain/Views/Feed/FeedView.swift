@@ -2,6 +2,7 @@ import SwiftUI
 
 struct FeedView: View {
     @Environment(AuthManager.self) private var auth
+    @Environment(StoryStatusCache.self) private var storyStatusCache
     @State private var prefsViewModel: FeedPreferencesViewModel
     @State private var storyViewModel: StoryStripViewModel
     @State private var showStoryViewer = false
@@ -38,8 +39,8 @@ struct FeedView: View {
                             showStoryViewer = true
                         },
                         onStoryCreateTap: { showStoryCreate = true },
-                        onRefresh: {
-                            await storyViewModel.load(auth: auth.authContext())
+                        onRefresh: { [storyStatusCache] in
+                            await storyViewModel.load(auth: auth.authContext(), storyStatusCache: storyStatusCache)
                         },
                         prefsViewModel: prefsViewModel
                     )
@@ -58,7 +59,7 @@ struct FeedView: View {
             }
             .task {
                 await prefsViewModel.loadIfNeeded(auth: auth.authContext())
-                await storyViewModel.load(auth: auth.authContext())
+                await storyViewModel.load(auth: auth.authContext(), storyStatusCache: storyStatusCache)
             }
             .onAppear {
                 Task { await prefsViewModel.refresh(auth: auth.authContext()) }
@@ -68,6 +69,10 @@ struct FeedView: View {
                     authors: storyViewModel.authors,
                     startIndex: storyViewerStartIndex,
                     client: client,
+                    onProfileTap: { did in
+                        showStoryViewer = false
+                        deepLinkProfileDid = did
+                    },
                     onDismiss: { showStoryViewer = false }
                 )
             }
@@ -86,6 +91,10 @@ struct FeedView: View {
                 StoryViewer(
                     authors: [author],
                     client: client,
+                    onProfileTap: { did in
+                        deepLinkStoryAuthor = nil
+                        deepLinkProfileDid = did
+                    },
                     onDismiss: { deepLinkStoryAuthor = nil }
                 )
                 .environment(auth)
@@ -199,6 +208,7 @@ private struct FeedTabContent: View {
     @State private var selectedHashtag: String?
     @State private var deletedGalleryUri: String?
     @State private var zoomState = ImageZoomState()
+    @State private var cardStoryAuthor: GrainStoryAuthor?
     let client: XRPCClient
     let storyAuthors: [GrainStoryAuthor]
     let userAvatar: String?
@@ -225,6 +235,7 @@ private struct FeedTabContent: View {
                     authors: storyAuthors,
                     userAvatar: userAvatar,
                     onAuthorTap: onStoryAuthorTap,
+                    onAuthorLongPress: { did in selectedProfileDid = did },
                     onCreateTap: onStoryCreateTap
                 )
 
@@ -235,6 +246,8 @@ private struct FeedTabContent: View {
                         selectedProfileDid = did
                     }, onHashtagTap: { tag in
                         selectedHashtag = tag
+                    }, onStoryTap: { author in
+                        cardStoryAuthor = author
                     })
                     .onAppear {
                         if gallery.id == viewModel.galleries.last?.id {
@@ -266,6 +279,18 @@ private struct FeedTabContent: View {
         }
         .navigationDestination(item: $selectedHashtag) { tag in
             HashtagFeedView(client: client, tag: tag)
+        }
+        .fullScreenCover(item: $cardStoryAuthor) { author in
+            StoryViewer(
+                authors: [author],
+                client: client,
+                onProfileTap: { did in
+                    cardStoryAuthor = nil
+                    selectedProfileDid = did
+                },
+                onDismiss: { cardStoryAuthor = nil }
+            )
+            .environment(auth)
         }
         .task {
             if viewModel.galleries.isEmpty {

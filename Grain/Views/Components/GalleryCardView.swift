@@ -3,63 +3,29 @@ import SwiftUI
 
 private let logger = Logger(subsystem: "social.grain.grain", category: "GalleryCard")
 
-// MARK: - Self-animating heart that removes itself when done
+// MARK: - Self-animating heart with heap-backed state
 
-private struct DoubleTapHeart: Identifiable {
+@Observable
+@MainActor
+private final class HeartAnimationState: Identifiable {
     let id = UUID()
     let position: CGPoint
     let rotation: Double
-}
+    var heartScale: CGFloat = 0
+    var ripple1Scale: CGFloat = 0.3
+    var ripple1Opacity: Double = 0
+    var ripple2Scale: CGFloat = 0.3
+    var ripple2Opacity: Double = 0
+    var ripple3Scale: CGFloat = 0.3
+    var ripple3Opacity: Double = 0
+    var isComplete = false
 
-private struct DoubleTapHeartView: View {
-    let heart: DoubleTapHeart
-    var onComplete: () -> Void
-
-    @State private var heartScale: CGFloat = 0
-    @State private var ripple1Scale: CGFloat = 0.3
-    @State private var ripple1Opacity: Double = 0
-    @State private var ripple2Scale: CGFloat = 0.3
-    @State private var ripple2Opacity: Double = 0
-    @State private var ripple3Scale: CGFloat = 0.3
-    @State private var ripple3Opacity: Double = 0
-
-    var body: some View {
-        ZStack {
-            Image(systemName: "heart")
-                .font(.system(size: 80, weight: .light))
-                .foregroundStyle(Color("AccentColor"))
-                .scaleEffect(ripple3Scale)
-                .opacity(ripple3Opacity)
-                .rotationEffect(.degrees(heart.rotation * 0.6))
-
-            Image(systemName: "heart")
-                .font(.system(size: 80, weight: .ultraLight))
-                .foregroundStyle(Color("AccentColor"))
-                .scaleEffect(ripple2Scale)
-                .opacity(ripple2Opacity)
-                .rotationEffect(.degrees(heart.rotation * 0.8))
-
-            Image(systemName: "heart")
-                .font(.system(size: 80, weight: .thin))
-                .foregroundStyle(Color("AccentColor"))
-                .scaleEffect(ripple1Scale)
-                .opacity(ripple1Opacity)
-                .rotationEffect(.degrees(heart.rotation * 0.9))
-
-            Image(systemName: "heart.fill")
-                .font(.system(size: 80))
-                .foregroundStyle(Color("AccentColor"))
-                .shadow(color: Color("AccentColor").opacity(0.4), radius: 12)
-                .scaleEffect(heartScale)
-                .opacity(heartScale > 1.2 ? 0 : 1)
-                .rotationEffect(.degrees(heart.rotation))
-        }
-        .position(x: heart.position.x, y: heart.position.y)
-        .allowsHitTesting(false)
-        .onAppear { animate() }
+    init(position: CGPoint) {
+        self.position = position
+        self.rotation = Double.random(in: -20...20)
     }
 
-    private func animate() {
+    func start() {
         withAnimation(.spring(response: 0.25, dampingFraction: 0.5)) {
             heartScale = 1
         }
@@ -80,22 +46,67 @@ private struct DoubleTapHeartView: View {
             try? await Task.sleep(for: .milliseconds(500))
             withAnimation(.easeInOut(duration: 0.4)) { heartScale = 1.6 }
             try? await Task.sleep(for: .milliseconds(400))
-            onComplete()
+            isComplete = true
         }
+    }
+}
+
+private struct DoubleTapHeartView: View {
+    let state: HeartAnimationState
+
+    var body: some View {
+        ZStack {
+            Image(systemName: "heart")
+                .font(.system(size: 80, weight: .light))
+                .foregroundStyle(Color("AccentColor"))
+                .scaleEffect(state.ripple3Scale)
+                .opacity(state.ripple3Opacity)
+                .rotationEffect(.degrees(state.rotation * 0.6))
+
+            Image(systemName: "heart")
+                .font(.system(size: 80, weight: .ultraLight))
+                .foregroundStyle(Color("AccentColor"))
+                .scaleEffect(state.ripple2Scale)
+                .opacity(state.ripple2Opacity)
+                .rotationEffect(.degrees(state.rotation * 0.8))
+
+            Image(systemName: "heart")
+                .font(.system(size: 80, weight: .thin))
+                .foregroundStyle(Color("AccentColor"))
+                .scaleEffect(state.ripple1Scale)
+                .opacity(state.ripple1Opacity)
+                .rotationEffect(.degrees(state.rotation * 0.9))
+
+            Image(systemName: "heart.fill")
+                .font(.system(size: 80))
+                .foregroundStyle(Color("AccentColor"))
+                .shadow(color: Color("AccentColor").opacity(0.4), radius: 12)
+                .scaleEffect(state.heartScale)
+                .opacity(state.heartScale > 1.2 ? 0 : 1)
+                .rotationEffect(.degrees(state.rotation))
+        }
+        .position(x: state.position.x, y: state.position.y)
+        .allowsHitTesting(false)
+        .onAppear { state.start() }
     }
 }
 
 struct GalleryCardView: View {
     @Environment(AuthManager.self) private var auth
+    @Environment(StoryStatusCache.self) private var storyStatusCache
     @Binding var gallery: GrainGallery
     let client: XRPCClient
     var onNavigate: () -> Void = {}
     var onProfileTap: ((String) -> Void)?
     var onHashtagTap: ((String) -> Void)?
+    var onStoryTap: ((GrainStoryAuthor) -> Void)?
     @State private var isFavoriting = false
     @State private var currentPage = 0
     @State private var showingAlt = false
-    @State private var hearts: [DoubleTapHeart] = []
+    @State private var hearts: [HeartAnimationState] = []
+    @State private var showCopiedToast = false
+    @State private var shareWiggle = false
+    @State private var didLongPressShare = false
 
     private var isFavorited: Bool {
         gallery.viewer?.fav != nil
@@ -110,7 +121,19 @@ struct GalleryCardView: View {
         VStack(alignment: .leading, spacing: 0) {
             // Header — tappable for navigation
             HStack(spacing: 8) {
-                AvatarView(url: gallery.creator.avatar, size: 32)
+                StoryRingView(hasStory: storyStatusCache.hasStory(for: gallery.creator.did), size: 32) {
+                    AvatarView(url: gallery.creator.avatar, size: 32)
+                }
+                .onTapGesture {
+                    if let author = storyStatusCache.author(for: gallery.creator.did) {
+                        onStoryTap?(author)
+                    } else {
+                        onProfileTap?(gallery.creator.did)
+                    }
+                }
+                .onLongPressGesture {
+                    onProfileTap?(gallery.creator.did)
+                }
 
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(spacing: 4) {
@@ -232,9 +255,10 @@ struct GalleryCardView: View {
 
                     // Double-tap heart animations
                     ForEach(hearts) { heart in
-                        DoubleTapHeartView(heart: heart) {
-                            hearts.removeAll { $0.id == heart.id }
-                        }
+                        DoubleTapHeartView(state: heart)
+                            .onChange(of: heart.isComplete) {
+                                hearts.removeAll { $0.isComplete }
+                            }
                     }
                     }
                     .frame(height: height)
@@ -277,8 +301,36 @@ struct GalleryCardView: View {
                 ShareLink(item: galleryShareURL) {
                     Image(systemName: "paperplane")
                         .font(.system(size: 20))
+                        .rotationEffect(.degrees(shareWiggle ? -15 : 0))
+                        .animation(
+                            shareWiggle
+                                ? .easeInOut(duration: 0.08).repeatCount(5, autoreverses: true)
+                                : .default,
+                            value: shareWiggle
+                        )
                 }
                 .foregroundStyle(.secondary)
+                .disabled(didLongPressShare)
+                .simultaneousGesture(
+                    LongPressGesture(minimumDuration: 0.5)
+                        .onEnded { _ in
+                            didLongPressShare = true
+                            UIPasteboard.general.url = galleryShareURL
+                            let generator = UIImpactFeedbackGenerator(style: .medium)
+                            generator.impactOccurred()
+                            shareWiggle = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                shareWiggle = false
+                            }
+                            showCopiedToast = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                                showCopiedToast = false
+                            }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                                didLongPressShare = false
+                            }
+                        }
+                )
 
                 Spacer()
             }
@@ -316,13 +368,26 @@ struct GalleryCardView: View {
             .padding(.top, 8)
             .padding(.bottom, 16)
         }
+        .overlay {
+            if showCopiedToast {
+                HStack(spacing: 6) {
+                    Image(systemName: "doc.on.doc.fill")
+                        .font(.caption)
+                    Text("Link copied")
+                        .font(.subheadline.weight(.medium))
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(.ultraThinMaterial, in: Capsule())
+                .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
+                .transition(.scale.combined(with: .opacity))
+            }
+        }
+        .animation(.spring(response: 0.4, dampingFraction: 0.7), value: showCopiedToast)
     }
 
     private func doubleTapLike(at point: CGPoint) {
-        hearts.append(DoubleTapHeart(
-            position: point,
-            rotation: Double.random(in: -20...20)
-        ))
+        hearts.append(HeartAnimationState(position: point))
 
         guard !isFavorited, !isFavoriting else { return }
         isFavoriting = true
@@ -371,3 +436,4 @@ struct GalleryCardView: View {
         }
     }
 }
+

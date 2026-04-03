@@ -16,6 +16,8 @@ struct ProfileView: View {
     @State private var selectedHashtag: String?
     @State private var deletedGalleryUri: String?
     @State private var viewMode: ProfileViewMode = .grid
+    @State private var zoomState = ImageZoomState()
+    @State private var cardStoryAuthor: GrainStoryAuthor?
     let client: XRPCClient
     let did: String
     var isRoot = false
@@ -183,7 +185,8 @@ struct ProfileView: View {
                                         client: client,
                                         onNavigate: { selectedGalleryUri = gallery.uri },
                                         onProfileTap: { did in selectedProfileDid = did },
-                                        onHashtagTap: { tag in selectedHashtag = tag }
+                                        onHashtagTap: { tag in selectedHashtag = tag },
+                                        onStoryTap: { author in cardStoryAuthor = author }
                                     )
                                     .onAppear {
                                         if gallery.id == viewModel.galleries.last?.id {
@@ -199,6 +202,8 @@ struct ProfileView: View {
                         .padding(.top, 100)
                 }
             }
+            .environment(zoomState)
+            .modifier(ImageZoomOverlay(zoomState: zoomState))
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -211,6 +216,7 @@ struct ProfileView: View {
                         } label: {
                             Image(systemName: "gearshape")
                         }
+                        .tint(.primary)
                     }
                 }
             }
@@ -233,9 +239,25 @@ struct ProfileView: View {
                         )],
                         startIndex: 0,
                         client: client,
+                        onProfileTap: { did in
+                            showStoryViewer = false
+                            selectedProfileDid = did
+                        },
                         onDismiss: { showStoryViewer = false }
                     )
                 }
+            }
+            .fullScreenCover(item: $cardStoryAuthor) { author in
+                StoryViewer(
+                    authors: [author],
+                    client: client,
+                    onProfileTap: { did in
+                        cardStoryAuthor = nil
+                        selectedProfileDid = did
+                    },
+                    onDismiss: { cardStoryAuthor = nil }
+                )
+                .environment(auth)
             }
             .fullScreenCover(isPresented: $showAvatarOverlay) {
                 if let avatar = viewModel.profile?.avatar {

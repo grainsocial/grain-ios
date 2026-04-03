@@ -2,11 +2,14 @@ import SwiftUI
 
 struct SearchView: View {
     @Environment(AuthManager.self) private var auth
+    @Environment(StoryStatusCache.self) private var storyStatusCache
     @State private var viewModel: SearchViewModel
     @State private var searchText = ""
     @State private var searchNavigationUri: String?
     @State private var selectedProfileDid: String?
     @State private var selectedHashtag: String?
+    @State private var zoomState = ImageZoomState()
+    @State private var cardStoryAuthor: GrainStoryAuthor?
     let client: XRPCClient
 
     init(client: XRPCClient) {
@@ -31,6 +34,8 @@ struct SearchView: View {
                                         selectedProfileDid = did
                                     }, onHashtagTap: { tag in
                                         selectedHashtag = tag
+                                    }, onStoryTap: { author in
+                                        cardStoryAuthor = author
                                     })
                                 }
                             case .profiles:
@@ -39,7 +44,9 @@ struct SearchView: View {
                                         selectedProfileDid = profile.did
                                     } label: {
                                         HStack {
-                                            AvatarView(url: profile.avatar, size: 40)
+                                            StoryRingView(hasStory: storyStatusCache.hasStory(for: profile.did), size: 40) {
+                                                AvatarView(url: profile.avatar, size: 40)
+                                            }
                                             VStack(alignment: .leading) {
                                                 Text(profile.displayName ?? profile.handle ?? "")
                                                     .font(.subheadline.bold())
@@ -59,6 +66,8 @@ struct SearchView: View {
                         }
                         .padding(.top)
                     }
+                    .environment(zoomState)
+                    .modifier(ImageZoomOverlay(zoomState: zoomState))
                 }
             }
             .navigationTitle("Search")
@@ -87,6 +96,18 @@ struct SearchView: View {
             }
             .navigationDestination(item: $selectedHashtag) { tag in
                 HashtagFeedView(client: client, tag: tag)
+            }
+            .fullScreenCover(item: $cardStoryAuthor) { author in
+                StoryViewer(
+                    authors: [author],
+                    client: client,
+                    onProfileTap: { did in
+                        cardStoryAuthor = nil
+                        selectedProfileDid = did
+                    },
+                    onDismiss: { cardStoryAuthor = nil }
+                )
+                .environment(auth)
             }
         }
     }
