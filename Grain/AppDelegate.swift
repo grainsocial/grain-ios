@@ -30,7 +30,7 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
     }
 
     // Show notifications even when app is in foreground
-    func userNotificationCenter(
+    nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
@@ -38,7 +38,7 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
     }
 
     // Handle notification tap — route to appropriate view
-    func userNotificationCenter(
+    nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse
     ) async {
@@ -70,7 +70,7 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         }
     }
 
-    private func parseGalleryUri(_ uri: String) -> DeepLink? {
+    nonisolated private func parseGalleryUri(_ uri: String) -> DeepLink? {
         // at://did:plc:xxx/social.grain.gallery/rkey
         let parts = uri.replacingOccurrences(of: "at://", with: "").split(separator: "/")
         guard parts.count >= 3 else { return nil }
