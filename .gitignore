@@ -29,3 +29,7 @@ Pods/
 .DS_Store
 *.swp
 *~
+
+# Icon/logo working files
+icons/
+logo-options/
