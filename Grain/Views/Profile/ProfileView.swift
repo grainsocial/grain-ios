@@ -189,6 +189,24 @@ struct ProfileView: View {
                 } else if viewModel.isLoading {
                     ProgressView()
                         .padding(.top, 100)
+                } else if viewModel.error != nil {
+                    VStack(spacing: 16) {
+                        ContentUnavailableView(
+                            "Profile Not Found",
+                            systemImage: "person.slash",
+                            description: Text("This user doesn't have a Grain profile yet.")
+                        )
+                        if let url = URL(string: "https://bsky.app/profile/\(actor)") {
+                            Link(destination: url) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "arrow.up.right")
+                                    Text("View on Bluesky")
+                                }
+                                .font(.subheadline.weight(.medium))
+                            }
+                        }
+                    }
+                    .padding(.top, 40)
                 }
             }
             .environment(zoomState)
