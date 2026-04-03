@@ -1,8 +1,46 @@
 import SwiftUI
 import NukeUI
 
+@Observable
+@MainActor
+private final class StoryTimer {
+    var progress: CGFloat = 0
+    var isRunning = false
+    private var task: Task<Void, Never>?
+    private let duration: TimeInterval = 5.0
+
+    func start() {
+        stop()
+        progress = 0
+        isRunning = true
+        task = Task {
+            let tickInterval: TimeInterval = 0.05
+            let totalTicks = Int(duration / tickInterval)
+            for tick in 0...totalTicks {
+                do {
+                    try await Task.sleep(for: .milliseconds(Int(tickInterval * 1000)))
+                } catch { return }
+                guard !Task.isCancelled else { return }
+                progress = CGFloat(tick) / CGFloat(totalTicks)
+            }
+            guard !Task.isCancelled else { return }
+            isRunning = false
+            onComplete?()
+        }
+    }
+
+    func stop() {
+        task?.cancel()
+        task = nil
+        isRunning = false
+    }
+
+    var onComplete: (() -> Void)?
+}
+
 struct StoryViewer: View {
     @Environment(AuthManager.self) private var auth
+    @Environment(LabelDefinitionsCache.self) private var labelDefsCache
     let authors: [GrainStoryAuthor]
     let client: XRPCClient
     var onProfileTap: ((String) -> Void)?
@@ -11,12 +49,13 @@ struct StoryViewer: View {
     @State private var currentStoryIndex = 0
     @State private var stories: [GrainStory] = []
     @State private var isLoadingStories = false
-    @State private var progress: CGFloat = 0
-    @State private var timerTask: Task<Void, Never>?
+    @State private var timer = StoryTimer()
     @State private var showDeleteConfirm = false
+    @State private var showReportSheet = false
+    @State private var reportStoryUri = ""
+    @State private var reportStoryCid = ""
     @State private var lastNavTime: Date = .distantPast
-
-    private let storyDuration: TimeInterval = 5.0
+    @State private var labelRevealed = false
 
     init(authors: [GrainStoryAuthor], startIndex: Int = 0, client: XRPCClient, onProfileTap: ((String) -> Void)? = nil, onDismiss: (() -> Void)? = nil) {
         self.authors = authors
@@ -31,102 +70,59 @@ struct StoryViewer: View {
         return stories[currentStoryIndex]
     }
 
+    private var storyLabelResult: LabelResolution {
+        resolveLabels(currentStory?.labels, definitions: labelDefsCache.definitions)
+    }
+
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
 
             if let story = currentStory {
+                let lr = storyLabelResult
+
                 // Story image
-                LazyImage(url: URL(string: story.fullsize)) { state in
-                    if let image = state.image {
-                        image
-                            .resizable()
-                            .aspectRatio(story.aspectRatio.ratio, contentMode: .fit)
-                    } else if state.isLoading {
-                        ProgressView()
-                            .tint(.white)
-                    }
-                }
-
-                // Overlay UI
-                VStack(spacing: 0) {
-                    // Progress bars
-                    HStack(spacing: 4) {
-                        ForEach(0..<stories.count, id: \.self) { index in
-                            GeometryReader { geo in
-                                Capsule()
-                                    .fill(Color.white.opacity(0.3))
-                                Capsule()
-                                    .fill(Color.white)
-                                    .frame(width: barWidth(for: index, totalWidth: geo.size.width))
-                            }
-                            .frame(height: 2)
+                ZStack {
+                    LazyImage(url: lr.action == .hide && !labelRevealed ? nil : URL(string: story.fullsize)) { state in
+                        if let image = state.image {
+                            image
+                                .resizable()
+                                .aspectRatio(story.aspectRatio.ratio, contentMode: .fit)
+                        } else if state.isLoading {
+                            ProgressView()
+                                .tint(.white)
                         }
                     }
-                    .padding(.horizontal)
-                    .padding(.top, 8)
+                    .blur(radius: (lr.action == .warnMedia || lr.action == .warnContent) && !labelRevealed ? 24 : 0)
 
-                    // Creator info
-                    HStack(alignment: .center) {
-                        Button {
-                            close()
-                            onProfileTap?(story.creator.did)
-                        } label: {
-                            HStack(alignment: .center, spacing: 8) {
-                                AvatarView(url: story.creator.avatar, size: 32)
-                                VStack(alignment: .leading, spacing: 0) {
-                                    Text(story.creator.displayName ?? story.creator.handle)
-                                        .font(.subheadline.bold())
-                                        .foregroundStyle(.white)
-                                    Text(relativeTime(story.createdAt))
-                                        .font(.caption2)
-                                        .foregroundStyle(.white.opacity(0.7))
-                                }
-                            }
-                        }
-                        Spacer()
-
-                        if story.creator.did == auth.userDID {
-                            Button {
-                                timerTask?.cancel()
-                                showDeleteConfirm = true
-                            } label: {
-                                Image(systemName: "trash")
-                                    .foregroundStyle(.white)
-                            }
-                        }
-
-                        Button { close() } label: {
-                            Image(systemName: "xmark")
+                    if (lr.action == .warnContent || lr.action == .hide) && !labelRevealed {
+                        VStack(spacing: 12) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.title)
+                                .foregroundStyle(.white.opacity(0.7))
+                            Text(lr.name)
+                                .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(.white)
-                                .font(.body.weight(.semibold))
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-
-                    Spacer()
-
-                    // Location pill
-                    if let locationText = storyLocationText(story) {
-                        HStack {
-                            HStack(spacing: 4) {
-                                Image(systemName: "location.fill")
-                                Text(locationText)
+                            Text("This content has been flagged.")
+                                .font(.caption)
+                                .foregroundStyle(.white.opacity(0.6))
+                            Button("Show content") {
+                                withAnimation { labelRevealed = true }
+                                timer.start()
                             }
-                            .font(.caption)
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(.ultraThinMaterial, in: Capsule())
-                            Spacer()
+                            .font(.caption.weight(.medium))
+                            .buttonStyle(.bordered)
+                            .tint(.white)
                         }
-                        .padding(.horizontal)
-                        .padding(.bottom, 32)
+                    } else if lr.action == .warnMedia && !labelRevealed {
+                        MediaWarningOverlay(name: lr.name) {
+                            withAnimation { labelRevealed = true }
+                            timer.start()
+                        }
                     }
                 }
 
-                // Tap zones (below header area)
+                // Tap zones
                 VStack(spacing: 0) {
                     Color.clear
                         .frame(height: 80)
@@ -154,6 +150,87 @@ struct StoryViewer: View {
                             }
                     )
                 }
+                .allowsHitTesting(!showReportSheet && !showDeleteConfirm && (labelRevealed || storyLabelResult.action == .none || storyLabelResult.action == .badge))
+
+                // Header overlay (on top of tap zones)
+                VStack(spacing: 0) {
+                    StoryProgressBars(timer: timer, stories: stories, currentStoryIndex: currentStoryIndex)
+                        .padding(.horizontal)
+                        .padding(.top, 8)
+
+                    // Creator info + actions
+                    HStack(alignment: .center) {
+                        Button {
+                            close()
+                            onProfileTap?(story.creator.did)
+                        } label: {
+                            HStack(alignment: .center, spacing: 8) {
+                                AvatarView(url: story.creator.avatar, size: 32)
+                                VStack(alignment: .leading, spacing: 0) {
+                                    Text(story.creator.displayName ?? story.creator.handle)
+                                        .font(.subheadline.bold())
+                                        .foregroundStyle(.white)
+                                    Text(relativeTime(story.createdAt))
+                                        .font(.caption2)
+                                        .foregroundStyle(.white.opacity(0.7))
+                                }
+                            }
+                        }
+                        Spacer()
+
+                        if story.creator.did == auth.userDID {
+                            Button {
+                                timer.stop()
+                                showDeleteConfirm = true
+                            } label: {
+                                Image(systemName: "trash")
+                                    .foregroundStyle(.white)
+                                    .frame(width: 36, height: 36)
+                            }
+                        } else {
+                            Button {
+                                timer.stop()
+                                reportStoryUri = story.uri
+                                reportStoryCid = story.cid
+                                showReportSheet = true
+                            } label: {
+                                Image(systemName: "flag")
+                                    .foregroundStyle(.white)
+                                    .frame(width: 36, height: 36)
+                            }
+                        }
+
+                        Button { close() } label: {
+                            Image(systemName: "xmark")
+                                .foregroundStyle(.white)
+                                .font(.body.weight(.semibold))
+                                .frame(width: 36, height: 36)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+
+                    Spacer()
+                        .allowsHitTesting(false)
+
+                    // Location pill
+                    if let locationText = storyLocationText(story) {
+                        HStack {
+                            HStack(spacing: 4) {
+                                Image(systemName: "location.fill")
+                                Text(locationText)
+                            }
+                            .font(.caption)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(.ultraThinMaterial, in: Capsule())
+                            Spacer()
+                        }
+                        .padding(.horizontal)
+                        .padding(.bottom, 32)
+                    }
+                }
             } else if isLoadingStories {
                 ProgressView()
                     .tint(.white)
@@ -167,59 +244,42 @@ struct StoryViewer: View {
                 }
             }
             Button("Cancel", role: .cancel) {
-                startTimer()
+                timer.start()
+            }
+        }
+        .fullScreenCover(isPresented: $showReportSheet) {
+            ReportView(client: client, subjectUri: reportStoryUri, subjectCid: reportStoryCid)
+                .environment(auth)
+        }
+        .onChange(of: showReportSheet) {
+            if !showReportSheet {
+                timer.start()
             }
         }
         .task {
+            timer.onComplete = { [self] in goToNext() }
             await loadStoriesForCurrentAuthor()
         }
     }
 
-    // MARK: - Progress Bar
-
-    private func barWidth(for index: Int, totalWidth: CGFloat) -> CGFloat {
-        if index < currentStoryIndex {
-            return totalWidth
-        } else if index == currentStoryIndex {
-            return totalWidth * progress
-        } else {
-            return 0
-        }
-    }
-
-    // MARK: - Timer
-
-    private func startTimer() {
-        timerTask?.cancel()
-        progress = 0
-        timerTask = Task {
-            let tickInterval: TimeInterval = 0.05
-            let totalTicks = Int(storyDuration / tickInterval)
-            for tick in 0...totalTicks {
-                try? await Task.sleep(for: .milliseconds(Int(tickInterval * 1000)))
-                guard !Task.isCancelled else { return }
-                progress = CGFloat(tick) / CGFloat(totalTicks)
-            }
-            guard !Task.isCancelled else { return }
-            goToNext()
-        }
-    }
+    // MARK: - Navigation
 
     private func close() {
-        timerTask?.cancel()
+        timer.stop()
         onDismiss?()
     }
 
-    // MARK: - Navigation
-
     private func goToNext() {
         guard !isLoadingStories, !stories.isEmpty else { return }
+        guard !showReportSheet, !showDeleteConfirm else { return }
         guard Date().timeIntervalSince(lastNavTime) > 0.3 else { return }
-        timerTask?.cancel()
+        timer.stop()
         lastNavTime = Date()
         if currentStoryIndex < stories.count - 1 {
             currentStoryIndex += 1
-            startTimer()
+            labelRevealed = false
+            let lr = storyLabelResult
+            if lr.action == .none || lr.action == .badge { timer.start() }
         } else {
             goToNextAuthor()
         }
@@ -227,12 +287,15 @@ struct StoryViewer: View {
 
     private func goToPrevious() {
         guard !isLoadingStories, !stories.isEmpty else { return }
+        guard !showReportSheet, !showDeleteConfirm else { return }
         guard Date().timeIntervalSince(lastNavTime) > 0.3 else { return }
-        timerTask?.cancel()
+        timer.stop()
         lastNavTime = Date()
         if currentStoryIndex > 0 {
             currentStoryIndex -= 1
-            startTimer()
+            labelRevealed = false
+            let lr = storyLabelResult
+            if lr.action == .none || lr.action == .badge { timer.start() }
         } else {
             goToPreviousAuthor()
         }
@@ -244,7 +307,7 @@ struct StoryViewer: View {
             currentStoryIndex = 0
             stories = []
             isLoadingStories = true
-            timerTask?.cancel()
+            timer.stop()
             Task { await loadStoriesForCurrentAuthor() }
         } else {
             close()
@@ -257,7 +320,7 @@ struct StoryViewer: View {
             currentStoryIndex = 0
             stories = []
             isLoadingStories = true
-            timerTask?.cancel()
+            timer.stop()
             Task { await loadStoriesForCurrentAuthor() }
         }
     }
@@ -268,13 +331,17 @@ struct StoryViewer: View {
         guard currentAuthorIndex < authors.count else { return }
         let did = authors[currentAuthorIndex].profile.did
         isLoadingStories = true
-        timerTask?.cancel()
+        timer.stop()
 
         do {
             let response = try await client.getStories(actor: did, auth: auth.authContext())
             stories = response.stories
             currentStoryIndex = 0
-            startTimer()
+            labelRevealed = false
+            let lr = storyLabelResult
+            if lr.action == .none || lr.action == .badge {
+                timer.start()
+            }
         } catch {
             stories = []
         }
@@ -291,7 +358,7 @@ struct StoryViewer: View {
                 goToNextAuthor()
             } else {
                 currentStoryIndex = min(currentStoryIndex, stories.count - 1)
-                startTimer()
+                timer.start()
             }
         } catch {
             // Silently fail
@@ -299,7 +366,6 @@ struct StoryViewer: View {
     }
 
     private func storyLocationText(_ story: GrainStory) -> String? {
-        // Prefer location.name as the primary display (e.g. "Fimmvörðuháls Trail")
         if let name = story.location?.name, !name.isEmpty {
             return name
         }
@@ -325,5 +391,37 @@ struct StoryViewer: View {
         if interval < 3600 { return "\(Int(interval / 60))m" }
         if interval < 86400 { return "\(Int(interval / 3600))h" }
         return "\(Int(interval / 86400))d"
+    }
+}
+
+// Extracted so progress ticks only redraw this view, not the entire StoryViewer
+private struct StoryProgressBars: View {
+    let timer: StoryTimer
+    let stories: [GrainStory]
+    let currentStoryIndex: Int
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(0..<stories.count, id: \.self) { index in
+                GeometryReader { geo in
+                    Capsule()
+                        .fill(Color.white.opacity(0.3))
+                    Capsule()
+                        .fill(Color.white)
+                        .frame(width: barWidth(for: index, totalWidth: geo.size.width))
+                }
+                .frame(height: 2)
+            }
+        }
+    }
+
+    private func barWidth(for index: Int, totalWidth: CGFloat) -> CGFloat {
+        if index < currentStoryIndex {
+            return totalWidth
+        } else if index == currentStoryIndex {
+            return totalWidth * timer.progress
+        } else {
+            return 0
+        }
     }
 }

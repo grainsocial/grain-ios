@@ -6,6 +6,7 @@ private enum AppTab: Hashable {
 
 struct MainTabView: View {
     @Environment(AuthManager.self) private var auth
+    @Environment(LabelDefinitionsCache.self) private var labelDefsCache
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedTab: AppTab = .feed
     @State private var client = XRPCClient(baseURL: AuthManager.serverURL)
@@ -78,6 +79,7 @@ struct MainTabView: View {
                 avatarTabImage = circularAvatar(uiImage, size: 26)
             }
             await notificationsVM.fetchUnseenCount(auth: auth.authContext())
+            await labelDefsCache.loadIfNeeded(client: c, auth: auth.authContext())
         }
         .onChange(of: auth.avatarImage) {
             if let uiImage = auth.avatarImage {
@@ -91,7 +93,10 @@ struct MainTabView: View {
         }
         .onChange(of: scenePhase) {
             if scenePhase == .active {
-                Task { await notificationsVM.fetchUnseenCount(auth: auth.authContext()) }
+                Task {
+                    await notificationsVM.fetchUnseenCount(auth: auth.authContext())
+                    await labelDefsCache.loadIfNeeded(client: client, auth: auth.authContext())
+                }
             }
         }
         .sheet(isPresented: $showCreate) {

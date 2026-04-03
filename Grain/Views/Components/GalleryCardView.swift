@@ -94,6 +94,7 @@ private struct DoubleTapHeartView: View {
 struct GalleryCardView: View {
     @Environment(AuthManager.self) private var auth
     @Environment(StoryStatusCache.self) private var storyStatusCache
+    @Environment(LabelDefinitionsCache.self) private var labelDefsCache
     @Binding var gallery: GrainGallery
     let client: XRPCClient
     var onNavigate: () -> Void = {}
@@ -108,9 +109,14 @@ struct GalleryCardView: View {
     @State private var showCopiedToast = false
     @State private var shareWiggle = false
     @State private var didLongPressShare = false
+    @State private var labelRevealed = false
 
     private var isFavorited: Bool {
         gallery.viewer?.fav != nil
+    }
+
+    private var labelResult: LabelResolution {
+        resolveLabels(gallery.labels, definitions: labelDefsCache.definitions)
     }
 
     private var galleryShareURL: URL {
@@ -119,6 +125,21 @@ struct GalleryCardView: View {
     }
 
     var body: some View {
+        let lr = labelResult
+        if (lr.action == .hide || lr.action == .warnContent) && !labelRevealed {
+            VStack(spacing: 0) {
+                ContentWarningOverlay(name: lr.name, action: lr.action) {
+                    labelRevealed = true
+                }
+                .frame(height: 200)
+            }
+        } else {
+            cardContent(lr: lr)
+        }
+    }
+
+    @ViewBuilder
+    private func cardContent(lr: LabelResolution) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             // Header — tappable for navigation
             HStack(spacing: 8) {
@@ -191,6 +212,8 @@ struct GalleryCardView: View {
                             }
                         }
                         .tabViewStyle(.page(indexDisplayMode: .never))
+                        .blur(radius: lr.action == .warnMedia && !labelRevealed ? 40 : 0)
+                        .allowsHitTesting(lr.action != .warnMedia || labelRevealed)
 
                     // Page indicator (abbreviated like web — max 5 visible dots)
                     if photos.count > 1 {
@@ -263,6 +286,13 @@ struct GalleryCardView: View {
                             .onChange(of: heart.isComplete) {
                                 hearts.removeAll { $0.isComplete }
                             }
+                    }
+
+                    // Media warning overlay
+                    if lr.action == .warnMedia && !labelRevealed {
+                        MediaWarningOverlay(name: lr.name) {
+                            withAnimation { labelRevealed = true }
+                        }
                     }
                     }
                     .frame(height: height)
@@ -366,6 +396,10 @@ struct GalleryCardView: View {
                         onMentionTap: onProfileTap,
                         onHashtagTap: onHashtagTap
                     )
+                }
+
+                if lr.action == .badge {
+                    LabelBadge(name: lr.name)
                 }
             }
             .padding(.horizontal, 12)
