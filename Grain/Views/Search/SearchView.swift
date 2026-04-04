@@ -11,6 +11,7 @@ struct SearchView: View {
     @State private var selectedLocation: LocationDestination?
     @State private var zoomState = ImageZoomState()
     @State private var cardStoryAuthor: GrainStoryAuthor?
+    @State private var recentSearches = RecentSearchStorage()
     let client: XRPCClient
 
     init(client: XRPCClient) {
@@ -22,7 +23,11 @@ struct SearchView: View {
         NavigationStack {
             Group {
                 if viewModel.searchText.isEmpty {
-                    ContentUnavailableView("Search", systemImage: "magnifyingglass", description: Text("Search for galleries and profiles"))
+                    if recentSearches.profiles.isEmpty && recentSearches.textSearches.isEmpty {
+                        ContentUnavailableView("Search", systemImage: "magnifyingglass", description: Text("Search for galleries and profiles"))
+                    } else {
+                        recentSearchesView
+                    }
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 12) {
@@ -44,6 +49,7 @@ struct SearchView: View {
                             case .profiles:
                                 ForEach(viewModel.profileResults) { profile in
                                     Button {
+                                        recentSearches.addProfile(did: profile.did, displayName: profile.displayName, handle: profile.handle, avatar: profile.avatar)
                                         selectedProfileDid = profile.did
                                     } label: {
                                         HStack {
@@ -81,6 +87,7 @@ struct SearchView: View {
                 }
             }
             .onSubmit(of: .search) {
+                recentSearches.addTextSearch(searchText)
                 Task { await viewModel.search(auth: auth.authContext()) }
             }
             .onChange(of: searchText) {
@@ -115,6 +122,78 @@ struct SearchView: View {
                 )
                 .environment(auth)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var recentSearchesView: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                if !recentSearches.profiles.isEmpty {
+                    Text("Recent searches")
+                        .font(.subheadline.weight(.semibold))
+                        .padding(.horizontal)
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 16) {
+                            ForEach(recentSearches.profiles) { profile in
+                                VStack(spacing: 6) {
+                                    AvatarView(url: profile.avatar, size: 76)
+                                        .padding(4)
+                                        .overlay(alignment: .topTrailing) {
+                                            Button {
+                                                recentSearches.removeProfile(profile.did)
+                                            } label: {
+                                                Image(systemName: "xmark")
+                                                    .font(.system(size: 8, weight: .bold))
+                                                    .foregroundStyle(.primary)
+                                                    .frame(width: 18, height: 18)
+                                                    .background(.thickMaterial, in: .circle)
+                                            }
+                                        }
+
+                                    Text(profile.displayName ?? profile.handle ?? "")
+                                        .font(.caption)
+                                        .lineLimit(1)
+                                        .frame(width: 72)
+                                }
+                                .onTapGesture {
+                                    selectedProfileDid = profile.did
+                                }
+                            }
+                        }
+                        .padding(.horizontal)
+                    }
+                }
+
+                if !recentSearches.textSearches.isEmpty {
+                    ForEach(recentSearches.textSearches) { recent in
+                        HStack {
+                            Image(systemName: "magnifyingglass")
+                                .foregroundStyle(.secondary)
+                                .font(.subheadline)
+                            Text(recent.query)
+                                .font(.subheadline)
+                            Spacer()
+                            Button {
+                                recentSearches.removeTextSearch(recent.query)
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(.primary)
+                            }
+                        }
+                        .padding(.horizontal)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            searchText = recent.query
+                            viewModel.searchText = recent.query
+                            Task { await viewModel.search(auth: auth.authContext()) }
+                        }
+                    }
+                }
+            }
+            .padding(.top)
         }
     }
 }
