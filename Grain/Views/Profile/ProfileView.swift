@@ -103,6 +103,16 @@ struct ProfileView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal)
 
+                        // Known followers
+                        if !viewModel.knownFollowers.isEmpty && did != auth.userDID {
+                            NavigationLink {
+                                FollowListView(client: client, did: did, mode: .knownFollowers)
+                            } label: {
+                                knownFollowersRow
+                            }
+                            .buttonStyle(.plain)
+                        }
+
                         // Follow + Germ DM buttons
                         if did != auth.userDID {
                             HStack(spacing: 8) {
@@ -286,6 +296,50 @@ struct ProfileView: View {
                     deletedGalleryUri = nil
                 }
             }
+    }
+
+    @ViewBuilder
+    private var knownFollowersRow: some View {
+        let followers = viewModel.knownFollowers
+        let displayCount = max(followers.count, 0)
+        let avatars = Array(followers.prefix(3))
+        let names = followers.prefix(2).compactMap { f -> String? in
+            if let name = f.displayName, !name.isEmpty { return name }
+            return f.handle
+        }
+        let othersCount = displayCount - names.count
+
+        HStack(spacing: 6) {
+            // Overlapping avatars
+            HStack(spacing: -8) {
+                ForEach(Array(avatars.enumerated()), id: \.element.did) { index, follower in
+                    AvatarView(url: follower.avatar, size: 24)
+                        .background(Circle().fill(Color(.systemBackground)))
+                        .overlay(Circle().stroke(Color(.systemBackground), lineWidth: 2))
+                        .zIndex(Double(3 - index))
+                }
+            }
+
+            // "Followed by X, Y and Z others" text
+            Group {
+                if names.count == 1 && othersCount == 0 {
+                    Text("Followed by **\(names[0])**")
+                } else if names.count == 2 && othersCount == 0 {
+                    Text("Followed by **\(names[0])** and **\(names[1])**")
+                } else if names.count == 1 && othersCount > 0 {
+                    Text("Followed by **\(names[0])** and \(othersCount) \(othersCount == 1 ? "other" : "others") you follow")
+                } else if names.count >= 2 && othersCount > 0 {
+                    Text("Followed by **\(names[0])**, **\(names[1])** and \(othersCount) \(othersCount == 1 ? "other" : "others") you follow")
+                } else {
+                    Text("Followed by \(displayCount) you follow")
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(2)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal)
     }
 
     @ViewBuilder

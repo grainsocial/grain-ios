@@ -4,6 +4,7 @@ import NukeUI
 enum FollowListMode: Hashable {
     case followers
     case following
+    case knownFollowers
 }
 
 struct FollowListView: View {
@@ -21,7 +22,11 @@ struct FollowListView: View {
     @Environment(StoryStatusCache.self) private var storyStatusCache
 
     private var title: String {
-        mode == .followers ? "Followers" : "Following"
+        switch mode {
+        case .followers: "Followers"
+        case .following: "Following"
+        case .knownFollowers: "Followers you know"
+        }
     }
 
     private var displayCount: String {
@@ -36,8 +41,8 @@ struct FollowListView: View {
             } else if hasLoaded && items.isEmpty {
                 ContentUnavailableView(
                     "No \(title)",
-                    systemImage: mode == .followers ? "person.2" : "person.badge.plus",
-                    description: Text(mode == .followers ? "No one is following this account yet." : "This account isn't following anyone yet.")
+                    systemImage: mode == .knownFollowers ? "person.2" : mode == .followers ? "person.2" : "person.badge.plus",
+                    description: Text(mode == .knownFollowers ? "None of the people you follow are following this account." : mode == .followers ? "No one is following this account yet." : "This account isn't following anyone yet.")
                 )
             } else {
                 List {
@@ -150,6 +155,12 @@ struct FollowListView: View {
                 items = (response.items ?? []).map { FollowListItem(from: $0) }
                 cursor = response.cursor
                 totalCount = response.totalCount
+            case .knownFollowers:
+                if let viewer = auth.userDID {
+                    let response = try await client.getKnownFollowers(actor: did, viewer: viewer, auth: auth.authContext())
+                    items = (response.items ?? []).map { FollowListItem(from: $0) }
+                    totalCount = items.count
+                }
             }
         } catch {
             // keep existing items on error
@@ -180,6 +191,8 @@ struct FollowListView: View {
                     items.append(contentsOf: filtered.map { FollowListItem(from: $0) })
                 }
                 cursor = response.cursor
+            case .knownFollowers:
+                break // No pagination for known followers
             }
         } catch {
             // silently fail

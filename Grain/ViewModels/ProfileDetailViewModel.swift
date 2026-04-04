@@ -6,6 +6,7 @@ final class ProfileDetailViewModel {
     var profile: GrainProfileDetailed?
     var galleries: [GrainGallery] = []
     var stories: [GrainStory] = []
+    var knownFollowers: [FollowerItem] = []
     var isLoading = false
     var error: Error?
 
@@ -22,14 +23,25 @@ final class ProfileDetailViewModel {
         error = nil
 
         do {
-            let p = try await client.getActorProfile(actor: did, viewer: viewer, auth: auth)
-            let f = try await client.getFeed(feed: "actor", actor: did, auth: auth)
-            let s = try await client.getStories(actor: did, auth: auth)
-            profile = p
-            galleries = f.items ?? []
-            galleryCursor = f.cursor
-            hasMoreGalleries = f.cursor != nil
-            stories = s.stories
+            async let p = client.getActorProfile(actor: did, viewer: viewer, auth: auth)
+            async let f = client.getFeed(feed: "actor", actor: did, auth: auth)
+            async let s = client.getStories(actor: did, auth: auth)
+            async let kf: [FollowerItem] = {
+                guard let viewer, viewer != did else { return [] }
+                let response = try? await client.getKnownFollowers(actor: did, viewer: viewer, auth: auth)
+                return response?.items ?? []
+            }()
+
+            let profileResult = try await p
+            let feedResult = try await f
+            let storiesResult = try await s
+
+            profile = profileResult
+            galleries = feedResult.items ?? []
+            galleryCursor = feedResult.cursor
+            hasMoreGalleries = feedResult.cursor != nil
+            stories = storiesResult.stories
+            knownFollowers = await kf
         } catch {
             self.error = error
         }
