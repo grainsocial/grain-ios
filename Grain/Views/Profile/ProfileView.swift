@@ -151,6 +151,13 @@ struct ProfileView: View {
                         }
 
                         // Galleries
+                        if viewModel.galleries.isEmpty && !viewModel.isLoading {
+                            Text("No galleries yet")
+                                .font(.subheadline)
+                                .foregroundStyle(.tertiary)
+                                .frame(maxWidth: .infinity)
+                                .padding(.top, 60)
+                        } else {
                             LazyVGrid(columns: [
                                 GridItem(.flexible(), spacing: 2),
                                 GridItem(.flexible(), spacing: 2),
@@ -195,6 +202,7 @@ struct ProfileView: View {
                                     }
                                 }
                             }
+                        }
                     }
                 } else if viewModel.isLoading {
                     ProgressView()
