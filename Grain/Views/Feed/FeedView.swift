@@ -210,6 +210,8 @@ private struct FeedTabContent: View {
     @State private var deletedGalleryUri: String?
     @State private var zoomState = ImageZoomState()
     @State private var cardStoryAuthor: GrainStoryAuthor?
+    @State private var suggestedFollows: [SuggestedItem] = []
+    @State private var suggestedLoaded = false
     let client: XRPCClient
     let storyAuthors: [GrainStoryAuthor]
     let userAvatar: String?
@@ -240,7 +242,7 @@ private struct FeedTabContent: View {
                     onCreateTap: onStoryCreateTap
                 )
 
-                ForEach($viewModel.galleries) { $gallery in
+                ForEach(Array($viewModel.galleries.enumerated()), id: \.element.id) { index, $gallery in
                     GalleryCardView(gallery: $gallery, client: client, onNavigate: {
                         selectedUri = gallery.uri
                     }, onProfileTap: { did in
@@ -256,6 +258,12 @@ private struct FeedTabContent: View {
                         if gallery.id == viewModel.galleries.last?.id {
                             Task { await viewModel.loadMore(auth: auth.authContext()) }
                         }
+                    }
+
+                    if index == 4 {
+                        SuggestedFollowsView(client: client, suggestions: $suggestedFollows, onProfileTap: { did in
+                            selectedProfileDid = did
+                        })
                     }
                 }
 
@@ -301,6 +309,13 @@ private struct FeedTabContent: View {
         .task {
             if viewModel.galleries.isEmpty {
                 await viewModel.loadInitial(auth: auth.authContext())
+            }
+            if !suggestedLoaded, let did = auth.userDID {
+                do {
+                    let response = try await client.getSuggestedFollows(actor: did, auth: auth.authContext())
+                    suggestedFollows = response.items ?? []
+                } catch {}
+                suggestedLoaded = true
             }
         }
         .onChange(of: deletedGalleryUri) { _, uri in
