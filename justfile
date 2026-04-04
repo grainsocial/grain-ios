@@ -16,6 +16,16 @@ build:
 install: build
     xcrun simctl install booted ~/Library/Developer/Xcode/DerivedData/Grain-gnyldzofconssnfxpuxpctdsmehu/Build/Products/Debug-iphonesimulator/Grain.app
 
+# Build and install to simulator using production API (grain.social)
+sim:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    xcodebuild build -scheme Grain -destination 'generic/platform=iOS Simulator' SWIFT_ACTIVE_COMPILATION_CONDITIONS='$(inherited) PRODUCTION_API' -quiet
+    APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData/Grain-*/Build/Products/Debug-iphonesimulator -name "Grain.app" -type d | head -1)
+    xcrun simctl install booted "$APP_PATH"
+    xcrun simctl launch booted social.grain.grain
+    echo "Installed and launched on simulator (grain.social)"
+
 # Build and install to a plugged-in iOS device
 device device_id:
     #!/usr/bin/env bash
