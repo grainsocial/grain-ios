@@ -11,7 +11,9 @@ struct GrainPhoto: Codable, Sendable, Identifiable {
     var exif: GrainExif?
     var gallery: PhotoGalleryState?
 
-    var id: String { uri }
+    var id: String {
+        uri
+    }
 }
 
 /// social.grain.photo.defs#exifView
@@ -33,13 +35,13 @@ struct GrainExif: Codable, Sendable {
     var model: String?
 
     var cameraName: String? {
-        let parts = [make, model].compactMap { $0 }.filter { !$0.isEmpty }
+        let parts = [make, model].compactMap(\.self).filter { !$0.isEmpty }
         return parts.isEmpty ? nil : parts.joined(separator: " ")
     }
 
     var lensName: String? {
         if let lensModel, !lensModel.isEmpty { return lensModel }
-        let parts = [lensMake, lensModel].compactMap { $0 }.filter { !$0.isEmpty }
+        let parts = [lensMake, lensModel].compactMap(\.self).filter { !$0.isEmpty }
         return parts.isEmpty ? nil : parts.joined(separator: " ")
     }
 
@@ -48,8 +50,8 @@ struct GrainExif: Codable, Sendable {
             focalLengthIn35mmFormat,
             fNumber,
             exposureTime,
-            iSO.map { "ISO \($0)" }
-        ].compactMap { $0 }.filter { !$0.isEmpty }
+            iSO.map { "ISO \($0)" },
+        ].compactMap(\.self).filter { !$0.isEmpty }
         return parts.isEmpty ? nil : parts.joined(separator: "  ·  ")
     }
 

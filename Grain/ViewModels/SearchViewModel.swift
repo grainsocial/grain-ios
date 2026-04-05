@@ -24,10 +24,10 @@ final class SearchViewModel {
 
     func loadDiscovery(auth: AuthContext? = nil) async {
         do {
-            let l = try await client.getLocations(auth: auth)
-            let c = try await client.getCameras(auth: auth)
-            locations = l.locations ?? []
-            cameras = c.cameras ?? []
+            let locationsResponse = try await client.getLocations(auth: auth)
+            let camerasResponse = try await client.getCameras(auth: auth)
+            locations = locationsResponse.locations ?? []
+            cameras = camerasResponse.cameras ?? []
         } catch {}
     }
 

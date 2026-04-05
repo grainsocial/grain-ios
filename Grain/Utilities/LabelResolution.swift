@@ -52,14 +52,13 @@ func resolveLabels(_ labels: [ATLabel]?, definitions: [LabelDefinition]) -> Labe
     for label in labels {
         guard let val = label.val, !val.isEmpty else { continue }
 
-        let resolution: LabelResolution
-        if let def = definitions.first(where: { $0.identifier == val }) {
-            resolution = resolveFromDefinition(val: val, def: def)
+        let resolution: LabelResolution = if let def = definitions.first(where: { $0.identifier == val }) {
+            resolveFromDefinition(val: val, def: def)
         } else if let fallback = fallbackDefinitions[val] {
-            resolution = resolveFromFallback(val: val, fallback: fallback)
+            resolveFromFallback(val: val, fallback: fallback)
         } else {
             // Unknown label — treat as badge warning
-            resolution = LabelResolution(action: .badge, label: val, name: val)
+            LabelResolution(action: .badge, label: val, name: val)
         }
 
         if resolution.action > worst.action {
@@ -79,22 +78,21 @@ private func resolveFromDefinition(val: String, def: LabelDefinition) -> LabelRe
 }
 
 private func resolveFromFallback(val: String, fallback: (blurs: String, defaultSetting: String, name: String)) -> LabelResolution {
-    return resolveAction(val: val, name: fallback.name, blurs: fallback.blurs, setting: fallback.defaultSetting)
+    resolveAction(val: val, name: fallback.name, blurs: fallback.blurs, setting: fallback.defaultSetting)
 }
 
 private func resolveAction(val: String, name: String, blurs: String, setting: String) -> LabelResolution {
-    let action: LabelAction
-    switch (blurs, setting) {
+    let action: LabelAction = switch (blurs, setting) {
     case (_, "hide") where blurs != "none":
-        action = blurs == "media" ? .warnMedia : .hide
+        blurs == "media" ? .warnMedia : .hide
     case ("content", "warn"):
-        action = .warnContent
+        .warnContent
     case ("media", "warn"):
-        action = .warnMedia
+        .warnMedia
     case ("none", "warn"):
-        action = .badge
+        .badge
     default:
-        action = .none
+        .none
     }
     return LabelResolution(action: action, label: val, name: name)
 }

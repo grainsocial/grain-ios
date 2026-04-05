@@ -21,7 +21,9 @@ struct GrainGallery: Codable, Sendable, Identifiable {
     var viewer: GalleryViewerState?
     var crossPost: CrossPostInfo?
 
-    var id: String { uri }
+    var id: String {
+        uri
+    }
 }
 
 /// social.grain.gallery.defs#viewerState

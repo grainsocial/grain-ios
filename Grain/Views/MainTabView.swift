@@ -16,11 +16,11 @@ struct MainTabView: View {
     @State private var notificationsVM = NotificationsViewModel(client: XRPCClient(baseURL: AuthManager.serverURL))
     @Binding var pendingDeepLink: DeepLink?
 
-    static let badgeAppearanceConfigured: Bool = {
+    @MainActor static let badgeAppearanceConfigured: Bool = {
         let color = UIColor(named: "AccentColor")
         let textAttrs: [NSAttributedString.Key: Any] = [.foregroundColor: UIColor.white]
         let appearance = UITabBarAppearance()
-        func apply(_ itemAppearance: UITabBarItemAppearance) {
+        @MainActor func apply(_ itemAppearance: UITabBarItemAppearance) {
             itemAppearance.normal.badgeBackgroundColor = color
             itemAppearance.normal.badgeTextAttributes = textAttrs
             itemAppearance.selected.badgeBackgroundColor = color
@@ -71,15 +71,15 @@ struct MainTabView: View {
         .tabBarMinimizeBehavior(.onScrollDown)
         .tint(Color("AccentColor"))
         .task {
-            let c = auth.makeClient()
-            client = c
-            notificationsVM.updateClient(c)
+            let newClient = auth.makeClient()
+            client = newClient
+            notificationsVM.updateClient(newClient)
             await auth.fetchAvatarIfNeeded()
             if let uiImage = auth.avatarImage {
                 avatarTabImage = circularAvatar(uiImage, size: 26)
             }
             await notificationsVM.fetchUnseenCount(auth: auth.authContext())
-            await labelDefsCache.loadIfNeeded(client: c, auth: auth.authContext())
+            await labelDefsCache.loadIfNeeded(client: newClient, auth: auth.authContext())
         }
         .onChange(of: auth.avatarImage) {
             if let uiImage = auth.avatarImage {

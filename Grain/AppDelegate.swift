@@ -8,59 +8,58 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
     var onNotificationTap: ((DeepLink) -> Void)?
 
     func application(
-        _ application: UIApplication,
-        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+        _: UIApplication,
+        didFinishLaunchingWithOptions _: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         UNUserNotificationCenter.current().delegate = self
         return true
     }
 
     func application(
-        _ application: UIApplication,
+        _: UIApplication,
         didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
     ) {
         pushManager?.didRegisterForRemoteNotifications(deviceToken: deviceToken)
     }
 
     func application(
-        _ application: UIApplication,
+        _: UIApplication,
         didFailToRegisterForRemoteNotificationsWithError error: Error
     ) {
         pushManager?.didFailToRegisterForRemoteNotifications(error: error)
     }
 
-    // Show notifications even when app is in foreground
+    /// Show notifications even when app is in foreground
     nonisolated func userNotificationCenter(
-        _ center: UNUserNotificationCenter,
-        willPresent notification: UNNotification
+        _: UNUserNotificationCenter,
+        willPresent _: UNNotification
     ) async -> UNNotificationPresentationOptions {
         [.banner, .sound]
     }
 
-    // Handle notification tap — route to appropriate view
+    /// Handle notification tap — route to appropriate view
     nonisolated func userNotificationCenter(
-        _ center: UNUserNotificationCenter,
+        _: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse
     ) async {
         let userInfo = response.notification.request.content.userInfo
         guard let type = userInfo["type"] as? String else { return }
 
-        let deepLink: DeepLink?
-        switch type {
+        let deepLink: DeepLink? = switch type {
         case "gallery-favorite", "gallery-comment", "comment-reply":
             if let uri = userInfo["uri"] as? String {
-                deepLink = parseGalleryUri(uri)
+                parseGalleryUri(uri)
             } else {
-                deepLink = nil
+                nil
             }
         case "follow":
             if let did = userInfo["did"] as? String {
-                deepLink = .profile(did: did)
+                .profile(did: did)
             } else {
-                deepLink = nil
+                nil
             }
         default:
-            deepLink = nil
+            nil
         }
 
         if let deepLink {
@@ -70,7 +69,7 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         }
     }
 
-    nonisolated private func parseGalleryUri(_ uri: String) -> DeepLink? {
+    private nonisolated func parseGalleryUri(_ uri: String) -> DeepLink? {
         // at://did:plc:xxx/social.grain.gallery/rkey
         let parts = uri.replacingOccurrences(of: "at://", with: "").split(separator: "/")
         guard parts.count >= 3 else { return nil }

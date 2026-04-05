@@ -1,6 +1,6 @@
 import Foundation
 
-/// Response types for profile-related XRPC queries.
+// Response types for profile-related XRPC queries.
 
 struct GetFollowersResponse: Codable, Sendable {
     var totalCount: Int?
@@ -34,7 +34,9 @@ struct FollowerItem: Codable, Sendable, Identifiable {
     var description: String?
     var avatar: String?
     var viewer: ActorViewerState?
-    var id: String { did }
+    var id: String {
+        did
+    }
 }
 
 struct FollowingItem: Codable, Sendable, Identifiable {
@@ -44,7 +46,9 @@ struct FollowingItem: Codable, Sendable, Identifiable {
     var description: String?
     var avatar: String?
     var viewer: ActorViewerState?
-    var id: String { did }
+    var id: String {
+        did
+    }
 }
 
 struct SuggestedItem: Codable, Sendable, Identifiable {
@@ -54,7 +58,9 @@ struct SuggestedItem: Codable, Sendable, Identifiable {
     var description: String?
     var avatar: String?
     var followersCount: Int?
-    var id: String { did }
+    var id: String {
+        did
+    }
 }
 
 struct ProfileSearchResult: Codable, Sendable, Identifiable {
@@ -63,7 +69,9 @@ struct ProfileSearchResult: Codable, Sendable, Identifiable {
     var displayName: String?
     var description: String?
     var avatar: String?
-    var id: String { did }
+    var id: String {
+        did
+    }
 }
 
 // MARK: - Convenience Extensions
@@ -97,9 +105,9 @@ extension XRPCClient {
         try await query("social.grain.unspecced.getSuggestedFollows", params: ["actor": actor, "limit": String(limit)], auth: auth, as: GetSuggestedFollowsResponse.self)
     }
 
-    func searchProfiles(query q: String, limit: Int = 30, cursor: String? = nil, auth: AuthContext? = nil) async throws -> SearchProfilesResponse {
-        var params = ["q": q, "limit": String(limit)]
+    func searchProfiles(query queryString: String, limit: Int = 30, cursor: String? = nil, auth: AuthContext? = nil) async throws -> SearchProfilesResponse {
+        var params = ["q": queryString, "limit": String(limit)]
         if let cursor { params["cursor"] = cursor }
-        return try await self.query("social.grain.unspecced.searchProfiles", params: params, auth: auth, as: SearchProfilesResponse.self)
+        return try await query("social.grain.unspecced.searchProfiles", params: params, auth: auth, as: SearchProfilesResponse.self)
     }
 }

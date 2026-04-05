@@ -1,5 +1,5 @@
-import SwiftUI
 import NukeUI
+import SwiftUI
 
 struct NotificationsView: View {
     @Environment(AuthManager.self) private var auth
@@ -19,30 +19,30 @@ struct NotificationsView: View {
             List {
                 ForEach(viewModel.notifications) { notification in
                     NotificationRow(notification: notification, onProfileTap: { did in
-                            selectedProfileDid = did
-                        }, onStoryTap: { author in
-                            cardStoryAuthor = author
-                        })
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            if notification.reasonType == .follow {
-                                selectedProfileDid = notification.author.did
-                            } else if let galleryUri = notification.galleryUri {
-                                selectedGalleryUri = galleryUri
-                            }
+                        selectedProfileDid = did
+                    }, onStoryTap: { author in
+                        cardStoryAuthor = author
+                    })
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        if notification.reasonType == .follow {
+                            selectedProfileDid = notification.author.did
+                        } else if let galleryUri = notification.galleryUri {
+                            selectedGalleryUri = galleryUri
                         }
-                        .swipeActions(edge: .leading) {
-                            Button {
-                                selectedProfileDid = notification.author.did
-                            } label: {
-                                Label("Profile", systemImage: "person")
-                            }
+                    }
+                    .swipeActions(edge: .leading) {
+                        Button {
+                            selectedProfileDid = notification.author.did
+                        } label: {
+                            Label("Profile", systemImage: "person")
                         }
-                        .onAppear {
-                            if notification.id == viewModel.notifications.last?.id {
-                                Task { await viewModel.loadMore(auth: auth.authContext()) }
-                            }
+                    }
+                    .onAppear {
+                        if notification.id == viewModel.notifications.last?.id {
+                            Task { await viewModel.loadMore(auth: auth.authContext()) }
                         }
+                    }
                 }
 
                 if viewModel.isLoading {
@@ -95,7 +95,11 @@ struct NotificationRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            StoryRingView(hasStory: storyStatusCache.hasStory(for: notification.author.did), viewed: viewedStories.hasViewedAll(did: notification.author.did, storyStatusCache: storyStatusCache), size: 36) {
+            StoryRingView(
+                hasStory: storyStatusCache.hasStory(for: notification.author.did),
+                viewed: viewedStories.hasViewedAll(did: notification.author.did, storyStatusCache: storyStatusCache),
+                size: 36
+            ) {
                 AvatarView(url: notification.author.avatar, size: 36)
             }
             .onTapGesture {

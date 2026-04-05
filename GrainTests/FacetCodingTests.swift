@@ -1,19 +1,18 @@
-import XCTest
 @testable import Grain
+import XCTest
 
 final class FacetCodingTests: XCTestCase {
-
     private let decoder = JSONDecoder()
     private let encoder = JSONEncoder()
 
     // MARK: - Decoding
 
     func testDecodeMention() throws {
-        let json = """
+        let json = Data("""
         {"$type": "app.bsky.richtext.facet#mention", "did": "did:plc:abc123"}
-        """.data(using: .utf8)!
+        """.utf8)
         let feature = try decoder.decode(FacetFeature.self, from: json)
-        if case .mention(let did) = feature {
+        if case let .mention(did) = feature {
             XCTAssertEqual(did, "did:plc:abc123")
         } else {
             XCTFail("Expected mention, got \(feature)")
@@ -21,11 +20,11 @@ final class FacetCodingTests: XCTestCase {
     }
 
     func testDecodeLink() throws {
-        let json = """
+        let json = Data("""
         {"$type": "app.bsky.richtext.facet#link", "uri": "https://example.com"}
-        """.data(using: .utf8)!
+        """.utf8)
         let feature = try decoder.decode(FacetFeature.self, from: json)
-        if case .link(let uri) = feature {
+        if case let .link(uri) = feature {
             XCTAssertEqual(uri, "https://example.com")
         } else {
             XCTFail("Expected link, got \(feature)")
@@ -33,11 +32,11 @@ final class FacetCodingTests: XCTestCase {
     }
 
     func testDecodeTag() throws {
-        let json = """
+        let json = Data("""
         {"$type": "app.bsky.richtext.facet#tag", "tag": "photography"}
-        """.data(using: .utf8)!
+        """.utf8)
         let feature = try decoder.decode(FacetFeature.self, from: json)
-        if case .tag(let tag) = feature {
+        if case let .tag(tag) = feature {
             XCTAssertEqual(tag, "photography")
         } else {
             XCTFail("Expected tag, got \(feature)")
@@ -45,9 +44,9 @@ final class FacetCodingTests: XCTestCase {
     }
 
     func testDecodeUnknownTypeThrows() {
-        let json = """
+        let json = Data("""
         {"$type": "app.bsky.richtext.facet#unknown", "data": "stuff"}
-        """.data(using: .utf8)!
+        """.utf8)
         XCTAssertThrowsError(try decoder.decode(FacetFeature.self, from: json))
     }
 
@@ -57,7 +56,7 @@ final class FacetCodingTests: XCTestCase {
         let original = FacetFeature.mention(did: "did:plc:xyz")
         let data = try encoder.encode(original)
         let decoded = try decoder.decode(FacetFeature.self, from: data)
-        if case .mention(let did) = decoded {
+        if case let .mention(did) = decoded {
             XCTAssertEqual(did, "did:plc:xyz")
         } else {
             XCTFail("Round-trip failed")
@@ -68,7 +67,7 @@ final class FacetCodingTests: XCTestCase {
         let original = FacetFeature.link(uri: "https://grain.social")
         let data = try encoder.encode(original)
         let decoded = try decoder.decode(FacetFeature.self, from: data)
-        if case .link(let uri) = decoded {
+        if case let .link(uri) = decoded {
             XCTAssertEqual(uri, "https://grain.social")
         } else {
             XCTFail("Round-trip failed")
@@ -79,7 +78,7 @@ final class FacetCodingTests: XCTestCase {
         let original = FacetFeature.tag(tag: "streetphoto")
         let data = try encoder.encode(original)
         let decoded = try decoder.decode(FacetFeature.self, from: data)
-        if case .tag(let tag) = decoded {
+        if case let .tag(tag) = decoded {
             XCTAssertEqual(tag, "streetphoto")
         } else {
             XCTFail("Round-trip failed")
@@ -89,14 +88,14 @@ final class FacetCodingTests: XCTestCase {
     // MARK: - Full Facet
 
     func testDecodeFacetWithFeatures() throws {
-        let json = """
+        let json = Data("""
         {
             "index": {"byteStart": 0, "byteEnd": 10},
             "features": [
                 {"$type": "app.bsky.richtext.facet#mention", "did": "did:plc:test"}
             ]
         }
-        """.data(using: .utf8)!
+        """.utf8)
         let facet = try decoder.decode(Facet.self, from: json)
         XCTAssertEqual(facet.index.byteStart, 0)
         XCTAssertEqual(facet.index.byteEnd, 10)

@@ -14,15 +14,15 @@ final class ViewedStoryStorage {
     }
 
     private static let dateFormatter: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return f
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
     }()
 
     private static let dateFormatterNoFrac: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime]
-        return f
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
     }()
 
     private static func parseDate(_ string: String) -> Date? {
@@ -34,7 +34,8 @@ final class ViewedStoryStorage {
         viewedUris.insert(uri)
         if let existing = authorLastViewed[authorDid],
            let existingDate = Self.parseDate(existing),
-           let newDate = Self.parseDate(createdAt) {
+           let newDate = Self.parseDate(createdAt)
+        {
             if newDate > existingDate {
                 authorLastViewed[authorDid] = createdAt
             }
@@ -66,10 +67,8 @@ final class ViewedStoryStorage {
     /// Find the index of the first unviewed story in a list.
     /// Returns 0 if all stories have been viewed (replay from start).
     func firstUnviewedIndex(in stories: [any StoryIdentifiable]) -> Int {
-        for (index, story) in stories.enumerated() {
-            if !viewedUris.contains(story.storyUri) {
-                return index
-            }
+        for (index, story) in stories.enumerated() where !viewedUris.contains(story.storyUri) {
+            return index
         }
         return 0
     }
@@ -87,11 +86,13 @@ final class ViewedStoryStorage {
 
     private func load() {
         if let data = UserDefaults.standard.data(forKey: Self.urisKey),
-           let decoded = try? JSONDecoder().decode(Set<String>.self, from: data) {
+           let decoded = try? JSONDecoder().decode(Set<String>.self, from: data)
+        {
             viewedUris = decoded
         }
         if let data = UserDefaults.standard.data(forKey: Self.authorKey),
-           let decoded = try? JSONDecoder().decode([String: String].self, from: data) {
+           let decoded = try? JSONDecoder().decode([String: String].self, from: data)
+        {
             authorLastViewed = decoded
         }
     }

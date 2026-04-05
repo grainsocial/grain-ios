@@ -1,6 +1,6 @@
+import NukeUI
 import PhotosUI
 import SwiftUI
-import NukeUI
 
 struct EditProfileView: View {
     @Environment(AuthManager.self) private var auth
@@ -149,7 +149,8 @@ struct EditProfileView: View {
             // Fetch raw record to get avatar blob ref for preservation on save
             let record = try await client.getRecord(uri: "at://\(did)/social.grain.actor.profile/self", auth: authContext)
             if let value = record.record?.dictValue?["value"],
-               let avatar = value.dictValue?["avatar"] {
+               let avatar = value.dictValue?["avatar"]
+            {
                 existingAvatarBlob = avatar.dictValue
             }
         } catch {
@@ -162,7 +163,8 @@ struct EditProfileView: View {
         guard let selectedPhoto else { return }
         do {
             if let data = try await selectedPhoto.loadTransferable(type: Data.self),
-               let image = UIImage(data: data) {
+               let image = UIImage(data: data)
+            {
                 let resized = resizeImage(image, maxSize: 1000, maxBytes: 900_000)
                 newAvatarImage = UIImage(data: resized)
                 newAvatarData = resized
@@ -193,7 +195,7 @@ struct EditProfileView: View {
             }
 
             var record: [String: AnyCodable] = [
-                "createdAt": AnyCodable(DateFormatting.nowISO())
+                "createdAt": AnyCodable(DateFormatting.nowISO()),
             ]
 
             let trimmedName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -228,7 +230,7 @@ struct EditProfileView: View {
 
     private func blobRefToAnyCodable(_ blob: BlobRef) -> AnyCodable {
         var dict: [String: AnyCodable] = [
-            "$type": AnyCodable("blob")
+            "$type": AnyCodable("blob"),
         ]
         if let mimeType = blob.mimeType {
             dict["mimeType"] = AnyCodable(mimeType)
@@ -259,7 +261,7 @@ struct EditProfileView: View {
 
         if result.count <= maxBytes { return result }
 
-        for _ in 0..<8 {
+        for _ in 0 ..< 8 {
             let mid = (low + high) / 2
             let data = rendered.jpegData(compressionQuality: mid) ?? Data()
             if data.count <= maxBytes {

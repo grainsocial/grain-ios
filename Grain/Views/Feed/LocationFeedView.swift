@@ -16,7 +16,9 @@ struct LocationFeedView: View {
     let h3Index: String
     let locationName: String
 
-    private var feedId: String { "location:\(h3Index)" }
+    private var feedId: String {
+        "location:\(h3Index)"
+    }
 
     var body: some View {
         ScrollView {
@@ -141,5 +143,7 @@ struct LocationFeedView: View {
 struct LocationDestination: Hashable, Identifiable {
     let h3Index: String
     let name: String
-    var id: String { h3Index }
+    var id: String {
+        h3Index
+    }
 }

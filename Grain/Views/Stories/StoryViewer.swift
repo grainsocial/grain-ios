@@ -1,5 +1,5 @@
-import SwiftUI
 import NukeUI
+import SwiftUI
 
 @Observable
 @MainActor
@@ -17,13 +17,13 @@ private final class StoryTimer {
         task = Task {
             let tickInterval: TimeInterval = 0.05
             let totalTicks = Int(duration / tickInterval)
-            for tick in 0...totalTicks {
+            for tick in 0 ... totalTicks {
                 do {
                     try await Task.sleep(for: .milliseconds(Int(tickInterval * 1000)))
                 } catch { return }
                 guard !Task.isCancelled else { return }
                 progress = CGFloat(tick) / CGFloat(totalTicks)
-                if !halfwayFired && progress >= 0.5 {
+                if !halfwayFired, progress >= 0.5 {
                     halfwayFired = true
                     onHalfway?()
                 }
@@ -72,11 +72,10 @@ struct StoryViewer: View {
         self.client = client
         self.onProfileTap = onProfileTap
         self.onDismiss = onDismiss
-        let resolvedIndex: Int
-        if let did = startAuthorDid {
-            resolvedIndex = authors.firstIndex(where: { $0.profile.did == did }) ?? 0
+        let resolvedIndex: Int = if let did = startAuthorDid {
+            authors.firstIndex(where: { $0.profile.did == did }) ?? 0
         } else {
-            resolvedIndex = startIndex
+            startIndex
         }
         _currentAuthorIndex = State(initialValue: resolvedIndex)
     }
@@ -92,57 +91,56 @@ struct StoryViewer: View {
 
     var body: some View {
         storyContent
-        .background(
-            DragToDismissInstaller(
-                handle: fadeDismissHandle,
-                onDismiss: { onDismiss?() },
-                onDragStart: { timer.stop() },
-                onDragCancel: {
-                    let lr = storyLabelResult
-                    if lr.action == .none || lr.action == .badge { timer.start() }
-                },
-                onSwipeLeft: { goToNextAuthor() },
-                onSwipeRight: { goToPreviousAuthor() }
+            .background(
+                DragToDismissInstaller(
+                    handle: fadeDismissHandle,
+                    onDismiss: { onDismiss?() },
+                    onDragStart: { timer.stop() },
+                    onDragCancel: {
+                        let labelResult = storyLabelResult
+                        if labelResult.action == .none || labelResult.action == .badge { timer.start() }
+                    },
+                    onSwipeLeft: { goToNextAuthor() },
+                    onSwipeRight: { goToPreviousAuthor() }
+                )
             )
-        )
-        .statusBarHidden()
-        .confirmationDialog("Delete this story?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
-            Button("Delete", role: .destructive) {
-                if let story = currentStory {
-                    Task { await deleteStory(story) }
+            .statusBarHidden()
+            .confirmationDialog("Delete this story?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+                Button("Delete", role: .destructive) {
+                    if let story = currentStory {
+                        Task { await deleteStory(story) }
+                    }
+                }
+                Button("Cancel", role: .cancel) {
+                    timer.start()
                 }
             }
-            Button("Cancel", role: .cancel) {
-                timer.start()
+            .fullScreenCover(isPresented: $showReportSheet) {
+                ReportView(client: client, subjectUri: reportStoryUri, subjectCid: reportStoryCid)
+                    .environment(auth)
             }
-        }
-        .fullScreenCover(isPresented: $showReportSheet) {
-            ReportView(client: client, subjectUri: reportStoryUri, subjectCid: reportStoryCid)
-                .environment(auth)
-        }
-        .onChange(of: showReportSheet) {
-            if !showReportSheet {
-                timer.start()
+            .onChange(of: showReportSheet) {
+                if !showReportSheet {
+                    timer.start()
+                }
             }
-        }
-        .task {
-            timer.onComplete = { [self] in goToNext() }
-            timer.onHalfway = { [self] in markCurrentStoryViewed() }
-            await loadStoriesForCurrentAuthor()
-        }
+            .task {
+                timer.onComplete = { [self] in goToNext() }
+                timer.onHalfway = { [self] in markCurrentStoryViewed() }
+                await loadStoriesForCurrentAuthor()
+            }
     }
 
-    @ViewBuilder
     private var storyContent: some View {
         ZStack {
             Color.black.ignoresSafeArea()
 
             if let story = currentStory {
-                let lr = storyLabelResult
+                let labelResult = storyLabelResult
 
                 // Story image
                 ZStack {
-                    LazyImage(url: lr.action == .hide && !labelRevealed ? nil : URL(string: story.fullsize)) { state in
+                    LazyImage(url: labelResult.action == .hide && !labelRevealed ? nil : URL(string: story.fullsize)) { state in
                         if let image = state.image {
                             image
                                 .resizable()
@@ -152,32 +150,10 @@ struct StoryViewer: View {
                                 .tint(.white)
                         }
                     }
-                    .blur(radius: (lr.action == .warnMedia || lr.action == .warnContent) && !labelRevealed ? 24 : 0)
+                    .blur(radius: (labelResult.action == .warnMedia || labelResult.action == .warnContent) && !labelRevealed ? 24 : 0)
 
-                    if (lr.action == .warnContent || lr.action == .hide) && !labelRevealed {
-                        VStack(spacing: 12) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .font(.title)
-                                .foregroundStyle(.white.opacity(0.7))
-                            Text(lr.name)
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.white)
-                            Text("This content has been flagged.")
-                                .font(.caption)
-                                .foregroundStyle(.white.opacity(0.6))
-                            Button("Show content") {
-                                withAnimation { labelRevealed = true }
-                                timer.start()
-                            }
-                            .font(.caption.weight(.medium))
-                            .buttonStyle(.bordered)
-                            .tint(.white)
-                        }
-                    } else if lr.action == .warnMedia && !labelRevealed {
-                        MediaWarningOverlay(name: lr.name) {
-                            withAnimation { labelRevealed = true }
-                            timer.start()
-                        }
+                    StoryLabelWarningOverlay(labelResult: labelResult, labelRevealed: $labelRevealed) {
+                        timer.start()
                     }
                 }
 
@@ -302,8 +278,8 @@ struct StoryViewer: View {
         if currentStoryIndex < stories.count - 1 {
             currentStoryIndex += 1
             labelRevealed = false
-            let lr = storyLabelResult
-            if lr.action == .none || lr.action == .badge { timer.start() }
+            let labelResult = storyLabelResult
+            if labelResult.action == .none || labelResult.action == .badge { timer.start() }
         } else {
             goToNextAuthor()
         }
@@ -318,8 +294,8 @@ struct StoryViewer: View {
         if currentStoryIndex > 0 {
             currentStoryIndex -= 1
             labelRevealed = false
-            let lr = storyLabelResult
-            if lr.action == .none || lr.action == .badge { timer.start() }
+            let labelResult = storyLabelResult
+            if labelResult.action == .none || labelResult.action == .badge { timer.start() }
         } else {
             goToPreviousAuthor()
         }
@@ -349,8 +325,8 @@ struct StoryViewer: View {
             currentStoryIndex = viewedStories.firstUnviewedIndex(in: cached)
             labelRevealed = false
             isLoadingStories = false
-            let lr = storyLabelResult
-            if lr.action == .none || lr.action == .badge { timer.start() }
+            let labelResult = storyLabelResult
+            if labelResult.action == .none || labelResult.action == .badge { timer.start() }
             prefetchAdjacentAuthors()
         } else {
             currentStoryIndex = 0
@@ -369,17 +345,16 @@ struct StoryViewer: View {
         timer.stop()
 
         do {
-            let fetched: [GrainStory]
-            if let cached = prefetchedStories.removeValue(forKey: did) {
-                fetched = cached
+            let fetched: [GrainStory] = if let cached = prefetchedStories.removeValue(forKey: did) {
+                cached
             } else {
-                fetched = try await client.getStories(actor: did, auth: auth.authContext()).stories
+                try await client.getStories(actor: did, auth: auth.authContext()).stories
             }
             stories = fetched
             currentStoryIndex = viewedStories.firstUnviewedIndex(in: fetched)
             labelRevealed = false
-            let lr = storyLabelResult
-            if lr.action == .none || lr.action == .badge {
+            let labelResult = storyLabelResult
+            if labelResult.action == .none || labelResult.action == .badge {
                 timer.start()
             }
         } catch {
@@ -431,9 +406,7 @@ struct StoryViewer: View {
         }
         if let address = story.address {
             var parts: [String] = []
-            if let name = address.name { parts.append(name) }
-            else if let street = address.street { parts.append(street) }
-            else if let locality = address.locality { parts.append(locality) }
+            if let name = address.name { parts.append(name) } else if let street = address.street { parts.append(street) } else if let locality = address.locality { parts.append(locality) }
             if let region = address.region, region != parts.first { parts.append(region) }
             if let locality = address.locality, !parts.contains(locality) { parts.append(locality) }
             if parts.isEmpty { parts.append(address.country) }
@@ -454,7 +427,41 @@ struct StoryViewer: View {
     }
 }
 
-// Extracted so progress ticks only redraw this view, not the entire StoryViewer
+private struct StoryLabelWarningOverlay: View {
+    let labelResult: LabelResolution
+    @Binding var labelRevealed: Bool
+    let onReveal: () -> Void
+
+    var body: some View {
+        if labelResult.action == .warnContent || labelResult.action == .hide, !labelRevealed {
+            VStack(spacing: 12) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.title)
+                    .foregroundStyle(.white.opacity(0.7))
+                Text(labelResult.name)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                Text("This content has been flagged.")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.6))
+                Button("Show content") {
+                    withAnimation { labelRevealed = true }
+                    onReveal()
+                }
+                .font(.caption.weight(.medium))
+                .buttonStyle(.bordered)
+                .tint(.white)
+            }
+        } else if labelResult.action == .warnMedia, !labelRevealed {
+            MediaWarningOverlay(name: labelResult.name) {
+                withAnimation { labelRevealed = true }
+                onReveal()
+            }
+        }
+    }
+}
+
+/// Extracted so progress ticks only redraw this view, not the entire StoryViewer
 private struct StoryProgressBars: View {
     let timer: StoryTimer
     let stories: [GrainStory]
@@ -462,7 +469,7 @@ private struct StoryProgressBars: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            ForEach(0..<stories.count, id: \.self) { index in
+            ForEach(0 ..< stories.count, id: \.self) { index in
                 GeometryReader { geo in
                     Capsule()
                         .fill(Color.white.opacity(0.3))
@@ -477,11 +484,11 @@ private struct StoryProgressBars: View {
 
     private func barWidth(for index: Int, totalWidth: CGFloat) -> CGFloat {
         if index < currentStoryIndex {
-            return totalWidth
+            totalWidth
         } else if index == currentStoryIndex {
-            return totalWidth * timer.progress
+            totalWidth * timer.progress
         } else {
-            return 0
+            0
         }
     }
 }

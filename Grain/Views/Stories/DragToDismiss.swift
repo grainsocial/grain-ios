@@ -17,7 +17,8 @@ final class FadeDismissHandle {
             view.transform = CGAffineTransform(scaleX: 0.92, y: 0.92)
         }) { _ in
             if let vc = view.findViewController(),
-               let presented = vc.presentedViewController ?? (vc.isBeingPresented ? vc : nil) {
+               let presented = vc.presentedViewController ?? (vc.isBeingPresented ? vc : nil)
+            {
                 presented.dismiss(animated: false) {
                     view.alpha = 1
                     view.transform = .identity
@@ -53,7 +54,7 @@ struct DragToDismissInstaller: UIViewRepresentable {
         return view
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {
+    func updateUIView(_: UIView, context: Context) {
         context.coordinator.onDismiss = onDismiss
         context.coordinator.onDragStart = onDragStart
         context.coordinator.onDragCancel = onDragCancel
@@ -90,7 +91,14 @@ struct DragToDismissInstaller: UIViewRepresentable {
         private var panGesture: UIPanGestureRecognizer?
         private var direction: DragDirection = .none
 
-        init(handle: FadeDismissHandle, onDismiss: @escaping () -> Void, onDragStart: @escaping () -> Void, onDragCancel: @escaping () -> Void, onSwipeLeft: @escaping () -> Void, onSwipeRight: @escaping () -> Void) {
+        init(
+            handle: FadeDismissHandle,
+            onDismiss: @escaping () -> Void,
+            onDragStart: @escaping () -> Void,
+            onDragCancel: @escaping () -> Void,
+            onSwipeLeft: @escaping () -> Void,
+            onSwipeRight: @escaping () -> Void
+        ) {
             self.handle = handle
             self.onDismiss = onDismiss
             self.onDragStart = onDragStart
@@ -112,9 +120,9 @@ struct DragToDismissInstaller: UIViewRepresentable {
             panGesture = pan
         }
 
-        // Allow SwiftUI tap gestures to work simultaneously
-        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
-            return !(other is UIPanGestureRecognizer)
+        /// Allow SwiftUI tap gestures to work simultaneously
+        func gestureRecognizer(_: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+            !(other is UIPanGestureRecognizer)
         }
 
         @objc private func handlePan(_ gesture: UIPanGestureRecognizer) {
@@ -132,7 +140,7 @@ struct DragToDismissInstaller: UIViewRepresentable {
                     let absX = abs(translation.x)
                     let absY = abs(translation.y)
                     if absX > 15 || absY > 15 {
-                        if absY > absX && translation.y > 0 {
+                        if absY > absX, translation.y > 0 {
                             direction = .vertical
                             onDragStart()
                         } else if absX > absY {

@@ -1,7 +1,7 @@
 import Foundation
+import os
 import UIKit
 import UserNotifications
-import os
 
 private let logger = Logger(subsystem: "social.grain.grain", category: "Push")
 
@@ -104,7 +104,6 @@ final class PushManager: NSObject {
             logger.error("Failed to register push token: \(error)")
         }
     }
-
 }
 
 private struct RegisterTokenInput: Encodable {

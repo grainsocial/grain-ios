@@ -44,7 +44,7 @@ struct ExpandableDescriptionView: View {
                 })
             )
 
-            if isTruncated && !isExpanded {
+            if isTruncated, !isExpanded {
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         isExpanded = true
