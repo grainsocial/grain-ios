@@ -10,7 +10,7 @@ generate:
 
 # Build for simulator
 build:
-    xcodebuild build -scheme Grain -destination 'generic/platform=iOS Simulator' -quiet
+    set -o pipefail && xcodebuild build -scheme Grain -destination 'generic/platform=iOS Simulator' 2>&1 | xcbeautify
 
 # Build + install + launch on simulator (local/dev API)
 sim-local: build
@@ -25,7 +25,7 @@ sim-local: build
 sim:
     #!/usr/bin/env bash
     set -euo pipefail
-    xcodebuild build -scheme Grain -destination 'generic/platform=iOS Simulator' SWIFT_ACTIVE_COMPILATION_CONDITIONS='$(inherited) PRODUCTION_API' -quiet
+    set -o pipefail && xcodebuild build -scheme Grain -destination 'generic/platform=iOS Simulator' SWIFT_ACTIVE_COMPILATION_CONDITIONS='$(inherited) PRODUCTION_API' 2>&1 | xcbeautify
     APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData/Grain-*/Build/Products/Debug-iphonesimulator -name "Grain.app" -type d | head -1)
     xcrun simctl install booted "$APP_PATH"
     xcrun simctl launch booted social.grain.grain
@@ -33,7 +33,23 @@ sim:
 
 # Run tests
 test:
-    xcodebuild test -scheme Grain -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max' -quiet
+    set -o pipefail && xcodebuild test -scheme Grain -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max' 2>&1 | xcbeautify
+
+# Check formatting (list unformatted files)
+format:
+    swiftformat Grain GrainTests --lint
+
+# Fix formatting in-place
+format-fix:
+    swiftformat Grain GrainTests
+
+# Lint Swift code
+lint:
+    swiftlint lint Grain GrainTests
+
+# Fix lint violations
+lint-fix:
+    swiftlint lint --fix Grain GrainTests
 
 # Legacy alias for sim-local
 install: sim-local
@@ -43,7 +59,7 @@ device device_id:
     #!/usr/bin/env bash
     set -euo pipefail
     echo "Building for device {{device_id}}..."
-    xcodebuild build -scheme Grain -destination 'platform=iOS,id={{device_id}}' CODE_SIGN_STYLE=Automatic -allowProvisioningUpdates -quiet
+    set -o pipefail && xcodebuild build -scheme Grain -destination 'platform=iOS,id={{device_id}}' CODE_SIGN_STYLE=Automatic -allowProvisioningUpdates 2>&1 | xcbeautify
     APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData/Grain-*/Build/Products/Debug-iphoneos -name "Grain.app" -type d | head -1)
     echo "Installing $APP_PATH..."
     xcrun devicectl device install app --device {{device_id}} "$APP_PATH"
@@ -60,7 +76,7 @@ release:
     echo "Bumped build number: $current → $next"
     xcodegen generate
     echo "Archiving..."
-    xcodebuild archive -scheme Grain -destination 'generic/platform=iOS' -archivePath /tmp/Grain.xcarchive CODE_SIGN_STYLE=Automatic -allowProvisioningUpdates -quiet
+    set -o pipefail && xcodebuild archive -scheme Grain -destination 'generic/platform=iOS' -archivePath /tmp/Grain.xcarchive CODE_SIGN_STYLE=Automatic -allowProvisioningUpdates 2>&1 | xcbeautify
     echo "Uploading to App Store Connect..."
     cat > /tmp/ExportOptions.plist << 'PLIST'
     <?xml version="1.0" encoding="UTF-8"?>
