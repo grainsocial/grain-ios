@@ -64,6 +64,8 @@ struct StoryViewer: View {
     @State private var reportStoryCid = ""
     @State private var lastNavTime: Date = .distantPast
     @State private var labelRevealed = false
+    @State private var fadeDismissHandle = FadeDismissHandle()
+    @State private var prefetchedStories: [String: [GrainStory]] = [:]
 
     init(authors: [GrainStoryAuthor], startIndex: Int = 0, startAuthorDid: String? = nil, client: XRPCClient, onProfileTap: ((String) -> Void)? = nil, onDismiss: (() -> Void)? = nil) {
         self.authors = authors
@@ -89,6 +91,49 @@ struct StoryViewer: View {
     }
 
     var body: some View {
+        storyContent
+        .background(
+            DragToDismissInstaller(
+                handle: fadeDismissHandle,
+                onDismiss: { onDismiss?() },
+                onDragStart: { timer.stop() },
+                onDragCancel: {
+                    let lr = storyLabelResult
+                    if lr.action == .none || lr.action == .badge { timer.start() }
+                },
+                onSwipeLeft: { goToNextAuthor() },
+                onSwipeRight: { goToPreviousAuthor() }
+            )
+        )
+        .statusBarHidden()
+        .confirmationDialog("Delete this story?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+            Button("Delete", role: .destructive) {
+                if let story = currentStory {
+                    Task { await deleteStory(story) }
+                }
+            }
+            Button("Cancel", role: .cancel) {
+                timer.start()
+            }
+        }
+        .fullScreenCover(isPresented: $showReportSheet) {
+            ReportView(client: client, subjectUri: reportStoryUri, subjectCid: reportStoryCid)
+                .environment(auth)
+        }
+        .onChange(of: showReportSheet) {
+            if !showReportSheet {
+                timer.start()
+            }
+        }
+        .task {
+            timer.onComplete = { [self] in goToNext() }
+            timer.onHalfway = { [self] in markCurrentStoryViewed() }
+            await loadStoriesForCurrentAuthor()
+        }
+    }
+
+    @ViewBuilder
+    private var storyContent: some View {
         ZStack {
             Color.black.ignoresSafeArea()
 
@@ -153,26 +198,15 @@ struct StoryViewer: View {
                                 .frame(maxWidth: .infinity)
                         }
                     }
-                    .simultaneousGesture(
-                        DragGesture(minimumDistance: 80)
-                            .onEnded { value in
-                                if value.translation.width < -80 {
-                                    goToNextAuthor()
-                                } else if value.translation.width > 80 {
-                                    goToPreviousAuthor()
-                                }
-                            }
-                    )
                 }
                 .allowsHitTesting(!showReportSheet && !showDeleteConfirm && (labelRevealed || storyLabelResult.action == .none || storyLabelResult.action == .badge))
 
-                // Header overlay (on top of tap zones)
+                // Header overlay
                 VStack(spacing: 0) {
                     StoryProgressBars(timer: timer, stories: stories, currentStoryIndex: currentStoryIndex)
                         .padding(.horizontal)
                         .padding(.top, 8)
 
-                    // Creator info + actions
                     HStack(alignment: .center) {
                         Button {
                             close()
@@ -227,7 +261,6 @@ struct StoryViewer: View {
                     Spacer()
                         .allowsHitTesting(false)
 
-                    // Location pill
                     if let locationText = storyLocationText(story) {
                         HStack {
                             HStack(spacing: 4) {
@@ -250,38 +283,13 @@ struct StoryViewer: View {
                     .tint(.white)
             }
         }
-        .statusBarHidden()
-        .confirmationDialog("Delete this story?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
-            Button("Delete", role: .destructive) {
-                if let story = currentStory {
-                    Task { await deleteStory(story) }
-                }
-            }
-            Button("Cancel", role: .cancel) {
-                timer.start()
-            }
-        }
-        .fullScreenCover(isPresented: $showReportSheet) {
-            ReportView(client: client, subjectUri: reportStoryUri, subjectCid: reportStoryCid)
-                .environment(auth)
-        }
-        .onChange(of: showReportSheet) {
-            if !showReportSheet {
-                timer.start()
-            }
-        }
-        .task {
-            timer.onComplete = { [self] in goToNext() }
-            timer.onHalfway = { [self] in markCurrentStoryViewed() }
-            await loadStoriesForCurrentAuthor()
-        }
     }
 
     // MARK: - Navigation
 
     private func close() {
         timer.stop()
-        onDismiss?()
+        fadeDismissHandle.fadeDismiss()
     }
 
     private func goToNext() {
@@ -320,11 +328,7 @@ struct StoryViewer: View {
     private func goToNextAuthor() {
         if currentAuthorIndex < authors.count - 1 {
             currentAuthorIndex += 1
-            currentStoryIndex = 0
-            stories = []
-            isLoadingStories = true
-            timer.stop()
-            Task { await loadStoriesForCurrentAuthor() }
+            switchToCurrentAuthor()
         } else {
             close()
         }
@@ -333,10 +337,25 @@ struct StoryViewer: View {
     private func goToPreviousAuthor() {
         if currentAuthorIndex > 0 {
             currentAuthorIndex -= 1
+            switchToCurrentAuthor()
+        }
+    }
+
+    private func switchToCurrentAuthor() {
+        timer.stop()
+        let did = authors[currentAuthorIndex].profile.did
+        if let cached = prefetchedStories.removeValue(forKey: did) {
+            stories = cached
+            currentStoryIndex = viewedStories.firstUnviewedIndex(in: cached)
+            labelRevealed = false
+            isLoadingStories = false
+            let lr = storyLabelResult
+            if lr.action == .none || lr.action == .badge { timer.start() }
+            prefetchAdjacentAuthors()
+        } else {
             currentStoryIndex = 0
             stories = []
             isLoadingStories = true
-            timer.stop()
             Task { await loadStoriesForCurrentAuthor() }
         }
     }
@@ -350,9 +369,14 @@ struct StoryViewer: View {
         timer.stop()
 
         do {
-            let response = try await client.getStories(actor: did, auth: auth.authContext())
-            stories = response.stories
-            currentStoryIndex = viewedStories.firstUnviewedIndex(in: response.stories)
+            let fetched: [GrainStory]
+            if let cached = prefetchedStories.removeValue(forKey: did) {
+                fetched = cached
+            } else {
+                fetched = try await client.getStories(actor: did, auth: auth.authContext()).stories
+            }
+            stories = fetched
+            currentStoryIndex = viewedStories.firstUnviewedIndex(in: fetched)
             labelRevealed = false
             let lr = storyLabelResult
             if lr.action == .none || lr.action == .badge {
@@ -362,6 +386,21 @@ struct StoryViewer: View {
             stories = []
         }
         isLoadingStories = false
+
+        // Prefetch next author's stories
+        prefetchAdjacentAuthors()
+    }
+
+    private func prefetchAdjacentAuthors() {
+        let nextIndex = currentAuthorIndex + 1
+        guard nextIndex < authors.count else { return }
+        let did = authors[nextIndex].profile.did
+        guard prefetchedStories[did] == nil else { return }
+        Task {
+            if let response = try? await client.getStories(actor: did, auth: auth.authContext()) {
+                prefetchedStories[did] = response.stories
+            }
+        }
     }
 
     private func markCurrentStoryViewed() {
