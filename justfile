@@ -12,9 +12,31 @@ generate:
 build:
     xcodebuild build -scheme Grain -destination 'generic/platform=iOS Simulator' -quiet
 
-# Install to booted simulator
-install: build
-    xcrun simctl install booted ~/Library/Developer/Xcode/DerivedData/Grain-gnyldzofconssnfxpuxpctdsmehu/Build/Products/Debug-iphonesimulator/Grain.app
+# Build + install + launch on simulator (local/dev API)
+sim-local: build
+    #!/usr/bin/env bash
+    set -euo pipefail
+    APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData/Grain-*/Build/Products/Debug-iphonesimulator -name "Grain.app" -type d | head -1)
+    xcrun simctl install booted "$APP_PATH"
+    xcrun simctl launch booted social.grain.grain
+    echo "Installed and launched on simulator (local/dev API)"
+
+# Build + install + launch on simulator (production API — grain.social)
+sim:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    xcodebuild build -scheme Grain -destination 'generic/platform=iOS Simulator' SWIFT_ACTIVE_COMPILATION_CONDITIONS='$(inherited) PRODUCTION_API' -quiet
+    APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData/Grain-*/Build/Products/Debug-iphonesimulator -name "Grain.app" -type d | head -1)
+    xcrun simctl install booted "$APP_PATH"
+    xcrun simctl launch booted social.grain.grain
+    echo "Installed and launched on simulator (grain.social)"
+
+# Run tests
+test:
+    xcodebuild test -scheme Grain -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max' -quiet
+
+# Legacy alias for sim-local
+install: sim-local
 
 # Build and install to a plugged-in iOS device
 device device_id:
