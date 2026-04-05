@@ -10,8 +10,18 @@ final class ViewedStoryStorage {
     private static let authorKey = "viewedStoryAuthors"
 
     init() {
+        #if DEBUG
+            Self.wipeDefaults()
+        #endif
         load()
     }
+
+    #if DEBUG
+        private static func wipeDefaults() {
+            UserDefaults.standard.removeObject(forKey: urisKey)
+            UserDefaults.standard.removeObject(forKey: authorKey)
+        }
+    #endif
 
     private static let dateFormatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
