@@ -5,6 +5,7 @@ import Foundation
 final class FeedPreferencesViewModel {
     var pinnedFeeds: [PinnedFeed] = PinnedFeed.defaults
     var selectedFeedId: String = "recent"
+    var includeExif: Bool = true
     private var hasLoaded = false
 
     private let client: XRPCClient
@@ -32,6 +33,9 @@ final class FeedPreferencesViewModel {
                     selectedFeedId = feeds.first?.id ?? "recent"
                 }
             }
+            if let exif = response.preferences.includeExif {
+                includeExif = exif
+            }
         } catch {
             // Fall back to defaults, already set
         }
@@ -49,6 +53,16 @@ final class FeedPreferencesViewModel {
             try await client.putPinnedFeeds(updated, auth: auth)
         } catch {
             pinnedFeeds.removeAll { $0.id == feed.id }
+        }
+    }
+
+    func setIncludeExif(_ value: Bool, auth: AuthContext?) async {
+        let previous = includeExif
+        includeExif = value
+        do {
+            try await client.putIncludeExif(value, auth: auth)
+        } catch {
+            includeExif = previous
         }
     }
 

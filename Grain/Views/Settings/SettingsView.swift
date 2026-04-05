@@ -5,6 +5,8 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     let client: XRPCClient
     var onProfileEdited: (() -> Void)?
+    @State private var includeExif = true
+    @State private var hasLoadedExifPref = false
 
     var body: some View {
         List {
@@ -22,6 +24,17 @@ struct SettingsView: View {
                 NavigationLink("Edit Profile") {
                     EditProfileView(client: client, onSaved: onProfileEdited)
                 }
+            }
+
+            Section("Photos") {
+                Toggle("Include camera data (EXIF) when uploading", isOn: $includeExif)
+                    .onChange(of: includeExif) {
+                        guard hasLoadedExifPref else { return }
+                        Task {
+                            guard let authContext = auth.authContext() else { return }
+                            try? await client.putIncludeExif(includeExif, auth: authContext)
+                        }
+                    }
             }
 
             Section("Legal") {
@@ -42,5 +55,13 @@ struct SettingsView: View {
             }
         }
         .navigationTitle("Settings")
+        .task {
+            if let authContext = auth.authContext(),
+               let prefs = try? await client.getPreferences(auth: authContext).preferences,
+               let exif = prefs.includeExif {
+                includeExif = exif
+            }
+            hasLoadedExifPref = true
+        }
     }
 }

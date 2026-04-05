@@ -108,6 +108,14 @@ extension XRPCClient {
         try await procedure("dev.hatk.putPreference", input: Input(key: "pinnedFeeds", value: feeds), auth: auth)
     }
 
+    func putIncludeExif(_ value: Bool, auth: AuthContext? = nil) async throws {
+        struct Input: Encodable {
+            let key: String
+            let value: Bool
+        }
+        try await procedure("dev.hatk.putPreference", input: Input(key: "includeExif", value: value), auth: auth)
+    }
+
     func searchGalleries(
         query q: String,
         limit: Int = 30,

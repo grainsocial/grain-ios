@@ -23,6 +23,7 @@ struct CreateGalleryView: View {
     @State private var photoItems: [PhotoItem] = []
     @State private var mentionState = MentionAutocompleteState()
     @State private var postToBluesky = false
+    @State private var includeExif = true
 
     let client: XRPCClient
     var onCreated: (() -> Void)?
@@ -177,6 +178,15 @@ struct CreateGalleryView: View {
                 }
                 .ignoresSafeArea()
             }
+            .task {
+                if let authContext = auth.authContext() {
+                    if let prefs = try? await client.getPreferences(auth: authContext).preferences {
+                        if let exif = prefs.includeExif {
+                            includeExif = exif
+                        }
+                    }
+                }
+            }
             .navigationTitle("New Gallery")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -329,8 +339,8 @@ struct CreateGalleryView: View {
                 guard let uri = result.uri else { continue }
                 photoUris.append(uri)
 
-                // Create EXIF record if we extracted metadata
-                if var exif = photo.exif {
+                // Create EXIF record if we extracted metadata and user has it enabled
+                if includeExif, var exif = photo.exif {
                     exif["photo"] = AnyCodable(uri)
                     exif["createdAt"] = AnyCodable(now)
                     _ = try await client.createRecord(
