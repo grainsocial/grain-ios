@@ -13,6 +13,7 @@ struct SearchView: View {
     @State private var zoomState = ImageZoomState()
     @State private var cardStoryAuthor: GrainStoryAuthor?
     @State private var recentSearches = RecentSearchStorage()
+    @State private var searchIsPresented = false
     let client: XRPCClient
 
     init(client: XRPCClient) {
@@ -81,7 +82,7 @@ struct SearchView: View {
                 }
             }
             .navigationTitle("Search")
-            .searchable(text: $searchText, prompt: "Search galleries & profiles")
+            .searchable(text: $searchText, isPresented: $searchIsPresented, prompt: "Search galleries & profiles")
             .searchScopes($viewModel.selectedTab, activation: .onSearchPresentation) {
                 ForEach(SearchViewModel.SearchTab.allCases, id: \.self) { tab in
                     Text(tab.rawValue).tag(tab)
@@ -189,6 +190,7 @@ struct SearchView: View {
                         .onTapGesture {
                             searchText = recent.query
                             viewModel.searchText = recent.query
+                            searchIsPresented = true
                             Task { await viewModel.search(auth: auth.authContext()) }
                         }
                     }
