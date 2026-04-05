@@ -14,15 +14,15 @@ final class ViewedStoryStorage {
     }
 
     private static let dateFormatter: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return f
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
     }()
 
     private static let dateFormatterNoFrac: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime]
-        return f
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
     }()
 
     private static func parseDate(_ string: String) -> Date? {
@@ -67,10 +67,8 @@ final class ViewedStoryStorage {
     /// Find the index of the first unviewed story in a list.
     /// Returns 0 if all stories have been viewed (replay from start).
     func firstUnviewedIndex(in stories: [any StoryIdentifiable]) -> Int {
-        for (index, story) in stories.enumerated() {
-            if !viewedUris.contains(story.storyUri) {
-                return index
-            }
+        for (index, story) in stories.enumerated() where !viewedUris.contains(story.storyUri) {
+            return index
         }
         return 0
     }

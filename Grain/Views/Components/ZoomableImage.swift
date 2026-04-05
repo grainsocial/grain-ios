@@ -94,7 +94,7 @@ struct PinchZoomOverlay: UIViewRepresentable {
             self.parent = parent
         }
 
-        nonisolated func gestureRecognizer(
+        @MainActor func gestureRecognizer(
             _: UIGestureRecognizer,
             shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
         ) -> Bool {
@@ -135,8 +135,8 @@ struct PinchZoomOverlay: UIViewRepresentable {
             switch gesture.state {
             case .changed:
                 guard parent.zoomState.scale > 1 else { return }
-                let t = gesture.translation(in: gesture.view)
-                parent.zoomState.offset = CGSize(width: t.x, height: t.y)
+                let translation = gesture.translation(in: gesture.view)
+                parent.zoomState.offset = CGSize(width: translation.x, height: translation.y)
             case .ended, .cancelled:
                 parent.onEnded()
             default:

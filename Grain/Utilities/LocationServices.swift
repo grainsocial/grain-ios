@@ -28,37 +28,34 @@ struct NominatimResult {
         let addr = json["address"] as? [String: Any]
         let city = addr?["city"] as? String ?? addr?["town"] as? String ?? addr?["village"] as? String
 
+        var locationParts: [String] = []
+        if let city { locationParts.append(city) }
+        if let state = addr?["state"] as? String { locationParts.append(state) }
+        if let country = addr?["country"] as? String { locationParts.append(country) }
+
         if let placeName = json["name"] as? String, !placeName.isEmpty {
             name = placeName
         } else {
-            var parts: [String] = []
-            if let city { parts.append(city) }
-            if let state = addr?["state"] as? String { parts.append(state) }
-            if let country = addr?["country"] as? String { parts.append(country) }
-            name = parts.isEmpty
+            name = locationParts.isEmpty
                 ? (json["display_name"] as? String ?? "Unknown").components(separatedBy: ",").first ?? "Unknown"
-                : parts.joined(separator: ", ")
+                : locationParts.joined(separator: ", ")
         }
 
-        var contextParts: [String] = []
-        if let city { contextParts.append(city) }
-        if let state = addr?["state"] as? String { contextParts.append(state) }
-        if let country = addr?["country"] as? String { contextParts.append(country) }
-        context = contextParts.isEmpty ? nil : contextParts.joined(separator: ", ")
+        context = locationParts.isEmpty ? nil : locationParts.joined(separator: ", ")
 
         if let countryCode = (addr?["country_code"] as? String)?.uppercased() {
-            var a: [String: AnyCodable] = ["country": AnyCodable(countryCode)]
-            if let city { a["locality"] = AnyCodable(city) }
-            if let state = addr?["state"] as? String { a["region"] = AnyCodable(state) }
+            var addressFields: [String: AnyCodable] = ["country": AnyCodable(countryCode)]
+            if let city { addressFields["locality"] = AnyCodable(city) }
+            if let state = addr?["state"] as? String { addressFields["region"] = AnyCodable(state) }
             if let road = addr?["road"] as? String {
                 if let houseNumber = addr?["house_number"] as? String {
-                    a["street"] = AnyCodable("\(houseNumber) \(road)")
+                    addressFields["street"] = AnyCodable("\(houseNumber) \(road)")
                 } else {
-                    a["street"] = AnyCodable(road)
+                    addressFields["street"] = AnyCodable(road)
                 }
             }
-            if let postcode = addr?["postcode"] as? String { a["postalCode"] = AnyCodable(postcode) }
-            address = a
+            if let postcode = addr?["postcode"] as? String { addressFields["postalCode"] = AnyCodable(postcode) }
+            address = addressFields
         } else {
             address = nil
         }

@@ -105,8 +105,8 @@ extension XRPCClient {
         try await query("social.grain.unspecced.getSuggestedFollows", params: ["actor": actor, "limit": String(limit)], auth: auth, as: GetSuggestedFollowsResponse.self)
     }
 
-    func searchProfiles(query q: String, limit: Int = 30, cursor: String? = nil, auth: AuthContext? = nil) async throws -> SearchProfilesResponse {
-        var params = ["q": q, "limit": String(limit)]
+    func searchProfiles(query queryString: String, limit: Int = 30, cursor: String? = nil, auth: AuthContext? = nil) async throws -> SearchProfilesResponse {
+        var params = ["q": queryString, "limit": String(limit)]
         if let cursor { params["cursor"] = cursor }
         return try await query("social.grain.unspecced.searchProfiles", params: params, auth: auth, as: SearchProfilesResponse.self)
     }

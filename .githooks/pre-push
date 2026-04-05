@@ -10,3 +10,5 @@ FORMAT_OUT=$(swiftformat Grain GrainTests --lint 2>/dev/null | grep -v "^SwiftFo
 
 LINT_OUT=$(swiftlint lint Grain GrainTests 2>/dev/null | grep -v "^Linting\|^Done linting")
 [ -n "$LINT_OUT" ] && echo "$LINT_OUT"
+
+exit 0

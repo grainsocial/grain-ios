@@ -3,9 +3,9 @@ import Foundation
 enum DateFormatting {
     /// Produce an ISO 8601 string with fractional seconds (matches JS `toISOString()`).
     static func nowISO() -> String {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return f.string(from: Date())
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.string(from: Date())
     }
 
     /// Parse an ISO 8601 string with or without fractional seconds.

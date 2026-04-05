@@ -54,7 +54,11 @@ struct SearchView: View {
                                         selectedProfileDid = profile.did
                                     } label: {
                                         HStack {
-                                            StoryRingView(hasStory: storyStatusCache.hasStory(for: profile.did), viewed: viewedStories.hasViewedAll(did: profile.did, storyStatusCache: storyStatusCache), size: 40) {
+                                            StoryRingView(
+                                                hasStory: storyStatusCache.hasStory(for: profile.did),
+                                                viewed: viewedStories.hasViewedAll(did: profile.did, storyStatusCache: storyStatusCache),
+                                                size: 40
+                                            ) {
                                                 AvatarView(url: profile.avatar, size: 40)
                                             }
                                             VStack(alignment: .leading) {

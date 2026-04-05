@@ -31,126 +31,11 @@ struct CreateGalleryView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Photos") {
-                    PhotosPicker(
-                        selection: $selectedPhotos,
-                        maxSelectionCount: 20,
-                        matching: .images
-                    ) {
-                        Label("Select Photos", systemImage: "photo.on.rectangle.angled")
-                    }
-
-                    Button {
-                        showCamera = true
-                    } label: {
-                        Label("Take Photo", systemImage: "camera")
-                    }
-
-                    if !photoItems.isEmpty {
-                        ReorderablePhotoStrip(items: $photoItems)
-                    }
-                }
-
-                if !photoItems.isEmpty {
-                    Section("Alt Text") {
-                        ForEach($photoItems) { $item in
-                            HStack(alignment: .top, spacing: 12) {
-                                Image(uiImage: item.thumbnail)
-                                    .resizable()
-                                    .scaledToFill()
-                                    .frame(width: 60, height: 60)
-                                    .clipShape(RoundedRectangle(cornerRadius: 8))
-
-                                TextField("Describe this photo...", text: $item.alt, axis: .vertical)
-                                    .font(.subheadline)
-                                    .lineLimit(2 ... 4)
-                            }
-                            .padding(.vertical, 4)
-                        }
-                    }
-                }
-
-                Section(header: Text("Details"), footer: Text("Title is required.")) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        TextField("Add a title...", text: $title)
-                        Text("\(title.count)/\(maxTitle)")
-                            .font(.caption2)
-                            .foregroundStyle(title.count > maxTitle ? .red : .secondary)
-                            .frame(maxWidth: .infinity, alignment: .trailing)
-                    }
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        TextField("Add a description. Supports @mentions, #hashtags, and links.", text: $description, axis: .vertical)
-                            .lineLimit(3 ... 6)
-                        Text("\(description.count)/\(maxDescription)")
-                            .font(.caption2)
-                            .foregroundStyle(description.count > maxDescription ? .red : .secondary)
-                            .frame(maxWidth: .infinity, alignment: .trailing)
-                    }
-                }
-
-                Section("Location") {
-                    if let loc = resolvedLocation {
-                        HStack {
-                            Label(loc.name, systemImage: "mappin.and.ellipse")
-                                .font(.subheadline)
-                                .lineLimit(1)
-                            Spacer()
-                            Button {
-                                resolvedLocation = nil
-                                locationQuery = ""
-                            } label: {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    } else {
-                        HStack {
-                            Image(systemName: "magnifyingglass")
-                                .foregroundStyle(.secondary)
-                            TextField("Search for a location...", text: $locationQuery)
-                                .textInputAutocapitalization(.never)
-                                .onChange(of: locationQuery) {
-                                    locationSearchTask?.cancel()
-                                    let query = locationQuery
-                                    locationSearchTask = Task {
-                                        try? await Task.sleep(for: .milliseconds(300))
-                                        guard !Task.isCancelled else { return }
-                                        await searchLocation(query: query)
-                                    }
-                                }
-                            if isSearchingLocation {
-                                ProgressView()
-                                    .controlSize(.small)
-                            }
-                        }
-
-                        ForEach(locationSuggestions, id: \.placeId) { result in
-                            Button {
-                                selectLocation(result)
-                            } label: {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(result.name)
-                                        .font(.subheadline)
-                                        .foregroundStyle(.primary)
-                                    if let context = result.context {
-                                        Text(context)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                if let errorMessage {
-                    Section {
-                        Text(errorMessage)
-                            .foregroundStyle(.red)
-                            .font(.caption)
-                    }
-                }
+                photosSection
+                altTextSection
+                detailsSection
+                locationSection
+                errorSection
             }
             .onChange(of: selectedPhotos) {
                 Task {
@@ -183,6 +68,144 @@ struct CreateGalleryView: View {
                     }
                     .disabled(title.isEmpty || photoItems.isEmpty || isUploading || title.count > maxTitle || description.count > maxDescription)
                 }
+            }
+        }
+    }
+
+    // MARK: - Form Sections
+
+    private var photosSection: some View {
+        Section("Photos") {
+            PhotosPicker(
+                selection: $selectedPhotos,
+                maxSelectionCount: 20,
+                matching: .images
+            ) {
+                Label("Select Photos", systemImage: "photo.on.rectangle.angled")
+            }
+
+            Button {
+                showCamera = true
+            } label: {
+                Label("Take Photo", systemImage: "camera")
+            }
+
+            if !photoItems.isEmpty {
+                ReorderablePhotoStrip(items: $photoItems)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var altTextSection: some View {
+        if !photoItems.isEmpty {
+            Section("Alt Text") {
+                ForEach($photoItems) { $item in
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(uiImage: item.thumbnail)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 60, height: 60)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                        TextField("Describe this photo...", text: $item.alt, axis: .vertical)
+                            .font(.subheadline)
+                            .lineLimit(2 ... 4)
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+        }
+    }
+
+    private var detailsSection: some View {
+        Section(header: Text("Details"), footer: Text("Title is required.")) {
+            VStack(alignment: .leading, spacing: 4) {
+                TextField("Add a title...", text: $title)
+                Text("\(title.count)/\(maxTitle)")
+                    .font(.caption2)
+                    .foregroundStyle(title.count > maxTitle ? .red : .secondary)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                TextField("Add a description. Supports @mentions, #hashtags, and links.", text: $description, axis: .vertical)
+                    .lineLimit(3 ... 6)
+                Text("\(description.count)/\(maxDescription)")
+                    .font(.caption2)
+                    .foregroundStyle(description.count > maxDescription ? .red : .secondary)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+        }
+    }
+
+    private var locationSection: some View {
+        Section("Location") {
+            if let loc = resolvedLocation {
+                HStack {
+                    Label(loc.name, systemImage: "mappin.and.ellipse")
+                        .font(.subheadline)
+                        .lineLimit(1)
+                    Spacer()
+                    Button {
+                        resolvedLocation = nil
+                        locationQuery = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } else {
+                locationSearchField
+                ForEach(locationSuggestions, id: \.placeId) { result in
+                    Button {
+                        selectLocation(result)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(result.name)
+                                .font(.subheadline)
+                                .foregroundStyle(.primary)
+                            if let context = result.context {
+                                Text(context)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var locationSearchField: some View {
+        HStack {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            TextField("Search for a location...", text: $locationQuery)
+                .textInputAutocapitalization(.never)
+                .onChange(of: locationQuery) {
+                    locationSearchTask?.cancel()
+                    let query = locationQuery
+                    locationSearchTask = Task {
+                        try? await Task.sleep(for: .milliseconds(300))
+                        guard !Task.isCancelled else { return }
+                        await searchLocation(query: query)
+                    }
+                }
+            if isSearchingLocation {
+                ProgressView()
+                    .controlSize(.small)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var errorSection: some View {
+        if let errorMessage {
+            Section {
+                Text(errorMessage)
+                    .foregroundStyle(.red)
+                    .font(.caption)
             }
         }
     }
@@ -254,82 +277,17 @@ struct CreateGalleryView: View {
         errorMessage = nil
 
         do {
-            struct ProcessedPhoto {
-                let blob: BlobRef
-                let aspectRatio: AspectRatio
-                let exif: [String: AnyCodable]?
-            }
-
-            var processed: [ProcessedPhoto] = []
             let altTexts = photoItems.map(\.alt)
-
-            for item in photoItems {
-                switch item.source {
-                case let .picker(pickerItem):
-                    guard let data = try await pickerItem.loadTransferable(type: Data.self),
-                          let original = UIImage(data: data) else { continue }
-                    let exif = extractExif(from: data)
-                    let (resized, size) = ImageProcessing.resizeImage(original, maxDimension: 2000, maxBytes: 900_000)
-                    logger.info("Uploading \(resized.count) bytes, \(Int(size.width))x\(Int(size.height))")
-                    let response = try await client.uploadBlob(data: resized, mimeType: "image/jpeg", auth: authContext)
-                    processed.append(ProcessedPhoto(
-                        blob: response.blob,
-                        aspectRatio: AspectRatio(width: Int(size.width), height: Int(size.height)),
-                        exif: exif
-                    ))
-
-                case let .camera(image):
-                    let (resized, size) = ImageProcessing.resizeImage(image, maxDimension: 2000, maxBytes: 900_000)
-                    logger.info("Uploading camera photo \(resized.count) bytes, \(Int(size.width))x\(Int(size.height))")
-                    let response = try await client.uploadBlob(data: resized, mimeType: "image/jpeg", auth: authContext)
-                    processed.append(ProcessedPhoto(
-                        blob: response.blob,
-                        aspectRatio: AspectRatio(width: Int(size.width), height: Int(size.height)),
-                        exif: nil
-                    ))
-                }
-            }
-
-            // 2. Create photo records + EXIF records
+            let processed = try await processGalleryPhotos(items: photoItems, client: client, authContext: authContext)
             let now = DateFormatting.nowISO()
-            var photoUris: [String] = []
-            for (index, photo) in processed.enumerated() {
-                let blobDict: [String: AnyCodable] = [
-                    "$type": AnyCodable(photo.blob.type ?? "blob"),
-                    "ref": AnyCodable(["$link": AnyCodable(photo.blob.ref?.link ?? "")] as [String: AnyCodable]),
-                    "mimeType": AnyCodable(photo.blob.mimeType ?? "image/jpeg"),
-                    "size": AnyCodable(photo.blob.size ?? 0),
-                ]
-                var photoRecord: [String: AnyCodable] = [
-                    "photo": AnyCodable(blobDict),
-                    "aspectRatio": AnyCodable(["width": AnyCodable(photo.aspectRatio.width), "height": AnyCodable(photo.aspectRatio.height)] as [String: AnyCodable]),
-                    "createdAt": AnyCodable(now),
-                ]
-                let alt = altTexts[index].trimmingCharacters(in: .whitespacesAndNewlines)
-                if !alt.isEmpty {
-                    photoRecord["alt"] = AnyCodable(alt)
-                }
-                let result = try await client.createRecord(
-                    collection: "social.grain.photo",
-                    repo: repo,
-                    record: AnyCodable(photoRecord),
-                    auth: authContext
-                )
-                guard let uri = result.uri else { continue }
-                photoUris.append(uri)
-
-                // Create EXIF record if we extracted metadata
-                if var exif = photo.exif {
-                    exif["photo"] = AnyCodable(uri)
-                    exif["createdAt"] = AnyCodable(now)
-                    _ = try await client.createRecord(
-                        collection: "social.grain.photo.exif",
-                        repo: repo,
-                        record: AnyCodable(exif),
-                        auth: authContext
-                    )
-                }
-            }
+            let photoUris = try await createGalleryPhotoRecords(
+                processed: processed,
+                altTexts: altTexts,
+                now: now,
+                repo: repo,
+                client: client,
+                authContext: authContext
+            )
 
             // 3. Create gallery record with pre-resolved location
             var galleryRecord: [String: AnyCodable] = [
@@ -382,75 +340,6 @@ struct CreateGalleryView: View {
         }
         isUploading = false
     }
-
-    // MARK: - EXIF Extraction (gallery-specific, not shared)
-
-    private func extractExif(from data: Data) -> [String: AnyCodable]? {
-        let scale = 1_000_000
-
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
-              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any]
-        else {
-            logger.warning("No image properties found")
-            return nil
-        }
-
-        let exifDict = properties[kCGImagePropertyExifDictionary as String] as? [String: Any]
-        let tiffDict = properties[kCGImagePropertyTIFFDictionary as String] as? [String: Any]
-        let exifAux = properties[kCGImagePropertyExifAuxDictionary as String] as? [String: Any]
-        var result: [String: AnyCodable] = [:]
-
-        if let make = tiffDict?[kCGImagePropertyTIFFMake as String] as? String {
-            result["make"] = AnyCodable(make.trimmingCharacters(in: .whitespaces))
-        }
-        if let model = tiffDict?[kCGImagePropertyTIFFModel as String] as? String {
-            result["model"] = AnyCodable(model.trimmingCharacters(in: .whitespaces))
-        }
-        if let lensMake = exifAux?["LensMake"] as? String ?? exifDict?["LensMake"] as? String ?? tiffDict?[kCGImagePropertyTIFFMake as String] as? String {
-            result["lensMake"] = AnyCodable(lensMake.trimmingCharacters(in: .whitespaces))
-        }
-        if let lensModel = exifAux?["LensModel"] as? String ?? exifDict?[kCGImagePropertyExifLensModel as String] as? String {
-            result["lensModel"] = AnyCodable(lensModel.trimmingCharacters(in: .whitespaces))
-        }
-        if let exposureTime = exifDict?[kCGImagePropertyExifExposureTime as String] as? Double {
-            result["exposureTime"] = AnyCodable(Int(exposureTime * Double(scale)))
-        }
-        if let fNumber = exifDict?[kCGImagePropertyExifFNumber as String] as? Double {
-            result["fNumber"] = AnyCodable(Int(fNumber * Double(scale)))
-        }
-        if let isoRaw = exifDict?[kCGImagePropertyExifISOSpeedRatings as String] as? [Any],
-           let iso = (isoRaw.first as? NSNumber)?.intValue
-        {
-            result["iSO"] = AnyCodable(iso * scale)
-        }
-        if let focal35 = exifDict?[kCGImagePropertyExifFocalLenIn35mmFilm as String] as? Int {
-            result["focalLengthIn35mmFormat"] = AnyCodable(focal35 * scale)
-        } else if let focal35 = exifDict?[kCGImagePropertyExifFocalLenIn35mmFilm as String] as? Double {
-            result["focalLengthIn35mmFormat"] = AnyCodable(Int(focal35) * scale)
-        }
-        if let flash = exifDict?[kCGImagePropertyExifFlash as String] as? Int {
-            let flashStr = switch flash {
-            case 0: "Off, Did not fire"
-            case 1: "On, Fired"
-            case 5: "On, Return not detected"
-            case 7: "On, Return detected"
-            case 16: "Off, Did not fire"
-            case 24: "Off, Auto"
-            case 25: "On, Auto"
-            default: "Unknown (\(flash))"
-            }
-            result["flash"] = AnyCodable(flashStr)
-        }
-        if let dateStr = exifDict?[kCGImagePropertyExifDateTimeOriginal as String] as? String {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "yyyy:MM:dd HH:mm:ss"
-            if let date = formatter.date(from: dateStr) {
-                result["dateTimeOriginal"] = AnyCodable(ISO8601DateFormatter().string(from: date))
-            }
-        }
-
-        return result.isEmpty ? nil : result
-    }
 }
 
 // MARK: - Photo Item Model
@@ -474,4 +363,187 @@ struct PhotoItem: Identifiable {
 enum PhotoSource {
     case picker(PhotosPickerItem)
     case camera(UIImage)
+}
+
+// MARK: - Gallery Upload Helpers
+
+private struct ProcessedPhoto {
+    let blob: BlobRef
+    let aspectRatio: AspectRatio
+    let exif: [String: AnyCodable]?
+}
+
+private func processGalleryPhotos(
+    items: [PhotoItem],
+    client: XRPCClient,
+    authContext: AuthContext
+) async throws -> [ProcessedPhoto] {
+    var processed: [ProcessedPhoto] = []
+    for item in items {
+        switch item.source {
+        case let .picker(pickerItem):
+            guard let data = try await pickerItem.loadTransferable(type: Data.self),
+                  let original = UIImage(data: data) else { continue }
+            let exif = extractGalleryExif(from: data)
+            let (resized, size) = ImageProcessing.resizeImage(original, maxDimension: 2000, maxBytes: 900_000)
+            logger.info("Uploading \(resized.count) bytes, \(Int(size.width))x\(Int(size.height))")
+            let response = try await client.uploadBlob(data: resized, mimeType: "image/jpeg", auth: authContext)
+            processed.append(ProcessedPhoto(
+                blob: response.blob,
+                aspectRatio: AspectRatio(width: Int(size.width), height: Int(size.height)),
+                exif: exif
+            ))
+
+        case let .camera(image):
+            let (resized, size) = ImageProcessing.resizeImage(image, maxDimension: 2000, maxBytes: 900_000)
+            logger.info("Uploading camera photo \(resized.count) bytes, \(Int(size.width))x\(Int(size.height))")
+            let response = try await client.uploadBlob(data: resized, mimeType: "image/jpeg", auth: authContext)
+            processed.append(ProcessedPhoto(
+                blob: response.blob,
+                aspectRatio: AspectRatio(width: Int(size.width), height: Int(size.height)),
+                exif: nil
+            ))
+        }
+    }
+    return processed
+}
+
+private func createGalleryPhotoRecords(
+    processed: [ProcessedPhoto],
+    altTexts: [String],
+    now: String,
+    repo: String,
+    client: XRPCClient,
+    authContext: AuthContext
+) async throws -> [String] {
+    var photoUris: [String] = []
+    for (index, photo) in processed.enumerated() {
+        let blobDict: [String: AnyCodable] = [
+            "$type": AnyCodable(photo.blob.type ?? "blob"),
+            "ref": AnyCodable(["$link": AnyCodable(photo.blob.ref?.link ?? "")] as [String: AnyCodable]),
+            "mimeType": AnyCodable(photo.blob.mimeType ?? "image/jpeg"),
+            "size": AnyCodable(photo.blob.size ?? 0),
+        ]
+        var photoRecord: [String: AnyCodable] = [
+            "photo": AnyCodable(blobDict),
+            "aspectRatio": AnyCodable(["width": AnyCodable(photo.aspectRatio.width), "height": AnyCodable(photo.aspectRatio.height)] as [String: AnyCodable]),
+            "createdAt": AnyCodable(now),
+        ]
+        let alt = altTexts[index].trimmingCharacters(in: .whitespacesAndNewlines)
+        if !alt.isEmpty {
+            photoRecord["alt"] = AnyCodable(alt)
+        }
+        let result = try await client.createRecord(
+            collection: "social.grain.photo",
+            repo: repo,
+            record: AnyCodable(photoRecord),
+            auth: authContext
+        )
+        guard let uri = result.uri else { continue }
+        photoUris.append(uri)
+
+        if var exif = photo.exif {
+            exif["photo"] = AnyCodable(uri)
+            exif["createdAt"] = AnyCodable(now)
+            _ = try await client.createRecord(
+                collection: "social.grain.photo.exif",
+                repo: repo,
+                record: AnyCodable(exif),
+                auth: authContext
+            )
+        }
+    }
+    return photoUris
+}
+
+// MARK: - EXIF Extraction (gallery-specific, not shared)
+
+private func flashDescription(for flash: Int) -> String {
+    switch flash {
+    case 0: "Off, Did not fire"
+    case 1: "On, Fired"
+    case 5: "On, Return not detected"
+    case 7: "On, Return detected"
+    case 16: "Off, Did not fire"
+    case 24: "Off, Auto"
+    case 25: "On, Auto"
+    default: "Unknown (\(flash))"
+    }
+}
+
+private func extractCameraInfo(
+    exifDict: [String: Any]?,
+    tiffDict: [String: Any]?,
+    exifAux: [String: Any]?,
+    into result: inout [String: AnyCodable]
+) {
+    if let make = tiffDict?[kCGImagePropertyTIFFMake as String] as? String {
+        result["make"] = AnyCodable(make.trimmingCharacters(in: .whitespaces))
+    }
+    if let model = tiffDict?[kCGImagePropertyTIFFModel as String] as? String {
+        result["model"] = AnyCodable(model.trimmingCharacters(in: .whitespaces))
+    }
+    let lensMake = exifAux?["LensMake"] as? String
+        ?? exifDict?["LensMake"] as? String
+        ?? tiffDict?[kCGImagePropertyTIFFMake as String] as? String
+    if let lensMake {
+        result["lensMake"] = AnyCodable(lensMake.trimmingCharacters(in: .whitespaces))
+    }
+    let lensModel = exifAux?["LensModel"] as? String
+        ?? exifDict?[kCGImagePropertyExifLensModel as String] as? String
+    if let lensModel {
+        result["lensModel"] = AnyCodable(lensModel.trimmingCharacters(in: .whitespaces))
+    }
+}
+
+private func extractExposureInfo(
+    exifDict: [String: Any]?,
+    scale: Int,
+    into result: inout [String: AnyCodable]
+) {
+    if let exposureTime = exifDict?[kCGImagePropertyExifExposureTime as String] as? Double {
+        result["exposureTime"] = AnyCodable(Int(exposureTime * Double(scale)))
+    }
+    if let fNumber = exifDict?[kCGImagePropertyExifFNumber as String] as? Double {
+        result["fNumber"] = AnyCodable(Int(fNumber * Double(scale)))
+    }
+    if let isoRaw = exifDict?[kCGImagePropertyExifISOSpeedRatings as String] as? [Any],
+       let iso = (isoRaw.first as? NSNumber)?.intValue
+    {
+        result["iSO"] = AnyCodable(iso * scale)
+    }
+    if let focal35 = exifDict?[kCGImagePropertyExifFocalLenIn35mmFilm as String] as? Int {
+        result["focalLengthIn35mmFormat"] = AnyCodable(focal35 * scale)
+    } else if let focal35 = exifDict?[kCGImagePropertyExifFocalLenIn35mmFilm as String] as? Double {
+        result["focalLengthIn35mmFormat"] = AnyCodable(Int(focal35) * scale)
+    }
+    if let flash = exifDict?[kCGImagePropertyExifFlash as String] as? Int {
+        result["flash"] = AnyCodable(flashDescription(for: flash))
+    }
+    if let dateStr = exifDict?[kCGImagePropertyExifDateTimeOriginal as String] as? String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy:MM:dd HH:mm:ss"
+        if let date = formatter.date(from: dateStr) {
+            result["dateTimeOriginal"] = AnyCodable(ISO8601DateFormatter().string(from: date))
+        }
+    }
+}
+
+private func extractGalleryExif(from data: Data) -> [String: AnyCodable]? {
+    guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+          let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any]
+    else {
+        logger.warning("No image properties found")
+        return nil
+    }
+
+    let exifDict = properties[kCGImagePropertyExifDictionary as String] as? [String: Any]
+    let tiffDict = properties[kCGImagePropertyTIFFDictionary as String] as? [String: Any]
+    let exifAux = properties[kCGImagePropertyExifAuxDictionary as String] as? [String: Any]
+    var result: [String: AnyCodable] = [:]
+
+    extractCameraInfo(exifDict: exifDict, tiffDict: tiffDict, exifAux: exifAux, into: &result)
+    extractExposureInfo(exifDict: exifDict, scale: 1_000_000, into: &result)
+
+    return result.isEmpty ? nil : result
 }

@@ -128,8 +128,8 @@ struct RichTextView: View {
 
         if let regex = try? NSRegularExpression(pattern: urlPattern) {
             let nsRange = NSRange(text.startIndex..., in: text)
-            for m in regex.matches(in: text, range: nsRange) {
-                if let range = Range(m.range, in: text) {
+            for matchResult in regex.matches(in: text, range: nsRange) {
+                if let range = Range(matchResult.range, in: text) {
                     let str = String(text[range])
                     matches.append(Match(range: range, segment: .link(str, url: str)))
                 }
@@ -138,8 +138,8 @@ struct RichTextView: View {
 
         if let regex = try? NSRegularExpression(pattern: mentionPattern) {
             let nsRange = NSRange(text.startIndex..., in: text)
-            for m in regex.matches(in: text, range: nsRange) {
-                if let range = Range(m.range, in: text) {
+            for matchResult in regex.matches(in: text, range: nsRange) {
+                if let range = Range(matchResult.range, in: text) {
                     if matches.contains(where: { $0.range.overlaps(range) }) { continue }
                     let str = String(text[range])
                     matches.append(Match(range: range, segment: .mention(str, did: String(str.dropFirst()))))
@@ -149,8 +149,8 @@ struct RichTextView: View {
 
         if let regex = try? NSRegularExpression(pattern: hashtagPattern) {
             let nsRange = NSRange(text.startIndex..., in: text)
-            for m in regex.matches(in: text, range: nsRange) {
-                if let range = Range(m.range, in: text) {
+            for matchResult in regex.matches(in: text, range: nsRange) {
+                if let range = Range(matchResult.range, in: text) {
                     if matches.contains(where: { $0.range.overlaps(range) }) { continue }
                     let str = String(text[range])
                     matches.append(Match(range: range, segment: .hashtag(str, tag: String(str.dropFirst()))))

@@ -62,7 +62,20 @@ final class AuthManager {
             "response_type": "code",
             "code_challenge": challenge,
             "code_challenge_method": "S256",
-            "scope": "atproto blob:image/* repo:social.grain.gallery repo:social.grain.gallery.item repo:social.grain.photo repo:social.grain.photo.exif repo:social.grain.actor.profile repo:social.grain.graph.follow repo:social.grain.favorite repo:social.grain.comment repo:social.grain.story repo:app.bsky.feed.post?action=create",
+            "scope": [
+                "atproto",
+                "blob:image/*",
+                "repo:social.grain.gallery",
+                "repo:social.grain.gallery.item",
+                "repo:social.grain.photo",
+                "repo:social.grain.photo.exif",
+                "repo:social.grain.actor.profile",
+                "repo:social.grain.graph.follow",
+                "repo:social.grain.favorite",
+                "repo:social.grain.comment",
+                "repo:social.grain.story",
+                "repo:app.bsky.feed.post?action=create",
+            ].joined(separator: " "),
         ]
         if createAccount {
             parBody["prompt"] = "create"
@@ -372,10 +385,14 @@ final class WebAuthContextProvider: NSObject, ASWebAuthenticationPresentationCon
     static let shared = WebAuthContextProvider()
 
     func presentationAnchor(for _: ASWebAuthenticationSession) -> ASPresentationAnchor {
-        UIApplication.shared.connectedScenes
+        let scene = UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
-            .flatMap(\.windows)
-            .first(where: \.isKeyWindow) ?? ASPresentationAnchor()
+            .first { $0.activationState == .foregroundActive }
+            ?? UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
+        if let scene {
+            return ASPresentationAnchor(windowScene: scene)
+        }
+        return ASPresentationAnchor()
     }
 }
 

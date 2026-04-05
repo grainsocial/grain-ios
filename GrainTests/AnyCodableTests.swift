@@ -55,7 +55,7 @@ final class AnyCodableTests: XCTestCase {
     // MARK: - Decoding from JSON
 
     func testDecodeNull() throws {
-        let json = "null".data(using: .utf8)!
+        let json = Data("null".utf8)
         let value = try decoder.decode(AnyCodable.self, from: json)
         // Re-encode should produce null
         let reEncoded = try XCTUnwrap(try String(data: encoder.encode(value), encoding: .utf8))
@@ -63,23 +63,23 @@ final class AnyCodableTests: XCTestCase {
     }
 
     func testDecodeString() throws {
-        let json = "\"test\"".data(using: .utf8)!
+        let json = Data("\"test\"".utf8)
         let value = try decoder.decode(AnyCodable.self, from: json)
         let reEncoded = try XCTUnwrap(try String(data: encoder.encode(value), encoding: .utf8))
         XCTAssertEqual(reEncoded, "\"test\"")
     }
 
     func testDecodeArray() throws {
-        let json = "[1,2,3]".data(using: .utf8)!
+        let json = Data("[1,2,3]".utf8)
         let value = try decoder.decode(AnyCodable.self, from: json)
         let reEncoded = try XCTUnwrap(try String(data: encoder.encode(value), encoding: .utf8))
         XCTAssertEqual(reEncoded, "[1,2,3]")
     }
 
     func testDecodeNestedDict() throws {
-        let json = """
+        let json = Data("""
         {"outer": {"inner": "value"}}
-        """.data(using: .utf8)!
+        """.utf8)
         let value = try decoder.decode(AnyCodable.self, from: json)
         XCTAssertNotNil(value.dictValue)
         XCTAssertNotNil(value.dictValue?["outer"]?.dictValue)

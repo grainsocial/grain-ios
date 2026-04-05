@@ -8,9 +8,9 @@ final class FacetCodingTests: XCTestCase {
     // MARK: - Decoding
 
     func testDecodeMention() throws {
-        let json = """
+        let json = Data("""
         {"$type": "app.bsky.richtext.facet#mention", "did": "did:plc:abc123"}
-        """.data(using: .utf8)!
+        """.utf8)
         let feature = try decoder.decode(FacetFeature.self, from: json)
         if case let .mention(did) = feature {
             XCTAssertEqual(did, "did:plc:abc123")
@@ -20,9 +20,9 @@ final class FacetCodingTests: XCTestCase {
     }
 
     func testDecodeLink() throws {
-        let json = """
+        let json = Data("""
         {"$type": "app.bsky.richtext.facet#link", "uri": "https://example.com"}
-        """.data(using: .utf8)!
+        """.utf8)
         let feature = try decoder.decode(FacetFeature.self, from: json)
         if case let .link(uri) = feature {
             XCTAssertEqual(uri, "https://example.com")
@@ -32,9 +32,9 @@ final class FacetCodingTests: XCTestCase {
     }
 
     func testDecodeTag() throws {
-        let json = """
+        let json = Data("""
         {"$type": "app.bsky.richtext.facet#tag", "tag": "photography"}
-        """.data(using: .utf8)!
+        """.utf8)
         let feature = try decoder.decode(FacetFeature.self, from: json)
         if case let .tag(tag) = feature {
             XCTAssertEqual(tag, "photography")
@@ -44,9 +44,9 @@ final class FacetCodingTests: XCTestCase {
     }
 
     func testDecodeUnknownTypeThrows() {
-        let json = """
+        let json = Data("""
         {"$type": "app.bsky.richtext.facet#unknown", "data": "stuff"}
-        """.data(using: .utf8)!
+        """.utf8)
         XCTAssertThrowsError(try decoder.decode(FacetFeature.self, from: json))
     }
 
@@ -88,14 +88,14 @@ final class FacetCodingTests: XCTestCase {
     // MARK: - Full Facet
 
     func testDecodeFacetWithFeatures() throws {
-        let json = """
+        let json = Data("""
         {
             "index": {"byteStart": 0, "byteEnd": 10},
             "features": [
                 {"$type": "app.bsky.richtext.facet#mention", "did": "did:plc:test"}
             ]
         }
-        """.data(using: .utf8)!
+        """.utf8)
         let facet = try decoder.decode(Facet.self, from: json)
         XCTAssertEqual(facet.index.byteStart, 0)
         XCTAssertEqual(facet.index.byteEnd, 10)

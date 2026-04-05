@@ -91,7 +91,14 @@ struct DragToDismissInstaller: UIViewRepresentable {
         private var panGesture: UIPanGestureRecognizer?
         private var direction: DragDirection = .none
 
-        init(handle: FadeDismissHandle, onDismiss: @escaping () -> Void, onDragStart: @escaping () -> Void, onDragCancel: @escaping () -> Void, onSwipeLeft: @escaping () -> Void, onSwipeRight: @escaping () -> Void) {
+        init(
+            handle: FadeDismissHandle,
+            onDismiss: @escaping () -> Void,
+            onDragStart: @escaping () -> Void,
+            onDragCancel: @escaping () -> Void,
+            onSwipeLeft: @escaping () -> Void,
+            onSwipeRight: @escaping () -> Void
+        ) {
             self.handle = handle
             self.onDismiss = onDismiss
             self.onDragStart = onDragStart

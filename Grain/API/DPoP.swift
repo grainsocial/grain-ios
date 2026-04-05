@@ -12,18 +12,18 @@ final class DPoP: Sendable {
         self.privateKey = privateKey
         let publicKey = privateKey.publicKey
         let rawRepresentation = publicKey.rawRepresentation
-        let x = rawRepresentation.prefix(32)
-        let y = rawRepresentation.suffix(32)
+        let xCoord = rawRepresentation.prefix(32)
+        let yCoord = rawRepresentation.suffix(32)
 
         publicJWK = [
             "kty": "EC",
             "crv": "P-256",
-            "x": x.base64URLEncoded(),
-            "y": y.base64URLEncoded(),
+            "x": xCoord.base64URLEncoded(),
+            "y": yCoord.base64URLEncoded(),
         ]
 
         // JWK thumbprint (RFC 7638) — lexicographic JSON of required members
-        let thumbprintInput = #"{"crv":"P-256","kty":"EC","x":"\#(x.base64URLEncoded())","y":"\#(y.base64URLEncoded())"}"#
+        let thumbprintInput = #"{"crv":"P-256","kty":"EC","x":"\#(xCoord.base64URLEncoded())","y":"\#(yCoord.base64URLEncoded())"}"#
         let hash = SHA256.hash(data: Data(thumbprintInput.utf8))
         thumbprint = Data(hash).base64URLEncoded()
     }

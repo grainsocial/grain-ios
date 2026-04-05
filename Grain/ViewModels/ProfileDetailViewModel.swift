@@ -23,25 +23,25 @@ final class ProfileDetailViewModel {
         error = nil
 
         do {
-            async let p = client.getActorProfile(actor: did, viewer: viewer, auth: auth)
-            async let f = client.getFeed(feed: "actor", actor: did, auth: auth)
-            async let s = client.getStories(actor: did, auth: auth)
-            async let kf: [FollowerItem] = {
+            async let profileFetch = client.getActorProfile(actor: did, viewer: viewer, auth: auth)
+            async let feedFetch = client.getFeed(feed: "actor", actor: did, auth: auth)
+            async let storiesFetch = client.getStories(actor: did, auth: auth)
+            async let knownFollowersFetch: [FollowerItem] = {
                 guard let viewer, viewer != did else { return [] }
                 let response = try? await client.getKnownFollowers(actor: did, viewer: viewer, auth: auth)
                 return response?.items ?? []
             }()
 
-            let profileResult = try await p
-            let feedResult = try await f
-            let storiesResult = try await s
+            let profileResult = try await profileFetch
+            let feedResult = try await feedFetch
+            let storiesResult = try await storiesFetch
 
             profile = profileResult
             galleries = feedResult.items ?? []
             galleryCursor = feedResult.cursor
             hasMoreGalleries = feedResult.cursor != nil
             stories = storiesResult.stories
-            knownFollowers = await kf
+            knownFollowers = await knownFollowersFetch
         } catch {
             self.error = error
         }
@@ -95,7 +95,12 @@ final class ProfileDetailViewModel {
             ])
             let repo = TokenStorage.userDID ?? ""
             do {
-                let response = try await client.createRecord(collection: "social.grain.graph.follow", repo: repo, record: record, auth: auth)
+                let response = try await client.createRecord(
+                    collection: "social.grain.graph.follow",
+                    repo: repo,
+                    record: record,
+                    auth: auth
+                )
                 profile?.viewer?.following = response.uri
             } catch {
                 profile?.viewer = prevViewer

@@ -95,7 +95,11 @@ struct NotificationRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            StoryRingView(hasStory: storyStatusCache.hasStory(for: notification.author.did), viewed: viewedStories.hasViewedAll(did: notification.author.did, storyStatusCache: storyStatusCache), size: 36) {
+            StoryRingView(
+                hasStory: storyStatusCache.hasStory(for: notification.author.did),
+                viewed: viewedStories.hasViewedAll(did: notification.author.did, storyStatusCache: storyStatusCache),
+                size: 36
+            ) {
                 AvatarView(url: notification.author.avatar, size: 36)
             }
             .onTapGesture {

@@ -8,7 +8,7 @@ enum DeepLink: Equatable {
     static func from(url: URL) -> DeepLink? {
         // Normalize: for grain:// scheme, host is the first segment (e.g. grain://profile/did/...)
         // For https, path starts with /profile/did/...
-        var segments: [String] = if url.scheme == "grain", let host = url.host {
+        let segments: [String] = if url.scheme == "grain", let host = url.host {
             [host] + url.pathComponents.filter { $0 != "/" }
         } else {
             url.pathComponents.filter { $0 != "/" }

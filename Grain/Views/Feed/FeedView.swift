@@ -26,7 +26,7 @@ struct FeedView: View {
 
     var body: some View {
         // Read version so Observation tracks it and re-renders on invalidate()
-        _ = storyViewModel.version
+        let _ = storyViewModel.version
         NavigationStack {
             ForEach(prefsViewModel.pinnedFeeds) { feed in
                 if feed.id == prefsViewModel.selectedFeedId {
@@ -232,7 +232,17 @@ private struct FeedTabContent: View {
     let onRefresh: (@Sendable () async -> Void)?
     let prefsViewModel: FeedPreferencesViewModel
 
-    init(client: XRPCClient, pinnedFeed: PinnedFeed, userDID: String? = nil, storyAuthors: [GrainStoryAuthor] = [], userAvatar: String? = nil, onStoryAuthorTap: @escaping (GrainStoryAuthor, Int) -> Void = { _, _ in }, onStoryCreateTap: @escaping () -> Void = {}, onRefresh: (@Sendable () async -> Void)? = nil, prefsViewModel: FeedPreferencesViewModel) {
+    init(
+        client: XRPCClient,
+        pinnedFeed: PinnedFeed,
+        userDID: String? = nil,
+        storyAuthors: [GrainStoryAuthor] = [],
+        userAvatar: String? = nil,
+        onStoryAuthorTap: @escaping (GrainStoryAuthor, Int) -> Void = { _, _ in },
+        onStoryCreateTap: @escaping () -> Void = {},
+        onRefresh: (@Sendable () async -> Void)? = nil,
+        prefsViewModel: FeedPreferencesViewModel
+    ) {
         self.client = client
         self.storyAuthors = storyAuthors
         self.userAvatar = userAvatar

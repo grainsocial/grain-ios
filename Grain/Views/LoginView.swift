@@ -199,11 +199,17 @@ struct LoginView: View {
                             .foregroundStyle(.white)
                             .disabled(isLoading)
                             // Legal links
-                            Text("By signing in you agree to our [Terms](https://grain.social/support/terms), [Privacy Policy](https://grain.social/support/privacy), and [Community Guidelines](https://grain.social/support/community-guidelines).")
-                                .font(.caption2)
-                                .foregroundStyle(.white.opacity(0.5))
-                                .tint(.white.opacity(0.7))
-                                .multilineTextAlignment(.center)
+                            Text(
+                                "By signing in you agree to our " +
+                                    "[Terms](https://grain.social/support/terms), " +
+                                    "[Privacy Policy](https://grain.social/support/privacy), " +
+                                    "and [Community Guidelines]" +
+                                    "(https://grain.social/support/community-guidelines)."
+                            )
+                            .font(.caption2)
+                            .foregroundStyle(.white.opacity(0.5))
+                            .tint(.white.opacity(0.7))
+                            .multilineTextAlignment(.center)
                         }
                         .padding(24)
 

@@ -120,7 +120,7 @@ struct ProfileView: View {
                         NavigationLink {
                             FollowListView(client: client, did: did, mode: .knownFollowers)
                         } label: {
-                            knownFollowersRow
+                            KnownFollowersRow(followers: viewModel.knownFollowers)
                         }
                         .buttonStyle(.plain)
                     }
@@ -128,7 +128,7 @@ struct ProfileView: View {
                     // Follow + Germ DM buttons
                     if did != auth.userDID {
                         HStack(spacing: 8) {
-                            followButton(profile: profile)
+                            FollowButton(profile: profile, viewModel: viewModel, auth: auth)
 
                             if let germUrl = germDMUrl(profile: profile) {
                                 Link(destination: germUrl) {
@@ -319,17 +319,45 @@ struct ProfileView: View {
         }
     }
 
-    @ViewBuilder
-    private var knownFollowersRow: some View {
-        let followers = viewModel.knownFollowers
-        let displayCount = max(followers.count, 0)
-        let avatars = Array(followers.prefix(3))
-        let names = followers.prefix(2).compactMap { f -> String? in
-            if let name = f.displayName, !name.isEmpty { return name }
-            return f.handle
+    private func germDMUrl(profile: GrainProfileDetailed) -> URL? {
+        guard let messageMe = profile.messageMe,
+              let viewerDid = auth.userDID else { return nil }
+        let isOwn = did == viewerDid
+        if !isOwn {
+            switch messageMe.showButtonTo {
+            case "everyone": break
+            case "usersIFollow":
+                guard profile.viewer?.followedBy != nil else { return nil }
+            default: return nil
+            }
         }
-        let othersCount = displayCount - names.count
+        return URL(string: "\(messageMe.messageMeUrl)/web#\(did)+\(viewerDid)")
+    }
+}
 
+private struct KnownFollowersRow: View {
+    let followers: [FollowerItem]
+
+    private var displayCount: Int {
+        max(followers.count, 0)
+    }
+
+    private var avatars: [FollowerItem] {
+        Array(followers.prefix(3))
+    }
+
+    private var names: [String] {
+        followers.prefix(2).compactMap { follower -> String? in
+            if let name = follower.displayName, !name.isEmpty { return name }
+            return follower.handle
+        }
+    }
+
+    private var othersCount: Int {
+        displayCount - names.count
+    }
+
+    var body: some View {
         HStack(spacing: 6) {
             // Overlapping avatars
             HStack(spacing: -8) {
@@ -362,9 +390,14 @@ struct ProfileView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal)
     }
+}
 
-    @ViewBuilder
-    private func followButton(profile: GrainProfileDetailed) -> some View {
+private struct FollowButton: View {
+    let profile: GrainProfileDetailed
+    let viewModel: ProfileDetailViewModel
+    let auth: AuthManager
+
+    var body: some View {
         if profile.viewer?.following != nil {
             Button {
                 Task { await viewModel.toggleFollow(auth: auth.authContext()) }
@@ -386,21 +419,6 @@ struct ProfileView: View {
             .buttonStyle(.borderedProminent)
             .tint(Color("AccentColor"))
         }
-    }
-
-    private func germDMUrl(profile: GrainProfileDetailed) -> URL? {
-        guard let messageMe = profile.messageMe,
-              let viewerDid = auth.userDID else { return nil }
-        let isOwn = did == viewerDid
-        if !isOwn {
-            switch messageMe.showButtonTo {
-            case "everyone": break
-            case "usersIFollow":
-                guard profile.viewer?.followedBy != nil else { return nil }
-            default: return nil
-            }
-        }
-        return URL(string: "\(messageMe.messageMeUrl)/web#\(did)+\(viewerDid)")
     }
 }
 

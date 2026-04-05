@@ -43,7 +43,13 @@ struct FollowListView: View {
                 ContentUnavailableView(
                     "No \(title)",
                     systemImage: mode == .knownFollowers ? "person.2" : mode == .followers ? "person.2" : "person.badge.plus",
-                    description: Text(mode == .knownFollowers ? "None of the people you follow are following this account." : mode == .followers ? "No one is following this account yet." : "This account isn't following anyone yet.")
+                    description: Text(
+                        mode == .knownFollowers
+                            ? "None of the people you follow are following this account."
+                            : mode == .followers
+                            ? "No one is following this account yet."
+                            : "This account isn't following anyone yet."
+                    )
                 )
             } else {
                 List {

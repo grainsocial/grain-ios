@@ -97,8 +97,8 @@ struct StoryViewer: View {
                     onDismiss: { onDismiss?() },
                     onDragStart: { timer.stop() },
                     onDragCancel: {
-                        let lr = storyLabelResult
-                        if lr.action == .none || lr.action == .badge { timer.start() }
+                        let labelResult = storyLabelResult
+                        if labelResult.action == .none || labelResult.action == .badge { timer.start() }
                     },
                     onSwipeLeft: { goToNextAuthor() },
                     onSwipeRight: { goToPreviousAuthor() }
@@ -136,11 +136,11 @@ struct StoryViewer: View {
             Color.black.ignoresSafeArea()
 
             if let story = currentStory {
-                let lr = storyLabelResult
+                let labelResult = storyLabelResult
 
                 // Story image
                 ZStack {
-                    LazyImage(url: lr.action == .hide && !labelRevealed ? nil : URL(string: story.fullsize)) { state in
+                    LazyImage(url: labelResult.action == .hide && !labelRevealed ? nil : URL(string: story.fullsize)) { state in
                         if let image = state.image {
                             image
                                 .resizable()
@@ -150,32 +150,10 @@ struct StoryViewer: View {
                                 .tint(.white)
                         }
                     }
-                    .blur(radius: (lr.action == .warnMedia || lr.action == .warnContent) && !labelRevealed ? 24 : 0)
+                    .blur(radius: (labelResult.action == .warnMedia || labelResult.action == .warnContent) && !labelRevealed ? 24 : 0)
 
-                    if lr.action == .warnContent || lr.action == .hide, !labelRevealed {
-                        VStack(spacing: 12) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .font(.title)
-                                .foregroundStyle(.white.opacity(0.7))
-                            Text(lr.name)
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.white)
-                            Text("This content has been flagged.")
-                                .font(.caption)
-                                .foregroundStyle(.white.opacity(0.6))
-                            Button("Show content") {
-                                withAnimation { labelRevealed = true }
-                                timer.start()
-                            }
-                            .font(.caption.weight(.medium))
-                            .buttonStyle(.bordered)
-                            .tint(.white)
-                        }
-                    } else if lr.action == .warnMedia, !labelRevealed {
-                        MediaWarningOverlay(name: lr.name) {
-                            withAnimation { labelRevealed = true }
-                            timer.start()
-                        }
+                    StoryLabelWarningOverlay(labelResult: labelResult, labelRevealed: $labelRevealed) {
+                        timer.start()
                     }
                 }
 
@@ -300,8 +278,8 @@ struct StoryViewer: View {
         if currentStoryIndex < stories.count - 1 {
             currentStoryIndex += 1
             labelRevealed = false
-            let lr = storyLabelResult
-            if lr.action == .none || lr.action == .badge { timer.start() }
+            let labelResult = storyLabelResult
+            if labelResult.action == .none || labelResult.action == .badge { timer.start() }
         } else {
             goToNextAuthor()
         }
@@ -316,8 +294,8 @@ struct StoryViewer: View {
         if currentStoryIndex > 0 {
             currentStoryIndex -= 1
             labelRevealed = false
-            let lr = storyLabelResult
-            if lr.action == .none || lr.action == .badge { timer.start() }
+            let labelResult = storyLabelResult
+            if labelResult.action == .none || labelResult.action == .badge { timer.start() }
         } else {
             goToPreviousAuthor()
         }
@@ -347,8 +325,8 @@ struct StoryViewer: View {
             currentStoryIndex = viewedStories.firstUnviewedIndex(in: cached)
             labelRevealed = false
             isLoadingStories = false
-            let lr = storyLabelResult
-            if lr.action == .none || lr.action == .badge { timer.start() }
+            let labelResult = storyLabelResult
+            if labelResult.action == .none || labelResult.action == .badge { timer.start() }
             prefetchAdjacentAuthors()
         } else {
             currentStoryIndex = 0
@@ -375,8 +353,8 @@ struct StoryViewer: View {
             stories = fetched
             currentStoryIndex = viewedStories.firstUnviewedIndex(in: fetched)
             labelRevealed = false
-            let lr = storyLabelResult
-            if lr.action == .none || lr.action == .badge {
+            let labelResult = storyLabelResult
+            if labelResult.action == .none || labelResult.action == .badge {
                 timer.start()
             }
         } catch {
@@ -446,6 +424,40 @@ struct StoryViewer: View {
         if interval < 3600 { return "\(Int(interval / 60))m" }
         if interval < 86400 { return "\(Int(interval / 3600))h" }
         return "\(Int(interval / 86400))d"
+    }
+}
+
+private struct StoryLabelWarningOverlay: View {
+    let labelResult: LabelResolution
+    @Binding var labelRevealed: Bool
+    let onReveal: () -> Void
+
+    var body: some View {
+        if labelResult.action == .warnContent || labelResult.action == .hide, !labelRevealed {
+            VStack(spacing: 12) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.title)
+                    .foregroundStyle(.white.opacity(0.7))
+                Text(labelResult.name)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                Text("This content has been flagged.")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.6))
+                Button("Show content") {
+                    withAnimation { labelRevealed = true }
+                    onReveal()
+                }
+                .font(.caption.weight(.medium))
+                .buttonStyle(.bordered)
+                .tint(.white)
+            }
+        } else if labelResult.action == .warnMedia, !labelRevealed {
+            MediaWarningOverlay(name: labelResult.name) {
+                withAnimation { labelRevealed = true }
+                onReveal()
+            }
+        }
     }
 }
 
