@@ -21,6 +21,7 @@ struct CreateGalleryView: View {
     @State private var locationSearchTask: Task<Void, Never>?
     @State private var showCamera = false
     @State private var photoItems: [PhotoItem] = []
+    @State private var mentionState = MentionAutocompleteState()
 
     let client: XRPCClient
     var onCreated: (() -> Void)?
@@ -82,6 +83,7 @@ struct CreateGalleryView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         TextField("Add a description. Supports @mentions, #hashtags, and links.", text: $description, axis: .vertical)
                             .lineLimit(3...6)
+                            .onChange(of: description) { mentionState.update(text: description) }
                         Text("\(description.count)/\(maxDescription)")
                             .font(.caption2)
                             .foregroundStyle(description.count > maxDescription ? .red : .secondary)
@@ -150,6 +152,11 @@ struct CreateGalleryView: View {
                             .foregroundStyle(.red)
                             .font(.caption)
                     }
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                MentionSuggestionOverlay(state: mentionState) { suggestion in
+                    mentionState.complete(handle: suggestion.handle, in: &description)
                 }
             }
             .onChange(of: selectedPhotos) {

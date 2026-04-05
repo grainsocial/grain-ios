@@ -19,6 +19,7 @@ struct EditProfileView: View {
     @State private var isLoading = true
     @State private var isSaving = false
     @State private var errorMessage: String?
+    @State private var mentionState = MentionAutocompleteState()
 
     private let maxDisplayName = 64
     private let maxBio = 256
@@ -93,6 +94,7 @@ struct EditProfileView: View {
                         .foregroundStyle(.secondary)
                     TextEditor(text: $bio)
                         .frame(minHeight: 100)
+                        .onChange(of: bio) { mentionState.update(text: bio) }
                     Text("\(bio.count)/\(maxBio)")
                         .font(.caption2)
                         .foregroundStyle(bio.count > maxBio ? .red : .secondary)
@@ -106,6 +108,11 @@ struct EditProfileView: View {
                         .foregroundStyle(.red)
                         .font(.caption)
                 }
+            }
+        }
+        .safeAreaInset(edge: .bottom) {
+            MentionSuggestionOverlay(state: mentionState) { suggestion in
+                mentionState.complete(handle: suggestion.handle, in: &bio)
             }
         }
         .navigationTitle("Edit Profile")

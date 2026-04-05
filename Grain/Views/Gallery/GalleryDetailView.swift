@@ -15,6 +15,7 @@ struct GalleryDetailView: View {
     @State private var showCommentSheet = false
     @State private var zoomState = ImageZoomState()
     @State private var cardStoryAuthor: GrainStoryAuthor?
+    @State private var mentionState = MentionAutocompleteState()
     @FocusState private var commentFocused: Bool
     @Environment(\.dismiss) private var dismiss
 
@@ -207,8 +208,14 @@ struct GalleryDetailView: View {
                         .focused($commentFocused)
                         .padding()
                         .lineLimit(5...10)
+                        .onChange(of: commentText) { mentionState.update(text: commentText) }
 
                     Spacer()
+                }
+                .safeAreaInset(edge: .bottom) {
+                    MentionSuggestionOverlay(state: mentionState) { suggestion in
+                        mentionState.complete(handle: suggestion.handle, in: &commentText)
+                    }
                 }
                 .navigationTitle(replyingTo != nil ? "Reply" : "Comment")
                 .navigationBarTitleDisplayMode(.inline)
