@@ -19,6 +19,7 @@ struct StoryCreateView: View {
     @State private var locationSearchTask: Task<Void, Never>?
     @State private var isUploading = false
     @State private var errorMessage: String?
+    @State private var postToBluesky = false
 
     var body: some View {
         NavigationStack {
@@ -96,6 +97,10 @@ struct StoryCreateView: View {
                             }
                         }
                     }
+                }
+
+                Section {
+                    Toggle("Post to Bluesky", isOn: $postToBluesky)
                 }
 
                 if let errorMessage {
@@ -213,12 +218,34 @@ struct StoryCreateView: View {
                 }
             }
 
-            _ = try await client.createRecord(
+            let storyResult = try await client.createRecord(
                 collection: "social.grain.story",
                 repo: repo,
                 record: AnyCodable(record),
                 auth: authContext
             )
+
+            // Cross-post to Bluesky if toggled
+            if postToBluesky, let storyUri = storyResult.uri {
+                let rkey = storyUri.split(separator: "/").last.map(String.init) ?? ""
+                let postURL = "https://grain.social/profile/\(repo)/story/\(rkey)"
+                do {
+                    let location: (name: String, address: [String: AnyCodable]?)? = resolvedLocation.map { ($0.name, $0.address) }
+                    try await BlueskyPost.create(
+                        options: BlueskyPostOptions(
+                            url: postURL,
+                            location: location,
+                            description: nil as String?,
+                            images: [(blob: response.blob, alt: "", width: Int(size.width), height: Int(size.height))]
+                        ),
+                        client: client,
+                        repo: repo,
+                        auth: authContext
+                    )
+                } catch {
+                    // Don't fail the story creation if cross-post fails
+                }
+            }
 
             onCreated?()
             dismiss()

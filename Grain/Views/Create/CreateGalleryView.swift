@@ -22,6 +22,7 @@ struct CreateGalleryView: View {
     @State private var showCamera = false
     @State private var photoItems: [PhotoItem] = []
     @State private var mentionState = MentionAutocompleteState()
+    @State private var postToBluesky = false
 
     let client: XRPCClient
     var onCreated: (() -> Void)?
@@ -144,6 +145,10 @@ struct CreateGalleryView: View {
                             }
                         }
                     }
+                }
+
+                Section {
+                    Toggle("Post to Bluesky", isOn: $postToBluesky)
                 }
 
                 if let errorMessage {
@@ -374,6 +379,30 @@ struct CreateGalleryView: View {
                         record: AnyCodable(itemRecord),
                         auth: authContext
                     )
+                }
+            }
+
+            // Cross-post to Bluesky if toggled
+            if postToBluesky, let galleryUri = galleryResult.uri {
+                let rkey = galleryUri.split(separator: "/").last.map(String.init) ?? ""
+                let postURL = "https://grain.social/profile/\(repo)/gallery/\(rkey)"
+                let bskyImages = zip(processed, altTexts).map { photo, alt in
+                    (blob: photo.blob, alt: alt, width: photo.aspectRatio.width, height: photo.aspectRatio.height)
+                }
+                do {
+                    try await BlueskyPost.create(
+                        options: BlueskyPostOptions(
+                            url: postURL,
+                            location: resolvedLocation.map { ($0.name, $0.address) },
+                            description: description.isEmpty ? nil : description,
+                            images: bskyImages
+                        ),
+                        client: client,
+                        repo: repo,
+                        auth: authContext
+                    )
+                } catch {
+                    logger.error("Bluesky cross-post failed: \(error)")
                 }
             }
 

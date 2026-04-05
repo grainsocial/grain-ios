@@ -21,6 +21,10 @@ struct AnyCodable: Codable, Sendable {
         case let d as Double: storage = .double(d)
         case let s as String: storage = .string(s)
         case let a as [AnyCodable]: storage = .array(a)
+        case let a as [String]:
+            storage = .array(a.map { AnyCodable($0) })
+        case let a as [[String: AnyCodable]]:
+            storage = .array(a.map { AnyCodable($0) })
         case let d as [String: AnyCodable]: storage = .dict(d)
         case let d as [String: String]:
             storage = .dict(d.mapValues { AnyCodable($0) })
@@ -51,6 +55,11 @@ struct AnyCodable: Codable, Sendable {
 
     var dictValue: [String: AnyCodable]? {
         if case .dict(let d) = storage { return d }
+        return nil
+    }
+
+    var stringValue: String? {
+        if case .string(let s) = storage { return s }
         return nil
     }
 
