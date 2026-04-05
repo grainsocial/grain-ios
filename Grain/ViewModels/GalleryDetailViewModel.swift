@@ -47,5 +47,4 @@ final class GalleryDetailViewModel {
         }
         isLoading = false
     }
-
 }

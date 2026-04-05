@@ -1,8 +1,7 @@
-import XCTest
 @testable import Grain
+import XCTest
 
 final class PhotoModelsTests: XCTestCase {
-
     // MARK: - Helpers
 
     private func makeExif(

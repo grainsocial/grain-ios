@@ -63,7 +63,7 @@ struct CreateGalleryView: View {
 
                                 TextField("Describe this photo...", text: $item.alt, axis: .vertical)
                                     .font(.subheadline)
-                                    .lineLimit(2...4)
+                                    .lineLimit(2 ... 4)
                             }
                             .padding(.vertical, 4)
                         }
@@ -81,7 +81,7 @@ struct CreateGalleryView: View {
 
                     VStack(alignment: .leading, spacing: 4) {
                         TextField("Add a description. Supports @mentions, #hashtags, and links.", text: $description, axis: .vertical)
-                            .lineLimit(3...6)
+                            .lineLimit(3 ... 6)
                         Text("\(description.count)/\(maxDescription)")
                             .font(.caption2)
                             .foregroundStyle(description.count > maxDescription ? .red : .secondary)
@@ -195,21 +195,22 @@ struct CreateGalleryView: View {
 
         // Remove picker items that are no longer in the selection
         photoItems.removeAll { item in
-            guard case .picker(let pickerItem) = item.source else { return false }
+            guard case let .picker(pickerItem) = item.source else { return false }
             guard let id = pickerItem.itemIdentifier else { return true }
             return !selectedIDs.contains(id)
         }
 
         // Find which picker items are already represented
         let existingIDs = Set(photoItems.compactMap { item -> String? in
-            guard case .picker(let pickerItem) = item.source else { return nil }
+            guard case let .picker(pickerItem) = item.source else { return nil }
             return pickerItem.itemIdentifier
         })
 
         // Only load and append truly new selections
         for item in selectedPhotos where !(item.itemIdentifier.map { existingIDs.contains($0) } ?? false) {
             if let data = try? await item.loadTransferable(type: Data.self),
-               let image = UIImage(data: data) {
+               let image = UIImage(data: data)
+            {
                 let thumb = PhotoItem.makeThumbnail(from: image)
                 photoItems.append(PhotoItem(thumbnail: thumb, source: .picker(item)))
             }
@@ -221,7 +222,7 @@ struct CreateGalleryView: View {
         guard resolvedLocation == nil else { return }
 
         for item in photoItems {
-            guard case .picker(let pickerItem) = item.source,
+            guard case let .picker(pickerItem) = item.source,
                   let data = try? await pickerItem.loadTransferable(type: Data.self),
                   let gps = ImageProcessing.extractGPS(from: data) else { continue }
 
@@ -260,11 +261,11 @@ struct CreateGalleryView: View {
             }
 
             var processed: [ProcessedPhoto] = []
-            let altTexts = photoItems.map { $0.alt }
+            let altTexts = photoItems.map(\.alt)
 
             for item in photoItems {
                 switch item.source {
-                case .picker(let pickerItem):
+                case let .picker(pickerItem):
                     guard let data = try await pickerItem.loadTransferable(type: Data.self),
                           let original = UIImage(data: data) else { continue }
                     let exif = extractExif(from: data)
@@ -277,7 +278,7 @@ struct CreateGalleryView: View {
                         exif: exif
                     ))
 
-                case .camera(let image):
+                case let .camera(image):
                     let (resized, size) = ImageProcessing.resizeImage(image, maxDimension: 2000, maxBytes: 900_000)
                     logger.info("Uploading camera photo \(resized.count) bytes, \(Int(size.width))x\(Int(size.height))")
                     let response = try await client.uploadBlob(data: resized, mimeType: "image/jpeg", auth: authContext)
@@ -297,12 +298,12 @@ struct CreateGalleryView: View {
                     "$type": AnyCodable(photo.blob.type ?? "blob"),
                     "ref": AnyCodable(["$link": AnyCodable(photo.blob.ref?.link ?? "")] as [String: AnyCodable]),
                     "mimeType": AnyCodable(photo.blob.mimeType ?? "image/jpeg"),
-                    "size": AnyCodable(photo.blob.size ?? 0)
+                    "size": AnyCodable(photo.blob.size ?? 0),
                 ]
                 var photoRecord: [String: AnyCodable] = [
                     "photo": AnyCodable(blobDict),
                     "aspectRatio": AnyCodable(["width": AnyCodable(photo.aspectRatio.width), "height": AnyCodable(photo.aspectRatio.height)] as [String: AnyCodable]),
-                    "createdAt": AnyCodable(now)
+                    "createdAt": AnyCodable(now),
                 ]
                 let alt = altTexts[index].trimmingCharacters(in: .whitespacesAndNewlines)
                 if !alt.isEmpty {
@@ -333,13 +334,13 @@ struct CreateGalleryView: View {
             // 3. Create gallery record with pre-resolved location
             var galleryRecord: [String: AnyCodable] = [
                 "title": AnyCodable(title),
-                "createdAt": AnyCodable(now)
+                "createdAt": AnyCodable(now),
             ]
             if !description.isEmpty { galleryRecord["description"] = AnyCodable(description) }
             if let loc = resolvedLocation {
                 galleryRecord["location"] = AnyCodable([
                     "value": AnyCodable(loc.h3),
-                    "name": AnyCodable(loc.name)
+                    "name": AnyCodable(loc.name),
                 ] as [String: AnyCodable])
                 if let addr = loc.address {
                     galleryRecord["address"] = AnyCodable(addr)
@@ -359,7 +360,7 @@ struct CreateGalleryView: View {
                         "gallery": AnyCodable(galleryUri),
                         "item": AnyCodable(photoUri),
                         "position": AnyCodable(index),
-                        "createdAt": AnyCodable(now)
+                        "createdAt": AnyCodable(now),
                     ]
                     _ = try await client.createRecord(
                         collection: "social.grain.gallery.item",
@@ -388,7 +389,8 @@ struct CreateGalleryView: View {
         let scale = 1_000_000
 
         guard let source = CGImageSourceCreateWithData(data as CFData, nil),
-              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any] else {
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any]
+        else {
             logger.warning("No image properties found")
             return nil
         }
@@ -417,7 +419,8 @@ struct CreateGalleryView: View {
             result["fNumber"] = AnyCodable(Int(fNumber * Double(scale)))
         }
         if let isoRaw = exifDict?[kCGImagePropertyExifISOSpeedRatings as String] as? [Any],
-           let iso = (isoRaw.first as? NSNumber)?.intValue {
+           let iso = (isoRaw.first as? NSNumber)?.intValue
+        {
             result["iSO"] = AnyCodable(iso * scale)
         }
         if let focal35 = exifDict?[kCGImagePropertyExifFocalLenIn35mmFilm as String] as? Int {
@@ -426,16 +429,15 @@ struct CreateGalleryView: View {
             result["focalLengthIn35mmFormat"] = AnyCodable(Int(focal35) * scale)
         }
         if let flash = exifDict?[kCGImagePropertyExifFlash as String] as? Int {
-            let flashStr: String
-            switch flash {
-            case 0: flashStr = "Off, Did not fire"
-            case 1: flashStr = "On, Fired"
-            case 5: flashStr = "On, Return not detected"
-            case 7: flashStr = "On, Return detected"
-            case 16: flashStr = "Off, Did not fire"
-            case 24: flashStr = "Off, Auto"
-            case 25: flashStr = "On, Auto"
-            default: flashStr = "Unknown (\(flash))"
+            let flashStr = switch flash {
+            case 0: "Off, Did not fire"
+            case 1: "On, Fired"
+            case 5: "On, Return not detected"
+            case 7: "On, Return detected"
+            case 16: "Off, Did not fire"
+            case 24: "Off, Auto"
+            case 25: "On, Auto"
+            default: "Unknown (\(flash))"
             }
             result["flash"] = AnyCodable(flashStr)
         }

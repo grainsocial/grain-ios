@@ -8,11 +8,10 @@ enum DeepLink: Equatable {
     static func from(url: URL) -> DeepLink? {
         // Normalize: for grain:// scheme, host is the first segment (e.g. grain://profile/did/...)
         // For https, path starts with /profile/did/...
-        var segments: [String]
-        if url.scheme == "grain", let host = url.host {
-            segments = [host] + url.pathComponents.filter { $0 != "/" }
+        var segments: [String] = if url.scheme == "grain", let host = url.host {
+            [host] + url.pathComponents.filter { $0 != "/" }
         } else {
-            segments = url.pathComponents.filter { $0 != "/" }
+            url.pathComponents.filter { $0 != "/" }
         }
 
         guard segments.first == "profile", segments.count >= 2 else { return nil }
@@ -30,7 +29,7 @@ enum DeepLink: Equatable {
     }
 
     var galleryUri: String? {
-        if case .gallery(let did, let rkey) = self {
+        if case let .gallery(did, rkey) = self {
             return "at://\(did)/social.grain.gallery/\(rkey)"
         }
         return nil

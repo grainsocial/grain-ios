@@ -74,32 +74,32 @@ final class ProfileDetailViewModel {
 
         if let followUri {
             // Optimistic unfollow
-            self.profile?.viewer?.following = nil
-            self.profile?.followersCount = max((prevCount ?? 1) - 1, 0)
+            profile?.viewer?.following = nil
+            profile?.followersCount = max((prevCount ?? 1) - 1, 0)
 
             let rkey = followUri.split(separator: "/").last.map(String.init) ?? ""
             do {
                 try await client.deleteRecord(collection: "social.grain.graph.follow", rkey: rkey, auth: auth)
             } catch {
-                self.profile?.viewer = prevViewer
-                self.profile?.followersCount = prevCount
+                profile?.viewer = prevViewer
+                profile?.followersCount = prevCount
             }
         } else {
             // Optimistic follow
-            self.profile?.viewer = ActorViewerState(following: "pending")
-            self.profile?.followersCount = (prevCount ?? 0) + 1
+            profile?.viewer = ActorViewerState(following: "pending")
+            profile?.followersCount = (prevCount ?? 0) + 1
 
             let record = AnyCodable([
                 "subject": did,
-                "createdAt": DateFormatting.nowISO()
+                "createdAt": DateFormatting.nowISO(),
             ])
             let repo = TokenStorage.userDID ?? ""
             do {
                 let response = try await client.createRecord(collection: "social.grain.graph.follow", repo: repo, record: record, auth: auth)
-                self.profile?.viewer?.following = response.uri
+                profile?.viewer?.following = response.uri
             } catch {
-                self.profile?.viewer = prevViewer
-                self.profile?.followersCount = prevCount
+                profile?.viewer = prevViewer
+                profile?.followersCount = prevCount
             }
         }
     }

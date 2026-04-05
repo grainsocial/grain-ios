@@ -1,8 +1,7 @@
-import XCTest
 @testable import Grain
+import XCTest
 
 final class LabelResolutionTests: XCTestCase {
-
     // MARK: - LabelAction ordering
 
     func testLabelActionSeverityOrder() {
@@ -119,8 +118,8 @@ final class LabelResolutionTests: XCTestCase {
 
     func testWorstActionWins() {
         let labels = [
-            ATLabel(src: nil, uri: nil, val: "nudity", cts: nil),       // warnMedia
-            ATLabel(src: nil, uri: nil, val: "dmca-violation", cts: nil) // hide
+            ATLabel(src: nil, uri: nil, val: "nudity", cts: nil), // warnMedia
+            ATLabel(src: nil, uri: nil, val: "dmca-violation", cts: nil), // hide
         ]
         let result = resolveLabels(labels, definitions: [])
         XCTAssertEqual(result.action, .hide)
@@ -131,7 +130,7 @@ final class LabelResolutionTests: XCTestCase {
         // Both are warnMedia — the first one encountered at that severity stays
         let labels = [
             ATLabel(src: nil, uri: nil, val: "porn", cts: nil),
-            ATLabel(src: nil, uri: nil, val: "nudity", cts: nil)
+            ATLabel(src: nil, uri: nil, val: "nudity", cts: nil),
         ]
         let result = resolveLabels(labels, definitions: [])
         XCTAssertEqual(result.action, .warnMedia)

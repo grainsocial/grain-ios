@@ -2,7 +2,7 @@ import Foundation
 @preconcurrency import KeychainAccess
 
 /// Secure storage for OAuth tokens using Keychain.
-struct TokenStorage {
+enum TokenStorage {
     private static let keychain = Keychain(service: "social.grain.oauth")
 
     static var accessToken: String? {

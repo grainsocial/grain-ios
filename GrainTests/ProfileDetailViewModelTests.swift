@@ -1,9 +1,8 @@
-import XCTest
 @testable import Grain
+import XCTest
 
 @MainActor
 final class ProfileDetailViewModelTests: XCTestCase {
-
     private var client: XRPCClient!
     private var vm: ProfileDetailViewModel!
 

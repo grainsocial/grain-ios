@@ -16,7 +16,9 @@ struct HashtagFeedView: View {
     let client: XRPCClient
     let tag: String
 
-    private var feedId: String { "hashtag:\(tag)" }
+    private var feedId: String {
+        "hashtag:\(tag)"
+    }
 
     var body: some View {
         ScrollView {

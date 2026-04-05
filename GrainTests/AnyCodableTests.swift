@@ -1,8 +1,7 @@
-import XCTest
 @testable import Grain
+import XCTest
 
 final class AnyCodableTests: XCTestCase {
-
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
@@ -11,21 +10,21 @@ final class AnyCodableTests: XCTestCase {
     func testInitWithString() throws {
         let value = AnyCodable("hello")
         let data = try encoder.encode(value)
-        let json = String(data: data, encoding: .utf8)!
+        let json = try XCTUnwrap(String(data: data, encoding: .utf8))
         XCTAssertEqual(json, "\"hello\"")
     }
 
     func testInitWithInt() throws {
         let value = AnyCodable(42)
         let data = try encoder.encode(value)
-        let json = String(data: data, encoding: .utf8)!
+        let json = try XCTUnwrap(String(data: data, encoding: .utf8))
         XCTAssertEqual(json, "42")
     }
 
     func testInitWithBool() throws {
         let value = AnyCodable(true)
         let data = try encoder.encode(value)
-        let json = String(data: data, encoding: .utf8)!
+        let json = try XCTUnwrap(String(data: data, encoding: .utf8))
         XCTAssertEqual(json, "true")
     }
 
@@ -34,14 +33,14 @@ final class AnyCodableTests: XCTestCase {
         let data = try encoder.encode(value)
         let decoded = try decoder.decode(AnyCodable.self, from: data)
         // Round-trip through JSON, re-encode to verify
-        let reEncoded = String(data: try encoder.encode(decoded), encoding: .utf8)!
+        let reEncoded = try XCTUnwrap(try String(data: encoder.encode(decoded), encoding: .utf8))
         XCTAssertTrue(reEncoded.contains("3.14"))
     }
 
     func testInitWithStringDict() throws {
         let value = AnyCodable(["key": "value"] as [String: String])
         let data = try encoder.encode(value)
-        let json = String(data: data, encoding: .utf8)!
+        let json = try XCTUnwrap(String(data: data, encoding: .utf8))
         XCTAssertTrue(json.contains("\"key\""))
         XCTAssertTrue(json.contains("\"value\""))
     }
@@ -49,7 +48,7 @@ final class AnyCodableTests: XCTestCase {
     func testInitWithUnknownTypeFallsToNull() throws {
         let value = AnyCodable(Date())
         let data = try encoder.encode(value)
-        let json = String(data: data, encoding: .utf8)!
+        let json = try XCTUnwrap(String(data: data, encoding: .utf8))
         XCTAssertEqual(json, "null")
     }
 
@@ -59,21 +58,21 @@ final class AnyCodableTests: XCTestCase {
         let json = "null".data(using: .utf8)!
         let value = try decoder.decode(AnyCodable.self, from: json)
         // Re-encode should produce null
-        let reEncoded = String(data: try encoder.encode(value), encoding: .utf8)!
+        let reEncoded = try XCTUnwrap(try String(data: encoder.encode(value), encoding: .utf8))
         XCTAssertEqual(reEncoded, "null")
     }
 
     func testDecodeString() throws {
         let json = "\"test\"".data(using: .utf8)!
         let value = try decoder.decode(AnyCodable.self, from: json)
-        let reEncoded = String(data: try encoder.encode(value), encoding: .utf8)!
+        let reEncoded = try XCTUnwrap(try String(data: encoder.encode(value), encoding: .utf8))
         XCTAssertEqual(reEncoded, "\"test\"")
     }
 
     func testDecodeArray() throws {
         let json = "[1,2,3]".data(using: .utf8)!
         let value = try decoder.decode(AnyCodable.self, from: json)
-        let reEncoded = String(data: try encoder.encode(value), encoding: .utf8)!
+        let reEncoded = try XCTUnwrap(try String(data: encoder.encode(value), encoding: .utf8))
         XCTAssertEqual(reEncoded, "[1,2,3]")
     }
 

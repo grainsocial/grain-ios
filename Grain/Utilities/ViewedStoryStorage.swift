@@ -34,7 +34,8 @@ final class ViewedStoryStorage {
         viewedUris.insert(uri)
         if let existing = authorLastViewed[authorDid],
            let existingDate = Self.parseDate(existing),
-           let newDate = Self.parseDate(createdAt) {
+           let newDate = Self.parseDate(createdAt)
+        {
             if newDate > existingDate {
                 authorLastViewed[authorDid] = createdAt
             }
@@ -87,11 +88,13 @@ final class ViewedStoryStorage {
 
     private func load() {
         if let data = UserDefaults.standard.data(forKey: Self.urisKey),
-           let decoded = try? JSONDecoder().decode(Set<String>.self, from: data) {
+           let decoded = try? JSONDecoder().decode(Set<String>.self, from: data)
+        {
             viewedUris = decoded
         }
         if let data = UserDefaults.standard.data(forKey: Self.authorKey),
-           let decoded = try? JSONDecoder().decode([String: String].self, from: data) {
+           let decoded = try? JSONDecoder().decode([String: String].self, from: data)
+        {
             authorLastViewed = decoded
         }
     }

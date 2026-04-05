@@ -50,7 +50,7 @@ struct AnyCodable: Codable, Sendable {
     }
 
     var dictValue: [String: AnyCodable]? {
-        if case .dict(let d) = storage { return d }
+        if case let .dict(d) = storage { return d }
         return nil
     }
 
@@ -58,12 +58,12 @@ struct AnyCodable: Codable, Sendable {
         var container = encoder.singleValueContainer()
         switch storage {
         case .null: try container.encodeNil()
-        case .bool(let v): try container.encode(v)
-        case .int(let v): try container.encode(v)
-        case .double(let v): try container.encode(v)
-        case .string(let v): try container.encode(v)
-        case .array(let v): try container.encode(v)
-        case .dict(let v): try container.encode(v)
+        case let .bool(v): try container.encode(v)
+        case let .int(v): try container.encode(v)
+        case let .double(v): try container.encode(v)
+        case let .string(v): try container.encode(v)
+        case let .array(v): try container.encode(v)
+        case let .dict(v): try container.encode(v)
         }
     }
 }

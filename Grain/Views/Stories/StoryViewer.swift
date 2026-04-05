@@ -1,5 +1,5 @@
-import SwiftUI
 import NukeUI
+import SwiftUI
 
 @Observable
 @MainActor
@@ -17,13 +17,13 @@ private final class StoryTimer {
         task = Task {
             let tickInterval: TimeInterval = 0.05
             let totalTicks = Int(duration / tickInterval)
-            for tick in 0...totalTicks {
+            for tick in 0 ... totalTicks {
                 do {
                     try await Task.sleep(for: .milliseconds(Int(tickInterval * 1000)))
                 } catch { return }
                 guard !Task.isCancelled else { return }
                 progress = CGFloat(tick) / CGFloat(totalTicks)
-                if !halfwayFired && progress >= 0.5 {
+                if !halfwayFired, progress >= 0.5 {
                     halfwayFired = true
                     onHalfway?()
                 }
@@ -72,11 +72,10 @@ struct StoryViewer: View {
         self.client = client
         self.onProfileTap = onProfileTap
         self.onDismiss = onDismiss
-        let resolvedIndex: Int
-        if let did = startAuthorDid {
-            resolvedIndex = authors.firstIndex(where: { $0.profile.did == did }) ?? 0
+        let resolvedIndex: Int = if let did = startAuthorDid {
+            authors.firstIndex(where: { $0.profile.did == did }) ?? 0
         } else {
-            resolvedIndex = startIndex
+            startIndex
         }
         _currentAuthorIndex = State(initialValue: resolvedIndex)
     }
@@ -92,47 +91,46 @@ struct StoryViewer: View {
 
     var body: some View {
         storyContent
-        .background(
-            DragToDismissInstaller(
-                handle: fadeDismissHandle,
-                onDismiss: { onDismiss?() },
-                onDragStart: { timer.stop() },
-                onDragCancel: {
-                    let lr = storyLabelResult
-                    if lr.action == .none || lr.action == .badge { timer.start() }
-                },
-                onSwipeLeft: { goToNextAuthor() },
-                onSwipeRight: { goToPreviousAuthor() }
+            .background(
+                DragToDismissInstaller(
+                    handle: fadeDismissHandle,
+                    onDismiss: { onDismiss?() },
+                    onDragStart: { timer.stop() },
+                    onDragCancel: {
+                        let lr = storyLabelResult
+                        if lr.action == .none || lr.action == .badge { timer.start() }
+                    },
+                    onSwipeLeft: { goToNextAuthor() },
+                    onSwipeRight: { goToPreviousAuthor() }
+                )
             )
-        )
-        .statusBarHidden()
-        .confirmationDialog("Delete this story?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
-            Button("Delete", role: .destructive) {
-                if let story = currentStory {
-                    Task { await deleteStory(story) }
+            .statusBarHidden()
+            .confirmationDialog("Delete this story?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+                Button("Delete", role: .destructive) {
+                    if let story = currentStory {
+                        Task { await deleteStory(story) }
+                    }
+                }
+                Button("Cancel", role: .cancel) {
+                    timer.start()
                 }
             }
-            Button("Cancel", role: .cancel) {
-                timer.start()
+            .fullScreenCover(isPresented: $showReportSheet) {
+                ReportView(client: client, subjectUri: reportStoryUri, subjectCid: reportStoryCid)
+                    .environment(auth)
             }
-        }
-        .fullScreenCover(isPresented: $showReportSheet) {
-            ReportView(client: client, subjectUri: reportStoryUri, subjectCid: reportStoryCid)
-                .environment(auth)
-        }
-        .onChange(of: showReportSheet) {
-            if !showReportSheet {
-                timer.start()
+            .onChange(of: showReportSheet) {
+                if !showReportSheet {
+                    timer.start()
+                }
             }
-        }
-        .task {
-            timer.onComplete = { [self] in goToNext() }
-            timer.onHalfway = { [self] in markCurrentStoryViewed() }
-            await loadStoriesForCurrentAuthor()
-        }
+            .task {
+                timer.onComplete = { [self] in goToNext() }
+                timer.onHalfway = { [self] in markCurrentStoryViewed() }
+                await loadStoriesForCurrentAuthor()
+            }
     }
 
-    @ViewBuilder
     private var storyContent: some View {
         ZStack {
             Color.black.ignoresSafeArea()
@@ -154,7 +152,7 @@ struct StoryViewer: View {
                     }
                     .blur(radius: (lr.action == .warnMedia || lr.action == .warnContent) && !labelRevealed ? 24 : 0)
 
-                    if (lr.action == .warnContent || lr.action == .hide) && !labelRevealed {
+                    if lr.action == .warnContent || lr.action == .hide, !labelRevealed {
                         VStack(spacing: 12) {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .font(.title)
@@ -173,7 +171,7 @@ struct StoryViewer: View {
                             .buttonStyle(.bordered)
                             .tint(.white)
                         }
-                    } else if lr.action == .warnMedia && !labelRevealed {
+                    } else if lr.action == .warnMedia, !labelRevealed {
                         MediaWarningOverlay(name: lr.name) {
                             withAnimation { labelRevealed = true }
                             timer.start()
@@ -369,11 +367,10 @@ struct StoryViewer: View {
         timer.stop()
 
         do {
-            let fetched: [GrainStory]
-            if let cached = prefetchedStories.removeValue(forKey: did) {
-                fetched = cached
+            let fetched: [GrainStory] = if let cached = prefetchedStories.removeValue(forKey: did) {
+                cached
             } else {
-                fetched = try await client.getStories(actor: did, auth: auth.authContext()).stories
+                try await client.getStories(actor: did, auth: auth.authContext()).stories
             }
             stories = fetched
             currentStoryIndex = viewedStories.firstUnviewedIndex(in: fetched)
@@ -454,7 +451,7 @@ struct StoryViewer: View {
     }
 }
 
-// Extracted so progress ticks only redraw this view, not the entire StoryViewer
+/// Extracted so progress ticks only redraw this view, not the entire StoryViewer
 private struct StoryProgressBars: View {
     let timer: StoryTimer
     let stories: [GrainStory]
@@ -462,7 +459,7 @@ private struct StoryProgressBars: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            ForEach(0..<stories.count, id: \.self) { index in
+            ForEach(0 ..< stories.count, id: \.self) { index in
                 GeometryReader { geo in
                     Capsule()
                         .fill(Color.white.opacity(0.3))
@@ -477,11 +474,11 @@ private struct StoryProgressBars: View {
 
     private func barWidth(for index: Int, totalWidth: CGFloat) -> CGFloat {
         if index < currentStoryIndex {
-            return totalWidth
+            totalWidth
         } else if index == currentStoryIndex {
-            return totalWidth * timer.progress
+            totalWidth * timer.progress
         } else {
-            return 0
+            0
         }
     }
 }

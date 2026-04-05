@@ -24,7 +24,7 @@ struct SearchView: View {
         NavigationStack {
             Group {
                 if viewModel.searchText.isEmpty {
-                    if recentSearches.profiles.isEmpty && recentSearches.textSearches.isEmpty {
+                    if recentSearches.profiles.isEmpty, recentSearches.textSearches.isEmpty {
                         ContentUnavailableView("Search", systemImage: "magnifyingglass", description: Text("Search for galleries and profiles"))
                     } else {
                         recentSearchesView
@@ -126,7 +126,6 @@ struct SearchView: View {
         }
     }
 
-    @ViewBuilder
     private var recentSearchesView: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {

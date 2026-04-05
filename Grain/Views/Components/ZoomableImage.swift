@@ -79,7 +79,7 @@ struct PinchZoomOverlay: UIViewRepresentable {
         return view
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {}
+    func updateUIView(_: UIView, context _: Context) {}
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -95,7 +95,7 @@ struct PinchZoomOverlay: UIViewRepresentable {
         }
 
         nonisolated func gestureRecognizer(
-            _ gestureRecognizer: UIGestureRecognizer,
+            _: UIGestureRecognizer,
             shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
         ) -> Bool {
             let dominated = otherGestureRecognizer.view is UIScrollView
@@ -211,4 +211,3 @@ struct ZoomableImage: View {
         }
     }
 }
-

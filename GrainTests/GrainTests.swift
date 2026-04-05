@@ -1,5 +1,5 @@
-import XCTest
 @testable import Grain
+import XCTest
 
 final class GrainTests: XCTestCase {
     func testAspectRatio() {

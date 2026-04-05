@@ -21,9 +21,9 @@ final class AuthManager {
     private var refreshTask: Task<Void, Error>?
 
     #if PRODUCTION_API || !targetEnvironment(simulator)
-    static let serverURL = URL(string: "https://grain.social")!
+        static let serverURL = URL(string: "https://grain.social")!
     #else
-    static let serverURL = URL(string: "http://127.0.0.1:3000")!
+        static let serverURL = URL(string: "http://127.0.0.1:3000")!
     #endif
     static let clientID = "grain-native://app"
     static let redirectURI = "grain://oauth/callback"
@@ -32,12 +32,13 @@ final class AuthManager {
         // Restore session from Keychain — allow expired tokens since we can refresh
         if TokenStorage.accessToken != nil,
            let did = TokenStorage.userDID,
-           TokenStorage.refreshToken != nil {
-            self.isAuthenticated = true
-            self.userDID = did
-            self.userHandle = TokenStorage.userHandle
-            self.userAvatar = TokenStorage.userAvatar
-            self.dpop = try? DPoP.loadOrCreate()
+           TokenStorage.refreshToken != nil
+        {
+            isAuthenticated = true
+            userDID = did
+            userHandle = TokenStorage.userHandle
+            userAvatar = TokenStorage.userAvatar
+            dpop = try? DPoP.loadOrCreate()
         }
     }
 
@@ -51,7 +52,7 @@ final class AuthManager {
 
         // Generate PKCE code verifier + challenge
         let verifier = generateCodeVerifier()
-        self.codeVerifier = verifier
+        codeVerifier = verifier
         let challenge = generateCodeChallenge(verifier: verifier)
 
         // Step 1: Pushed Authorization Request
@@ -61,14 +62,14 @@ final class AuthManager {
             "response_type": "code",
             "code_challenge": challenge,
             "code_challenge_method": "S256",
-            "scope": "atproto blob:image/* repo:social.grain.gallery repo:social.grain.gallery.item repo:social.grain.photo repo:social.grain.photo.exif repo:social.grain.actor.profile repo:social.grain.graph.follow repo:social.grain.favorite repo:social.grain.comment repo:social.grain.story repo:app.bsky.feed.post?action=create"
+            "scope": "atproto blob:image/* repo:social.grain.gallery repo:social.grain.gallery.item repo:social.grain.photo repo:social.grain.photo.exif repo:social.grain.actor.profile repo:social.grain.graph.follow repo:social.grain.favorite repo:social.grain.comment repo:social.grain.story repo:app.bsky.feed.post?action=create",
         ]
         if createAccount {
             parBody["prompt"] = "create"
             #if DEBUG
-            parBody["login_hint"] = "localhost:2583"
+                parBody["login_hint"] = "localhost:2583"
             #else
-            parBody["login_hint"] = "selfhosted.social"
+                parBody["login_hint"] = "selfhosted.social"
             #endif
         } else if !handle.isEmpty {
             parBody["login_hint"] = handle
@@ -88,14 +89,16 @@ final class AuthManager {
         // Handle DPoP nonce requirement on PAR
         if let httpResp = parHTTPResponse as? HTTPURLResponse,
            httpResp.statusCode == 400,
-           let nonce = httpResp.value(forHTTPHeaderField: "DPoP-Nonce") {
+           let nonce = httpResp.value(forHTTPHeaderField: "DPoP-Nonce")
+        {
             let retryProof = try await dpop.createProof(httpMethod: "POST", url: parURL, nonce: nonce)
             parRequest.setValue(retryProof, forHTTPHeaderField: "DPoP")
             (parData, parHTTPResponse) = try await URLSession.shared.data(for: parRequest)
         }
 
         if let httpResp = parHTTPResponse as? HTTPURLResponse,
-           !(200...299).contains(httpResp.statusCode) {
+           !(200 ... 299).contains(httpResp.statusCode)
+        {
             throw XRPCError.httpError(statusCode: httpResp.statusCode, body: parData)
         }
 
@@ -105,7 +108,7 @@ final class AuthManager {
         var authComponents = URLComponents(url: Self.serverURL.appendingPathComponent("oauth/authorize"), resolvingAgainstBaseURL: false)!
         authComponents.queryItems = [
             URLQueryItem(name: "request_uri", value: parResponse.requestUri),
-            URLQueryItem(name: "client_id", value: Self.clientID)
+            URLQueryItem(name: "client_id", value: Self.clientID),
         ]
 
         let authURL = authComponents.url!
@@ -125,7 +128,8 @@ final class AuthManager {
 
         // Step 3: Exchange code for tokens
         guard let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false),
-              let code = components.queryItems?.first(where: { $0.name == "code" })?.value else {
+              let code = components.queryItems?.first(where: { $0.name == "code" })?.value
+        else {
             throw XRPCError.invalidURL
         }
 
@@ -141,7 +145,7 @@ final class AuthManager {
         let task = Task { @MainActor [weak self] in
             guard let self else { throw XRPCError.unauthorized }
             defer { self.refreshTask = nil }
-            try await self.performRefresh()
+            try await performRefresh()
         }
         refreshTask = task
         try await task.value
@@ -160,7 +164,7 @@ final class AuthManager {
         let body: [String: String] = [
             "grant_type": "refresh_token",
             "refresh_token": refreshToken,
-            "client_id": Self.clientID
+            "client_id": Self.clientID,
         ]
         request.httpBody = body.urlEncoded.data(using: .utf8)
 
@@ -172,7 +176,8 @@ final class AuthManager {
         // Handle DPoP nonce requirement
         if let httpResp = response as? HTTPURLResponse,
            httpResp.statusCode == 400,
-           let nonce = httpResp.value(forHTTPHeaderField: "DPoP-Nonce") {
+           let nonce = httpResp.value(forHTTPHeaderField: "DPoP-Nonce")
+        {
             let retryProof = try await dpop.createProof(httpMethod: "POST", url: tokenURL, nonce: nonce)
             request.setValue(retryProof, forHTTPHeaderField: "DPoP")
             (data, response) = try await URLSession.shared.data(for: request)
@@ -182,7 +187,7 @@ final class AuthManager {
             throw XRPCError.unauthorized
         }
 
-        guard (200...299).contains(httpResponse.statusCode) else {
+        guard (200 ... 299).contains(httpResponse.statusCode) else {
             let bodyStr = String(data: data, encoding: .utf8) ?? "no body"
             logger.error("Token refresh failed (\(httpResponse.statusCode)): \(bodyStr)")
             if httpResponse.statusCode == 401 {
@@ -240,7 +245,7 @@ final class AuthManager {
             "code": code,
             "redirect_uri": Self.redirectURI,
             "client_id": Self.clientID,
-            "code_verifier": codeVerifier ?? ""
+            "code_verifier": codeVerifier ?? "",
         ]
         request.httpBody = body.urlEncoded.data(using: .utf8)
 
@@ -252,7 +257,8 @@ final class AuthManager {
         // Handle DPoP nonce retry
         if let httpResponse = response as? HTTPURLResponse,
            httpResponse.statusCode == 400,
-           let nonce = httpResponse.value(forHTTPHeaderField: "DPoP-Nonce") {
+           let nonce = httpResponse.value(forHTTPHeaderField: "DPoP-Nonce")
+        {
             let retryProof = try await dpop.createProof(httpMethod: "POST", url: tokenURL, nonce: nonce)
             var retryRequest = request
             retryRequest.setValue(retryProof, forHTTPHeaderField: "DPoP")
@@ -279,10 +285,10 @@ final class AuthManager {
     }
 
     func fetchAvatarIfNeeded() async {
-        if userAvatar != nil && avatarImage == nil {
+        if userAvatar != nil, avatarImage == nil {
             await downloadAvatarImage()
         }
-        if userAvatar == nil && userDID != nil {
+        if userAvatar == nil, userDID != nil {
             await fetchAndStoreAvatar()
         }
     }
@@ -365,7 +371,7 @@ import UIKit
 final class WebAuthContextProvider: NSObject, ASWebAuthenticationPresentationContextProviding {
     static let shared = WebAuthContextProvider()
 
-    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+    func presentationAnchor(for _: ASWebAuthenticationSession) -> ASPresentationAnchor {
         UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
             .flatMap(\.windows)
@@ -375,7 +381,7 @@ final class WebAuthContextProvider: NSObject, ASWebAuthenticationPresentationCon
 
 // MARK: - Helpers
 
-extension Dictionary where Key == String, Value == String {
+extension [String: String] {
     var urlEncoded: String {
         map { key, value in
             let escapedKey = key.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? key

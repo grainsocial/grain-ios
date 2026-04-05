@@ -14,12 +14,13 @@ struct NominatimResult {
         self.placeId = placeId
 
         if let lat = json["lat"] as? String, let lon = json["lon"] as? String,
-           let latD = Double(lat), let lonD = Double(lon) {
-            self.latitude = latD
-            self.longitude = lonD
+           let latD = Double(lat), let lonD = Double(lon)
+        {
+            latitude = latD
+            longitude = lonD
         } else if let lat = json["lat"] as? Double, let lon = json["lon"] as? Double {
-            self.latitude = lat
-            self.longitude = lon
+            latitude = lat
+            longitude = lon
         } else {
             return nil
         }
@@ -28,13 +29,13 @@ struct NominatimResult {
         let city = addr?["city"] as? String ?? addr?["town"] as? String ?? addr?["village"] as? String
 
         if let placeName = json["name"] as? String, !placeName.isEmpty {
-            self.name = placeName
+            name = placeName
         } else {
             var parts: [String] = []
             if let city { parts.append(city) }
             if let state = addr?["state"] as? String { parts.append(state) }
             if let country = addr?["country"] as? String { parts.append(country) }
-            self.name = parts.isEmpty
+            name = parts.isEmpty
                 ? (json["display_name"] as? String ?? "Unknown").components(separatedBy: ",").first ?? "Unknown"
                 : parts.joined(separator: ", ")
         }
@@ -43,7 +44,7 @@ struct NominatimResult {
         if let city { contextParts.append(city) }
         if let state = addr?["state"] as? String { contextParts.append(state) }
         if let country = addr?["country"] as? String { contextParts.append(country) }
-        self.context = contextParts.isEmpty ? nil : contextParts.joined(separator: ", ")
+        context = contextParts.isEmpty ? nil : contextParts.joined(separator: ", ")
 
         if let countryCode = (addr?["country_code"] as? String)?.uppercased() {
             var a: [String: AnyCodable] = ["country": AnyCodable(countryCode)]
@@ -57,9 +58,9 @@ struct NominatimResult {
                 }
             }
             if let postcode = addr?["postcode"] as? String { a["postalCode"] = AnyCodable(postcode) }
-            self.address = a
+            address = a
         } else {
-            self.address = nil
+            address = nil
         }
     }
 }
@@ -96,7 +97,8 @@ enum LocationServices {
         request.setValue("grain-app/1.0", forHTTPHeaderField: "User-Agent")
 
         guard let (data, _) = try? await URLSession.shared.data(for: request),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
             return nil
         }
 
@@ -121,7 +123,8 @@ enum LocationServices {
         request.setValue("grain-app/1.0", forHTTPHeaderField: "User-Agent")
 
         guard let (data, _) = try? await URLSession.shared.data(for: request),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+              let json = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+        else {
             return []
         }
 

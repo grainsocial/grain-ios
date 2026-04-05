@@ -1,5 +1,5 @@
-import SwiftUI
 import NukeUI
+import SwiftUI
 
 struct GalleryDetailView: View {
     @Environment(AuthManager.self) private var auth
@@ -206,7 +206,7 @@ struct GalleryDetailView: View {
                         .font(.body)
                         .focused($commentFocused)
                         .padding()
-                        .lineLimit(5...10)
+                        .lineLimit(5 ... 10)
 
                     Spacer()
                 }
@@ -261,7 +261,7 @@ struct GalleryDetailView: View {
         var recordDict: [String: String] = [
             "text": text,
             "subject": galleryUri,
-            "createdAt": DateFormatting.nowISO()
+            "createdAt": DateFormatting.nowISO(),
         ]
         if let replyTarget = replyingTo {
             recordDict["replyTo"] = replyTarget.uri
@@ -378,5 +378,4 @@ struct CommentRow: View {
         .padding(.trailing, 12)
         .padding(.vertical, 8)
     }
-
 }

@@ -22,7 +22,7 @@ private final class HeartAnimationState: Identifiable {
 
     init(position: CGPoint) {
         self.position = position
-        self.rotation = Double.random(in: -20...20)
+        rotation = Double.random(in: -20 ... 20)
     }
 
     func start() {
@@ -127,7 +127,7 @@ struct GalleryCardView: View {
 
     var body: some View {
         let lr = labelResult
-        if (lr.action == .hide || lr.action == .warnContent) && !labelRevealed {
+        if lr.action == .hide || lr.action == .warnContent, !labelRevealed {
             VStack(spacing: 0) {
                 ContentWarningOverlay(name: lr.name, action: lr.action) {
                     labelRevealed = true
@@ -139,7 +139,6 @@ struct GalleryCardView: View {
         }
     }
 
-    @ViewBuilder
     private func cardContent(lr: LabelResolution) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             // Header — tappable for navigation
@@ -216,85 +215,85 @@ struct GalleryCardView: View {
                         .blur(radius: lr.action == .warnMedia && !labelRevealed ? 40 : 0)
                         .allowsHitTesting(lr.action != .warnMedia || labelRevealed)
 
-                    // Page indicator (abbreviated like web — max 5 visible dots)
-                    if photos.count > 1 {
-                        HStack(spacing: 5) {
-                            let total = photos.count
-                            let maxVisible = 5
-                            let start = total <= maxVisible ? 0 : min(max(currentPage - 2, 0), total - maxVisible)
-                            let end = total <= maxVisible ? total : start + maxVisible
+                        // Page indicator (abbreviated like web — max 5 visible dots)
+                        if photos.count > 1 {
+                            HStack(spacing: 5) {
+                                let total = photos.count
+                                let maxVisible = 5
+                                let start = total <= maxVisible ? 0 : min(max(currentPage - 2, 0), total - maxVisible)
+                                let end = total <= maxVisible ? total : start + maxVisible
 
-                            ForEach(start..<end, id: \.self) { index in
-                                let distance = abs(index - currentPage)
-                                let currentIsLandscape = photos[currentPage].aspectRatio.ratio >= 1
-                                let dotColor: Color = hasPortrait && currentIsLandscape ? .secondary : .white
-                                Circle()
-                                    .fill(dotColor.opacity(index == currentPage ? 1.0 : distance == 1 ? 0.5 : distance == 2 ? 0.3 : 0.2))
-                                    .frame(
-                                        width: distance <= 1 ? 6 : distance == 2 ? 4 : 3,
-                                        height: distance <= 1 ? 6 : distance == 2 ? 4 : 3
-                                    )
-                                    .animation(.easeInOut(duration: 0.2), value: currentPage)
-                            }
-                        }
-                        .padding(.vertical, 8)
-                    }
-
-                    // Alt text overlay — centered, tap to dismiss
-                    if showingAlt, let alt = photos[currentPage].alt, !alt.isEmpty {
-                        Color.black.opacity(0.6)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .onTapGesture {
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    showingAlt = false
+                                ForEach(start ..< end, id: \.self) { index in
+                                    let distance = abs(index - currentPage)
+                                    let currentIsLandscape = photos[currentPage].aspectRatio.ratio >= 1
+                                    let dotColor: Color = hasPortrait && currentIsLandscape ? .secondary : .white
+                                    Circle()
+                                        .fill(dotColor.opacity(index == currentPage ? 1.0 : distance == 1 ? 0.5 : distance == 2 ? 0.3 : 0.2))
+                                        .frame(
+                                            width: distance <= 1 ? 6 : distance == 2 ? 4 : 3,
+                                            height: distance <= 1 ? 6 : distance == 2 ? 4 : 3
+                                        )
+                                        .animation(.easeInOut(duration: 0.2), value: currentPage)
                                 }
                             }
-                        Text(alt)
-                            .font(.subheadline)
-                            .foregroundStyle(.white)
-                            .multilineTextAlignment(.center)
-                            .padding(20)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .allowsHitTesting(false)
-                    }
+                            .padding(.vertical, 8)
+                        }
 
-                    // ALT button — bottom right
-                    if let alt = photos[currentPage].alt, !alt.isEmpty {
-                        VStack {
-                            Spacer()
-                            HStack {
-                                Spacer()
-                                Button {
+                        // Alt text overlay — centered, tap to dismiss
+                        if showingAlt, let alt = photos[currentPage].alt, !alt.isEmpty {
+                            Color.black.opacity(0.6)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                .onTapGesture {
                                     withAnimation(.easeInOut(duration: 0.2)) {
-                                        showingAlt.toggle()
+                                        showingAlt = false
                                     }
-                                } label: {
-                                    Text("ALT")
-                                        .font(.caption2.weight(.bold))
-                                        .padding(.horizontal, 6)
-                                        .padding(.vertical, 3)
-                                        .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 4))
-                                        .foregroundStyle(.white)
                                 }
-                            }
-                            .padding(8)
+                            Text(alt)
+                                .font(.subheadline)
+                                .foregroundStyle(.white)
+                                .multilineTextAlignment(.center)
+                                .padding(20)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                .allowsHitTesting(false)
                         }
-                    }
 
-                    // Double-tap heart animations
-                    ForEach(hearts) { heart in
-                        DoubleTapHeartView(state: heart)
-                            .onChange(of: heart.isComplete) {
-                                hearts.removeAll { $0.isComplete }
+                        // ALT button — bottom right
+                        if let alt = photos[currentPage].alt, !alt.isEmpty {
+                            VStack {
+                                Spacer()
+                                HStack {
+                                    Spacer()
+                                    Button {
+                                        withAnimation(.easeInOut(duration: 0.2)) {
+                                            showingAlt.toggle()
+                                        }
+                                    } label: {
+                                        Text("ALT")
+                                            .font(.caption2.weight(.bold))
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 3)
+                                            .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 4))
+                                            .foregroundStyle(.white)
+                                    }
+                                }
+                                .padding(8)
                             }
-                    }
-
-                    // Media warning overlay
-                    if lr.action == .warnMedia && !labelRevealed {
-                        MediaWarningOverlay(name: lr.name) {
-                            withAnimation { labelRevealed = true }
                         }
-                    }
+
+                        // Double-tap heart animations
+                        ForEach(hearts) { heart in
+                            DoubleTapHeartView(state: heart)
+                                .onChange(of: heart.isComplete) {
+                                    hearts.removeAll { $0.isComplete }
+                                }
+                        }
+
+                        // Media warning overlay
+                        if lr.action == .warnMedia, !labelRevealed {
+                            MediaWarningOverlay(name: lr.name) {
+                                withAnimation { labelRevealed = true }
+                            }
+                        }
                     }
                     .frame(height: height)
                 }
@@ -377,7 +376,8 @@ struct GalleryCardView: View {
             // EXIF info
             if let photos = gallery.items, !photos.isEmpty,
                let exif = photos[currentPage].exif,
-               exif.hasDisplayableData {
+               exif.hasDisplayableData
+            {
                 ExifInfoView(exif: exif)
                     .padding(.horizontal, 12)
                     .padding(.top, 8)
@@ -475,4 +475,3 @@ struct GalleryCardView: View {
         }
     }
 }
-

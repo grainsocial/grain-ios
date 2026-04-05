@@ -1,5 +1,5 @@
-import SwiftUI
 import NukeUI
+import SwiftUI
 
 struct NotificationsView: View {
     @Environment(AuthManager.self) private var auth
@@ -19,30 +19,30 @@ struct NotificationsView: View {
             List {
                 ForEach(viewModel.notifications) { notification in
                     NotificationRow(notification: notification, onProfileTap: { did in
-                            selectedProfileDid = did
-                        }, onStoryTap: { author in
-                            cardStoryAuthor = author
-                        })
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            if notification.reasonType == .follow {
-                                selectedProfileDid = notification.author.did
-                            } else if let galleryUri = notification.galleryUri {
-                                selectedGalleryUri = galleryUri
-                            }
+                        selectedProfileDid = did
+                    }, onStoryTap: { author in
+                        cardStoryAuthor = author
+                    })
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        if notification.reasonType == .follow {
+                            selectedProfileDid = notification.author.did
+                        } else if let galleryUri = notification.galleryUri {
+                            selectedGalleryUri = galleryUri
                         }
-                        .swipeActions(edge: .leading) {
-                            Button {
-                                selectedProfileDid = notification.author.did
-                            } label: {
-                                Label("Profile", systemImage: "person")
-                            }
+                    }
+                    .swipeActions(edge: .leading) {
+                        Button {
+                            selectedProfileDid = notification.author.did
+                        } label: {
+                            Label("Profile", systemImage: "person")
                         }
-                        .onAppear {
-                            if notification.id == viewModel.notifications.last?.id {
-                                Task { await viewModel.loadMore(auth: auth.authContext()) }
-                            }
+                    }
+                    .onAppear {
+                        if notification.id == viewModel.notifications.last?.id {
+                            Task { await viewModel.loadMore(auth: auth.authContext()) }
                         }
+                    }
                 }
 
                 if viewModel.isLoading {

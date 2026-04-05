@@ -85,7 +85,7 @@ struct SuggestedFollowsView: View {
         Task {
             let record = AnyCodable([
                 "subject": item.did,
-                "createdAt": DateFormatting.nowISO()
+                "createdAt": DateFormatting.nowISO(),
             ])
             let repo = TokenStorage.userDID ?? ""
             do {

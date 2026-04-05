@@ -44,13 +44,13 @@ enum FacetFeature: Codable, Sendable {
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         switch self {
-        case .mention(let did):
+        case let .mention(did):
             try container.encode("app.bsky.richtext.facet#mention", forKey: .type)
             try container.encode(did, forKey: .did)
-        case .link(let uri):
+        case let .link(uri):
             try container.encode("app.bsky.richtext.facet#link", forKey: .type)
             try container.encode(uri, forKey: .uri)
-        case .tag(let tag):
+        case let .tag(tag):
             try container.encode("app.bsky.richtext.facet#tag", forKey: .type)
             try container.encode(tag, forKey: .tag)
         }
