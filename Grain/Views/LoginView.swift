@@ -266,7 +266,7 @@ struct LoginView: View {
             return
         }
 
-        var components = URLComponents(string: "https://public.api.bsky.app/xrpc/app.bsky.actor.searchActorsTypeahead")!
+        var components = URLComponents(url: AuthManager.serverURL.appendingPathComponent("xrpc/social.grain.unspecced.searchActorsTypeahead"), resolvingAgainstBaseURL: false)!
         components.queryItems = [
             URLQueryItem(name: "q", value: trimmed),
             URLQueryItem(name: "limit", value: "5"),
