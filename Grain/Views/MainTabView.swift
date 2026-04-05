@@ -78,8 +78,8 @@ struct MainTabView: View {
             if let uiImage = auth.avatarImage {
                 avatarTabImage = circularAvatar(uiImage, size: 26)
             }
-            await notificationsVM.fetchUnseenCount(auth: await auth.authContext())
-            await labelDefsCache.loadIfNeeded(client: c, auth: await auth.authContext())
+            await notificationsVM.fetchUnseenCount(auth: auth.authContext())
+            await labelDefsCache.loadIfNeeded(client: c, auth: auth.authContext())
         }
         .onChange(of: auth.avatarImage) {
             if let uiImage = auth.avatarImage {
@@ -95,8 +95,8 @@ struct MainTabView: View {
             if scenePhase == .active {
                 Task {
                     try? await auth.refreshIfNeeded()
-                    await notificationsVM.fetchUnseenCount(auth: await auth.authContext())
-                    await labelDefsCache.loadIfNeeded(client: client, auth: await auth.authContext())
+                    await notificationsVM.fetchUnseenCount(auth: auth.authContext())
+                    await labelDefsCache.loadIfNeeded(client: client, auth: auth.authContext())
                 }
             }
         }

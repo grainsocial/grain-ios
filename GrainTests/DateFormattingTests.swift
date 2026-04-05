@@ -1,8 +1,7 @@
-import XCTest
 @testable import Grain
+import XCTest
 
 final class DateFormattingTests: XCTestCase {
-
     // MARK: - parse()
 
     func testParseFractionalSeconds() {
@@ -21,13 +20,13 @@ final class DateFormattingTests: XCTestCase {
         XCTAssertNil(DateFormatting.parse("2024-13-40"))
     }
 
-    func testParseRoundTrip() {
+    func testParseRoundTrip() throws {
         // Generate an ISO string, parse it back, verify it's close to now
         let iso = DateFormatting.nowISO()
         let parsed = DateFormatting.parse(iso)
         XCTAssertNotNil(parsed)
         // Should be within 1 second of now
-        let interval = abs(parsed!.timeIntervalSinceNow)
+        let interval = try abs(XCTUnwrap(parsed?.timeIntervalSinceNow))
         XCTAssertLessThan(interval, 1.0)
     }
 
@@ -58,7 +57,7 @@ final class DateFormattingTests: XCTestCase {
     }
 
     func testRelativeTimeDaysAgo() {
-        let twoDaysAgo = Date().addingTimeInterval(-172800)
+        let twoDaysAgo = Date().addingTimeInterval(-172_800)
         let iso = isoString(from: twoDaysAgo)
         let result = DateFormatting.relativeTime(iso)
         XCTAssertEqual(result, "2d")

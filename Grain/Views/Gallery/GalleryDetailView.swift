@@ -1,5 +1,5 @@
-import SwiftUI
 import NukeUI
+import SwiftUI
 
 struct GalleryDetailView: View {
     @Environment(AuthManager.self) private var auth
@@ -207,8 +207,12 @@ struct GalleryDetailView: View {
                         .font(.body)
                         .focused($commentFocused)
                         .padding()
+<<<<<<< HEAD
                         .lineLimit(5...10)
                         .onChange(of: commentText) { mentionState.update(text: commentText) }
+=======
+                        .lineLimit(5 ... 10)
+>>>>>>> c7c34af (feat: add xcbeautify, SwiftFormat, and SwiftLint tooling)
 
                     Spacer()
                 }
@@ -268,7 +272,7 @@ struct GalleryDetailView: View {
         var recordDict: [String: String] = [
             "text": text,
             "subject": galleryUri,
-            "createdAt": DateFormatting.nowISO()
+            "createdAt": DateFormatting.nowISO(),
         ]
         if let replyTarget = replyingTo {
             recordDict["replyTo"] = replyTarget.uri
@@ -326,7 +330,11 @@ struct CommentRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             let avatarSize: CGFloat = isReply ? 24 : 28
-            StoryRingView(hasStory: storyStatusCache.hasStory(for: comment.author.did), viewed: viewedStories.hasViewedAll(did: comment.author.did, storyStatusCache: storyStatusCache), size: avatarSize) {
+            StoryRingView(
+                hasStory: storyStatusCache.hasStory(for: comment.author.did),
+                viewed: viewedStories.hasViewedAll(did: comment.author.did, storyStatusCache: storyStatusCache),
+                size: avatarSize
+            ) {
                 AvatarView(url: comment.author.avatar, size: avatarSize)
             }
             .onTapGesture {
@@ -385,5 +393,4 @@ struct CommentRow: View {
         .padding(.trailing, 12)
         .padding(.vertical, 8)
     }
-
 }

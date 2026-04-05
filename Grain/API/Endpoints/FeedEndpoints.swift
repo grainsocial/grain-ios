@@ -1,6 +1,6 @@
 import Foundation
 
-/// Response types for feed-related XRPC queries.
+// Response types for feed-related XRPC queries.
 
 struct GetFeedResponse: Codable, Sendable {
     var items: [GrainGallery]?
@@ -117,14 +117,14 @@ extension XRPCClient {
     }
 
     func searchGalleries(
-        query q: String,
+        query queryString: String,
         limit: Int = 30,
         cursor: String? = nil,
         fuzzy: Bool = true,
         auth: AuthContext? = nil
     ) async throws -> SearchGalleriesResponse {
-        var params = ["q": q, "limit": String(limit), "fuzzy": String(fuzzy)]
+        var params = ["q": queryString, "limit": String(limit), "fuzzy": String(fuzzy)]
         if let cursor { params["cursor"] = cursor }
-        return try await self.query("social.grain.unspecced.searchGalleries", params: params, auth: auth, as: SearchGalleriesResponse.self)
+        return try await query("social.grain.unspecced.searchGalleries", params: params, auth: auth, as: SearchGalleriesResponse.self)
     }
 }

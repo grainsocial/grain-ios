@@ -11,7 +11,9 @@ struct GrainProfile: Codable, Sendable, Identifiable {
     var avatar: String?
     var createdAt: String?
 
-    var id: String { did }
+    var id: String {
+        did
+    }
 }
 
 /// social.grain.actor.defs#profileViewDetailed
@@ -32,7 +34,9 @@ struct GrainProfileDetailed: Codable, Sendable, Identifiable {
     var labels: [ATLabel]?
     var messageMe: MessageMe?
 
-    var id: String { did }
+    var id: String {
+        did
+    }
 }
 
 /// social.grain.actor.defs#viewerState

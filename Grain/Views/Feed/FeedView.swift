@@ -123,7 +123,6 @@ struct FeedView: View {
         }
     }
 
-    @ViewBuilder
     private var leadingToolbarContent: some View {
         Menu {
             ForEach(prefsViewModel.pinnedFeeds) { feed in
@@ -166,7 +165,6 @@ struct FeedView: View {
         .tint(.primary)
     }
 
-    @ViewBuilder
     private var trailingToolbarContent: some View {
         Button {
             showCreate = true
@@ -184,11 +182,11 @@ struct FeedView: View {
         guard let link = pendingDeepLink else { return }
         pendingDeepLink = nil
         switch link {
-        case .profile(let did):
+        case let .profile(did):
             deepLinkProfileDid = did
         case .gallery:
             deepLinkGalleryUri = link.galleryUri
-        case .story(let did, _):
+        case let .story(did, _):
             Task { await openStoryDeepLink(did: did) }
         }
     }
@@ -212,7 +210,6 @@ struct FeedView: View {
             deepLinkProfileDid = did
         }
     }
-
 }
 
 private struct FeedTabContent: View {
@@ -237,7 +234,17 @@ private struct FeedTabContent: View {
     let onRefresh: (@Sendable () async -> Void)?
     let prefsViewModel: FeedPreferencesViewModel
 
-    init(client: XRPCClient, pinnedFeed: PinnedFeed, userDID: String? = nil, storyAuthors: [GrainStoryAuthor] = [], userAvatar: String? = nil, onStoryAuthorTap: @escaping (GrainStoryAuthor, Int) -> Void = { _, _ in }, onStoryCreateTap: @escaping () -> Void = {}, onRefresh: (@Sendable () async -> Void)? = nil, prefsViewModel: FeedPreferencesViewModel) {
+    init(
+        client: XRPCClient,
+        pinnedFeed: PinnedFeed,
+        userDID: String? = nil,
+        storyAuthors: [GrainStoryAuthor] = [],
+        userAvatar: String? = nil,
+        onStoryAuthorTap: @escaping (GrainStoryAuthor, Int) -> Void = { _, _ in },
+        onStoryCreateTap: @escaping () -> Void = {},
+        onRefresh: (@Sendable () async -> Void)? = nil,
+        prefsViewModel: FeedPreferencesViewModel
+    ) {
         self.client = client
         self.storyAuthors = storyAuthors
         self.userAvatar = userAvatar

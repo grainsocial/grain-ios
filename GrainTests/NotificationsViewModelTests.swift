@@ -1,9 +1,8 @@
-import XCTest
 @testable import Grain
+import XCTest
 
 @MainActor
 final class NotificationsViewModelTests: XCTestCase {
-
     private var client: XRPCClient!
     private var vm: NotificationsViewModel!
 

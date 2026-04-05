@@ -16,6 +16,7 @@ struct AnyCodable: Codable, Sendable {
 
     init(_ value: some Sendable) {
         switch value {
+<<<<<<< HEAD
         case let b as Bool: storage = .bool(b)
         case let i as Int: storage = .int(i)
         case let d as Double: storage = .double(d)
@@ -28,6 +29,16 @@ struct AnyCodable: Codable, Sendable {
         case let d as [String: AnyCodable]: storage = .dict(d)
         case let d as [String: String]:
             storage = .dict(d.mapValues { AnyCodable($0) })
+=======
+        case let boolVal as Bool: storage = .bool(boolVal)
+        case let intVal as Int: storage = .int(intVal)
+        case let doubleVal as Double: storage = .double(doubleVal)
+        case let stringVal as String: storage = .string(stringVal)
+        case let arrayVal as [AnyCodable]: storage = .array(arrayVal)
+        case let dictVal as [String: AnyCodable]: storage = .dict(dictVal)
+        case let dictVal as [String: String]:
+            storage = .dict(dictVal.mapValues { AnyCodable($0) })
+>>>>>>> c7c34af (feat: add xcbeautify, SwiftFormat, and SwiftLint tooling)
         default: storage = .null
         }
     }
@@ -54,7 +65,7 @@ struct AnyCodable: Codable, Sendable {
     }
 
     var dictValue: [String: AnyCodable]? {
-        if case .dict(let d) = storage { return d }
+        if case let .dict(dictVal) = storage { return dictVal }
         return nil
     }
 
@@ -67,12 +78,12 @@ struct AnyCodable: Codable, Sendable {
         var container = encoder.singleValueContainer()
         switch storage {
         case .null: try container.encodeNil()
-        case .bool(let v): try container.encode(v)
-        case .int(let v): try container.encode(v)
-        case .double(let v): try container.encode(v)
-        case .string(let v): try container.encode(v)
-        case .array(let v): try container.encode(v)
-        case .dict(let v): try container.encode(v)
+        case let .bool(val): try container.encode(val)
+        case let .int(val): try container.encode(val)
+        case let .double(val): try container.encode(val)
+        case let .string(val): try container.encode(val)
+        case let .array(val): try container.encode(val)
+        case let .dict(val): try container.encode(val)
         }
     }
 }

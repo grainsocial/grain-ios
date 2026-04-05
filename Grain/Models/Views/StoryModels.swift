@@ -14,8 +14,13 @@ struct GrainStory: Codable, Sendable, Identifiable {
     var labels: [ATLabel]?
     var crossPost: CrossPostInfo?
 
-    var id: String { uri }
-    var storyUri: String { uri }
+    var id: String {
+        uri
+    }
+
+    var storyUri: String {
+        uri
+    }
 }
 
 extension GrainStory: StoryIdentifiable {}
@@ -26,5 +31,7 @@ struct GrainStoryAuthor: Codable, Sendable, Identifiable {
     let storyCount: Int
     let latestAt: String
 
-    var id: String { profile.did }
+    var id: String {
+        profile.did
+    }
 }

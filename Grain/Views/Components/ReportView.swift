@@ -42,7 +42,7 @@ struct ReportView: View {
 
                         Section("Details (optional)") {
                             TextField("Provide additional context...", text: $reason, axis: .vertical)
-                                .lineLimit(3...6)
+                                .lineLimit(3 ... 6)
                         }
 
                         if let error {

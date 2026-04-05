@@ -20,7 +20,7 @@ enum ImageProcessing {
         var lo: CGFloat = 0
         var hi: CGFloat = 1
 
-        for _ in 0..<10 {
+        for _ in 0 ..< 10 {
             let mid = (lo + hi) / 2
             guard let data = scaled.jpegData(compressionQuality: mid) else { break }
             if data.count <= maxBytes {
@@ -50,14 +50,16 @@ enum ImageProcessing {
     static func extractGPS(from data: Data) -> (latitude: Double, longitude: Double)? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil),
               let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any],
-              let gpsDict = properties[kCGImagePropertyGPSDictionary as String] as? [String: Any] else {
+              let gpsDict = properties[kCGImagePropertyGPSDictionary as String] as? [String: Any]
+        else {
             return nil
         }
 
         guard let latitude = gpsDict[kCGImagePropertyGPSLatitude as String] as? Double,
               let latRef = gpsDict[kCGImagePropertyGPSLatitudeRef as String] as? String,
               let longitude = gpsDict[kCGImagePropertyGPSLongitude as String] as? Double,
-              let lonRef = gpsDict[kCGImagePropertyGPSLongitudeRef as String] as? String else {
+              let lonRef = gpsDict[kCGImagePropertyGPSLongitudeRef as String] as? String
+        else {
             return nil
         }
 

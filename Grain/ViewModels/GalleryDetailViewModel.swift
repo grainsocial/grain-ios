@@ -21,12 +21,12 @@ final class GalleryDetailViewModel {
         error = nil
 
         do {
-            let g = try await client.getGallery(uri: uri, auth: auth)
-            let c = try await client.getGalleryThread(gallery: uri, auth: auth)
-            gallery = g.gallery
-            comments = c.comments
-            commentCursor = c.cursor
-            hasMoreComments = c.cursor != nil
+            let galleryResponse = try await client.getGallery(uri: uri, auth: auth)
+            let commentsResponse = try await client.getGalleryThread(gallery: uri, auth: auth)
+            gallery = galleryResponse.gallery
+            comments = commentsResponse.comments
+            commentCursor = commentsResponse.cursor
+            hasMoreComments = commentsResponse.cursor != nil
         } catch {
             self.error = error
         }
@@ -47,5 +47,4 @@ final class GalleryDetailViewModel {
         }
         isLoading = false
     }
-
 }

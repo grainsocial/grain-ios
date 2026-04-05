@@ -1,9 +1,8 @@
-import XCTest
 @testable import Grain
+import XCTest
 
 @MainActor
 final class StoryStatusCacheTests: XCTestCase {
-
     private func makeAuthor(did: String, storyCount: Int = 1) -> GrainStoryAuthor {
         GrainStoryAuthor(
             profile: GrainProfile(cid: "cid", did: did, handle: "\(did).test"),

@@ -1,9 +1,8 @@
-import XCTest
 @testable import Grain
+import XCTest
 
 @MainActor
 final class ProfileDetailViewModelTests: XCTestCase {
-
     private var client: XRPCClient!
     private var vm: ProfileDetailViewModel!
 
@@ -36,9 +35,14 @@ final class ProfileDetailViewModelTests: XCTestCase {
 
     private func makeDummyAuth() -> AuthContext {
         // DPoP needs a real key for signing — create one for tests
-        let key = try! CryptoKit.P256.Signing.PrivateKey()
-        let dpop = DPoP(privateKey: key)
-        return AuthContext(accessToken: "test-token", dpop: dpop)
+        do {
+            let key = try CryptoKit.P256.Signing.PrivateKey()
+            let dpop = DPoP(privateKey: key)
+            return AuthContext(accessToken: "test-token", dpop: dpop)
+        } catch {
+            XCTFail("Failed to create P256 private key: \(error)")
+            fatalError("Unreachable")
+        }
     }
 
     // MARK: - toggleFollow (follow)

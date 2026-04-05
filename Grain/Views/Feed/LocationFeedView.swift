@@ -18,7 +18,9 @@ struct LocationFeedView: View {
     let h3Index: String
     let locationName: String
 
-    private var feedId: String { "location:\(h3Index)" }
+    private var feedId: String {
+        "location:\(h3Index)"
+    }
 
     private var coordinate: CLLocationCoordinate2D? {
         LocationServices.h3ToCoordinate(h3Index)
@@ -174,5 +176,7 @@ struct LocationFeedView: View {
 struct LocationDestination: Hashable, Identifiable {
     let h3Index: String
     let name: String
-    var id: String { h3Index }
+    var id: String {
+        h3Index
+    }
 }

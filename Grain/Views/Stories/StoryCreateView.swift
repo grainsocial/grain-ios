@@ -163,7 +163,8 @@ struct StoryCreateView: View {
     private func loadPhoto() async {
         guard let item = selectedPhoto,
               let data = try? await item.loadTransferable(type: Data.self),
-              let image = UIImage(data: data) else {
+              let image = UIImage(data: data)
+        else {
             photoData = nil
             previewImage = nil
             return
@@ -199,22 +200,22 @@ struct StoryCreateView: View {
                 "$type": AnyCodable(response.blob.type ?? "blob"),
                 "ref": AnyCodable(["$link": AnyCodable(response.blob.ref?.link ?? "")] as [String: AnyCodable]),
                 "mimeType": AnyCodable(response.blob.mimeType ?? "image/jpeg"),
-                "size": AnyCodable(response.blob.size ?? 0)
+                "size": AnyCodable(response.blob.size ?? 0),
             ]
 
             var record: [String: AnyCodable] = [
                 "media": AnyCodable(blobDict),
                 "aspectRatio": AnyCodable([
                     "width": AnyCodable(Int(size.width)),
-                    "height": AnyCodable(Int(size.height))
+                    "height": AnyCodable(Int(size.height)),
                 ] as [String: AnyCodable]),
-                "createdAt": AnyCodable(DateFormatting.nowISO())
+                "createdAt": AnyCodable(DateFormatting.nowISO()),
             ]
 
             if let loc = resolvedLocation {
                 record["location"] = AnyCodable([
                     "value": AnyCodable(loc.h3),
-                    "name": AnyCodable(loc.name)
+                    "name": AnyCodable(loc.name),
                 ] as [String: AnyCodable])
                 if let addr = loc.address {
                     record["address"] = AnyCodable(addr)

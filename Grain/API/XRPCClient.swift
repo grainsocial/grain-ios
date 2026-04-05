@@ -13,8 +13,8 @@ enum XRPCError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidURL: "Invalid URL"
-        case .httpError(let code, _): "HTTP error \(code)"
-        case .decodingError(let error): "Decoding error: \(error.localizedDescription)"
+        case let .httpError(code, _): "HTTP error \(code)"
+        case let .decodingError(error): "Decoding error: \(error.localizedDescription)"
         case .unauthorized: "Unauthorized"
         case .dpopNonceRequired: "DPoP nonce required"
         }
@@ -32,8 +32,8 @@ final class XRPCClient: Sendable {
     init(baseURL: URL, session: URLSession = .shared, onUnauthorized: (@Sendable () async throws -> AuthContext?)? = nil) {
         self.baseURL = baseURL
         self.session = session
-        self.decoder = JSONDecoder()
-        self.encoder = JSONEncoder()
+        decoder = JSONDecoder()
+        encoder = JSONEncoder()
         self.onUnauthorized = onUnauthorized
     }
 
@@ -58,9 +58,9 @@ final class XRPCClient: Sendable {
     }
 
     /// Execute an XRPC procedure (POST request).
-    func procedure<I: Encodable, O: Decodable>(
+    func procedure<O: Decodable>(
         _ nsid: String,
-        input: I,
+        input: some Encodable,
         auth: AuthContext? = nil,
         as type: O.Type
     ) async throws -> O {
@@ -74,9 +74,9 @@ final class XRPCClient: Sendable {
     }
 
     /// Execute an XRPC procedure with no response body.
-    func procedure<I: Encodable>(
+    func procedure(
         _ nsid: String,
-        input: I,
+        input: some Encodable,
         auth: AuthContext? = nil
     ) async throws {
         let url = baseURL.appendingPathComponent("xrpc/\(nsid)")
@@ -116,7 +116,7 @@ final class XRPCClient: Sendable {
 
         do {
             return try await execute(req, as: type)
-        } catch XRPCError.dpopNonceRequired(let nonce) where retryCount < 2 {
+        } catch let XRPCError.dpopNonceRequired(nonce) where retryCount < 2 {
             logger.info("DPoP nonce required, retrying with nonce")
             var updatedAuth = auth
             updatedAuth?.nonce = nonce
@@ -151,7 +151,8 @@ final class XRPCClient: Sendable {
 
         if httpResponse.statusCode == 400,
            let nonce = httpResponse.value(forHTTPHeaderField: "DPoP-Nonce"),
-           retryCount < 2 {
+           retryCount < 2
+        {
             logger.info("DPoP nonce required (void), retrying")
             var updatedAuth = auth
             updatedAuth?.nonce = nonce
@@ -160,7 +161,7 @@ final class XRPCClient: Sendable {
             let (_, retryResponse) = try await session.data(for: retryReq)
             guard let retryHttp = retryResponse as? HTTPURLResponse else { return }
             if retryHttp.statusCode == 401 { throw XRPCError.unauthorized }
-            guard (200...299).contains(retryHttp.statusCode) else {
+            guard (200 ... 299).contains(retryHttp.statusCode) else {
                 throw XRPCError.httpError(statusCode: retryHttp.statusCode, body: nil)
             }
             return
@@ -177,7 +178,7 @@ final class XRPCClient: Sendable {
                 let (_, retryResponse) = try await session.data(for: retryReq)
                 guard let retryHttp = retryResponse as? HTTPURLResponse else { return }
                 if retryHttp.statusCode == 401 { throw XRPCError.unauthorized }
-                guard (200...299).contains(retryHttp.statusCode) else {
+                guard (200 ... 299).contains(retryHttp.statusCode) else {
                     throw XRPCError.httpError(statusCode: retryHttp.statusCode, body: nil)
                 }
                 return
@@ -197,7 +198,7 @@ final class XRPCClient: Sendable {
             throw XRPCError.unauthorized
         }
 
-        guard (200...299).contains(httpResponse.statusCode) else {
+        guard (200 ... 299).contains(httpResponse.statusCode) else {
             logger.error("HTTP \(httpResponse.statusCode): \(String(data: data, encoding: .utf8) ?? "")")
             throw XRPCError.httpError(statusCode: httpResponse.statusCode, body: data)
         }
@@ -211,7 +212,8 @@ final class XRPCClient: Sendable {
 
         // Check for DPoP nonce requirement
         if httpResponse.statusCode == 400,
-           let nonce = httpResponse.value(forHTTPHeaderField: "DPoP-Nonce") {
+           let nonce = httpResponse.value(forHTTPHeaderField: "DPoP-Nonce")
+        {
             throw XRPCError.dpopNonceRequired(nonce: nonce)
         }
 
@@ -226,7 +228,7 @@ final class XRPCClient: Sendable {
             throw XRPCError.unauthorized
         }
 
-        guard (200...299).contains(httpResponse.statusCode) else {
+        guard (200 ... 299).contains(httpResponse.statusCode) else {
             logger.error("HTTP \(httpResponse.statusCode): \(String(data: data, encoding: .utf8) ?? "")")
             throw XRPCError.httpError(statusCode: httpResponse.statusCode, body: data)
         }

@@ -5,12 +5,16 @@ struct RecentProfileSearch: Codable, Identifiable, Equatable {
     var displayName: String?
     var handle: String?
     var avatar: String?
-    var id: String { did }
+    var id: String {
+        did
+    }
 }
 
 struct RecentTextSearch: Codable, Identifiable, Equatable {
     let query: String
-    var id: String { query }
+    var id: String {
+        query
+    }
 }
 
 @Observable
@@ -62,11 +66,13 @@ final class RecentSearchStorage {
 
     private func load() {
         if let data = UserDefaults.standard.data(forKey: Self.profilesKey),
-           let decoded = try? JSONDecoder().decode([RecentProfileSearch].self, from: data) {
+           let decoded = try? JSONDecoder().decode([RecentProfileSearch].self, from: data)
+        {
             profiles = decoded
         }
         if let data = UserDefaults.standard.data(forKey: Self.textKey),
-           let decoded = try? JSONDecoder().decode([RecentTextSearch].self, from: data) {
+           let decoded = try? JSONDecoder().decode([RecentTextSearch].self, from: data)
+        {
             textSearches = decoded
         }
     }
