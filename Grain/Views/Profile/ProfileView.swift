@@ -19,6 +19,7 @@ struct ProfileView: View {
     @State private var viewMode: ProfileViewMode = .grid
     @State private var zoomState = ImageZoomState()
     @State private var cardStoryAuthor: GrainStoryAuthor?
+    @State private var avatarPressed = false
     let client: XRPCClient
     let actor: String
     var isRoot = false
@@ -53,6 +54,9 @@ struct ProfileView: View {
                                 AvatarView(url: profile.avatar, size: 80)
                                     .liquidGlassCircle()
                             }
+                            .scaleEffect(avatarPressed ? 1.08 : 1.0)
+                            .animation(.spring(response: 0.2, dampingFraction: 0.6), value: avatarPressed)
+                            .contentShape(Circle())
                             .onTapGesture {
                                 if !viewModel.stories.isEmpty {
                                     showStoryViewer = true
@@ -60,6 +64,11 @@ struct ProfileView: View {
                                     showAvatarOverlay = true
                                 }
                             }
+                            .simultaneousGesture(
+                                DragGesture(minimumDistance: 0)
+                                    .onChanged { _ in if !avatarPressed { avatarPressed = true } }
+                                    .onEnded { _ in avatarPressed = false }
+                            )
 
                             HStack(spacing: 0) {
                                 StatView(count: profile.galleryCount ?? 0, label: "Galleries")
@@ -255,7 +264,7 @@ struct ProfileView: View {
             .navigationDestination(item: $selectedHashtag) { tag in
                 HashtagFeedView(client: client, tag: tag)
             }
-            .customFullScreenCover(isPresented: $showStoryViewer) {
+            .fullScreenCover(isPresented: $showStoryViewer) {
                 if let profile = viewModel.profile {
                     StoryViewer(
                         authors: [GrainStoryAuthor(
@@ -271,6 +280,7 @@ struct ProfileView: View {
                         },
                         onDismiss: { showStoryViewer = false }
                     )
+                    .environment(auth)
                 }
             }
             .fullScreenCover(item: $cardStoryAuthor) { author in
