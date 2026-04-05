@@ -25,17 +25,17 @@ The app connects to the [Grain backend](https://tangled.org/grain.social/grain),
 ## Commands
 
 ```bash
-just generate  # Regenerate Xcode project from project.yml
-just build     # Build for simulator
-just sim-local # Build + install + launch on simulator (local/dev API)
-just sim       # Build + install + launch on simulator (production API)
+just generate   # Regenerate Xcode project from project.yml
+just build      # Build for simulator
+just sim-local  # Build + install + launch on simulator (local/dev API)
+just sim        # Build + install + launch on simulator (production API)
 just test       # Run tests
 just format     # Check formatting (list unformatted files)
 just format-fix # Fix formatting in-place
 just lint       # Lint Swift code
 just lint-fix   # Fix lint violations
-just device ID # Build + install to a plugged-in iOS device
-just release   # Bump build, archive, upload to App Store Connect
+just device ID  # Build + install to a plugged-in iOS device
+just release    # Bump build, archive, upload to App Store Connect
 ```
 
 ## License

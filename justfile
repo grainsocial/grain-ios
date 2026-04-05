@@ -7,6 +7,7 @@ default:
 # Regenerate Xcode project from project.yml
 generate:
     xcodegen generate
+    git config core.hooksPath .githooks
 
 # Build for simulator
 build:
