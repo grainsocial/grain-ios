@@ -26,7 +26,7 @@ struct FeedView: View {
 
     var body: some View {
         // Read version so Observation tracks it and re-renders on invalidate()
-        let _ = storyViewModel.version
+        _ = storyViewModel.version
         NavigationStack {
             ForEach(prefsViewModel.pinnedFeeds) { feed in
                 if feed.id == prefsViewModel.selectedFeedId {

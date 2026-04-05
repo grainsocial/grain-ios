@@ -428,9 +428,7 @@ struct StoryViewer: View {
         }
         if let address = story.address {
             var parts: [String] = []
-            if let name = address.name { parts.append(name) }
-            else if let street = address.street { parts.append(street) }
-            else if let locality = address.locality { parts.append(locality) }
+            if let name = address.name { parts.append(name) } else if let street = address.street { parts.append(street) } else if let locality = address.locality { parts.append(locality) }
             if let region = address.region, region != parts.first { parts.append(region) }
             if let locality = address.locality, !parts.contains(locality) { parts.append(locality) }
             if parts.isEmpty { parts.append(address.country) }

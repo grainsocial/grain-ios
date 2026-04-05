@@ -35,7 +35,7 @@ struct MainTabView: View {
     }()
 
     var body: some View {
-        let _ = Self.badgeAppearanceConfigured
+        _ = Self.badgeAppearanceConfigured
         TabView(selection: $selectedTab) {
             Tab("Feed", systemImage: "photo.on.rectangle", value: AppTab.feed) {
                 FeedView(client: client, pendingDeepLink: $pendingDeepLink, showCreate: $showCreate)
