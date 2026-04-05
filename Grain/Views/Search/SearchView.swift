@@ -146,11 +146,9 @@ struct SearchView: View {
                                             Button {
                                                 recentSearches.removeProfile(profile.did)
                                             } label: {
-                                                Image(systemName: "xmark")
-                                                    .font(.system(size: 8, weight: .bold))
-                                                    .foregroundStyle(.primary)
-                                                    .frame(width: 18, height: 18)
-                                                    .background(.thickMaterial, in: .circle)
+                                                Image(systemName: "xmark.circle.fill")
+                                                    .font(.system(size: 18))
+                                                    .foregroundStyle(.white, Color("AccentColor"))
                                             }
                                         }
 
