@@ -1,3 +1,4 @@
+import MapKit
 import SwiftUI
 
 struct LocationFeedView: View {
@@ -11,6 +12,7 @@ struct LocationFeedView: View {
     @State private var selectedHashtag: String?
     @State private var zoomState = ImageZoomState()
     @State private var cardStoryAuthor: GrainStoryAuthor?
+    @State private var mapInteractive = false
 
     let client: XRPCClient
     let h3Index: String
@@ -18,9 +20,40 @@ struct LocationFeedView: View {
 
     private var feedId: String { "location:\(h3Index)" }
 
+    private var coordinate: CLLocationCoordinate2D? {
+        LocationServices.h3ToCoordinate(h3Index)
+    }
+
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
+                if let coord = coordinate {
+                    Map(initialPosition: .region(MKCoordinateRegion(
+                        center: coord,
+                        latitudinalMeters: 20000,
+                        longitudinalMeters: 20000
+                    )))
+                    .mapStyle(.standard(pointsOfInterest: .excludingAll))
+                    .mapControlVisibility(mapInteractive ? .automatic : .hidden)
+                    .frame(height: mapInteractive ? 300 : 150)
+                    .overlay {
+                        if !mapInteractive {
+                            Color.clear
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    withAnimation(.easeInOut(duration: 0.25)) { mapInteractive = true }
+                                }
+                        }
+                    }
+                    .mask(
+                        LinearGradient(
+                            colors: mapInteractive ? [.black] : [.black, .black, .clear],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                }
+
                 ForEach($galleries) { $gallery in
                     GalleryCardView(gallery: $gallery, client: client, onNavigate: {
                         selectedUri = gallery.uri

@@ -1,3 +1,4 @@
+import CoreLocation
 import Foundation
 import SwiftyH3
 
@@ -72,13 +73,11 @@ enum LocationServices {
         return cell.description
     }
 
-    /// Coarsen an H3 index to city level (resolution 5).
-    static func h3ToCity(_ h3Index: String) -> String {
+    /// Convert an H3 index string to a CLLocationCoordinate2D.
+    static func h3ToCoordinate(_ h3Index: String) -> CLLocationCoordinate2D? {
         guard let cell = H3Cell(h3Index),
-              let res = try? cell.resolution,
-              res.rawValue > 5,
-              let parent = try? cell.parent(at: .res5) else { return h3Index }
-        return parent.description
+              let center = try? cell.center else { return nil }
+        return center.coordinates
     }
 
     /// Reverse geocode coordinates via Nominatim.

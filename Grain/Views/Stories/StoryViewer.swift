@@ -147,6 +147,7 @@ struct StoryViewer: View {
                             image
                                 .resizable()
                                 .aspectRatio(story.aspectRatio.ratio, contentMode: .fit)
+                                .frame(maxWidth: .infinity)
                         } else if state.isLoading {
                             ProgressView()
                                 .tint(.white)
