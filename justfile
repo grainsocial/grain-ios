@@ -12,14 +12,16 @@ generate:
 build:
     xcodebuild build -scheme Grain -destination 'generic/platform=iOS Simulator' -quiet
 
-# Install to booted simulator (dev API)
-install-web: build
+# Build + install + launch on simulator (local/dev API)
+sim-local: build
     #!/usr/bin/env bash
     set -euo pipefail
     APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData/Grain-*/Build/Products/Debug-iphonesimulator -name "Grain.app" -type d | head -1)
     xcrun simctl install booted "$APP_PATH"
+    xcrun simctl launch booted social.grain.grain
+    echo "Installed and launched on simulator (local/dev API)"
 
-# Build and install to simulator using production API (grain.social)
+# Build + install + launch on simulator (production API — grain.social)
 sim:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -28,6 +30,13 @@ sim:
     xcrun simctl install booted "$APP_PATH"
     xcrun simctl launch booted social.grain.grain
     echo "Installed and launched on simulator (grain.social)"
+
+# Run tests
+test:
+    xcodebuild test -scheme Grain -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max' -quiet
+
+# Legacy alias for sim-local
+install: sim-local
 
 # Build and install to a plugged-in iOS device
 device device_id:
