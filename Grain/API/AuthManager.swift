@@ -133,6 +133,12 @@ final class AuthManager {
         await fetchAndStoreAvatar()
     }
 
+    /// Refresh the access token only if it expires within 60 seconds.
+    func refreshIfNeeded() async throws {
+        guard let expiresAt = TokenStorage.tokenExpiresAt, expiresAt.timeIntervalSinceNow < 60 else { return }
+        try await refresh()
+    }
+
     /// Refresh the access token using the refresh token. Coalesces concurrent calls.
     func refresh() async throws {
         if let existing = refreshTask {

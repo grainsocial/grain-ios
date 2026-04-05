@@ -94,6 +94,7 @@ struct MainTabView: View {
         .onChange(of: scenePhase) {
             if scenePhase == .active {
                 Task {
+                    try? await auth.refreshIfNeeded()
                     await notificationsVM.fetchUnseenCount(auth: auth.authContext())
                     await labelDefsCache.loadIfNeeded(client: client, auth: auth.authContext())
                 }

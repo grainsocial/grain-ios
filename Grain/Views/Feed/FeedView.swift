@@ -217,6 +217,7 @@ struct FeedView: View {
 
 private struct FeedTabContent: View {
     @Environment(AuthManager.self) private var auth
+    @Environment(\.scenePhase) private var scenePhase
     @State private var viewModel: FeedViewModel
     @State private var selectedUri: String?
     @State private var selectedProfileDid: String?
@@ -227,6 +228,7 @@ private struct FeedTabContent: View {
     @State private var cardStoryAuthor: GrainStoryAuthor?
     @State private var suggestedFollows: [SuggestedItem] = []
     @State private var suggestedLoaded = false
+    @State private var lastLoadTime: Date = .now
     let client: XRPCClient
     let storyAuthors: [GrainStoryAuthor]
     let userAvatar: String?
@@ -296,6 +298,7 @@ private struct FeedTabContent: View {
             async let stories: ()? = onRefresh?()
             async let prefs: () = prefsViewModel.refresh(auth: auth)
             _ = await (feed, stories, prefs)
+            lastLoadTime = .now
         }
         .navigationDestination(item: $selectedUri) { uri in
             GalleryDetailView(client: client, galleryUri: uri, deletedGalleryUri: $deletedGalleryUri)
@@ -324,6 +327,7 @@ private struct FeedTabContent: View {
         .task {
             if viewModel.galleries.isEmpty {
                 await viewModel.loadInitial(auth: auth.authContext())
+                lastLoadTime = .now
             }
             if !suggestedLoaded, let did = auth.userDID {
                 do {
@@ -331,6 +335,14 @@ private struct FeedTabContent: View {
                     suggestedFollows = response.items ?? []
                 } catch {}
                 suggestedLoaded = true
+            }
+        }
+        .onChange(of: scenePhase) {
+            if scenePhase == .active, Date.now.timeIntervalSince(lastLoadTime) > 300 {
+                Task {
+                    await viewModel.loadInitial(auth: auth.authContext())
+                    lastLoadTime = .now
+                }
             }
         }
         .onChange(of: deletedGalleryUri) { _, uri in
