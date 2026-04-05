@@ -10,18 +10,56 @@ generate:
 
 # Build for simulator
 build:
-    xcodebuild build -scheme Grain -destination 'generic/platform=iOS Simulator' -quiet
+    set -o pipefail && xcodebuild build -scheme Grain -destination 'generic/platform=iOS Simulator' 2>&1 | xcbeautify
 
-# Install to booted simulator
-install: build
-    xcrun simctl install booted ~/Library/Developer/Xcode/DerivedData/Grain-gnyldzofconssnfxpuxpctdsmehu/Build/Products/Debug-iphonesimulator/Grain.app
+# Build + install + launch on simulator (local/dev API)
+sim-local: build
+    #!/usr/bin/env bash
+    set -euo pipefail
+    APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData/Grain-*/Build/Products/Debug-iphonesimulator -name "Grain.app" -type d | head -1)
+    xcrun simctl install booted "$APP_PATH"
+    xcrun simctl launch booted social.grain.grain
+    echo "Installed and launched on simulator (local/dev API)"
+
+# Build + install + launch on simulator (production API — grain.social)
+sim:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    set -o pipefail && xcodebuild build -scheme Grain -destination 'generic/platform=iOS Simulator' SWIFT_ACTIVE_COMPILATION_CONDITIONS='$(inherited) PRODUCTION_API' 2>&1 | xcbeautify
+    APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData/Grain-*/Build/Products/Debug-iphonesimulator -name "Grain.app" -type d | head -1)
+    xcrun simctl install booted "$APP_PATH"
+    xcrun simctl launch booted social.grain.grain
+    echo "Installed and launched on simulator (grain.social)"
+
+# Run tests
+test:
+    set -o pipefail && xcodebuild test -scheme Grain -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max' 2>&1 | xcbeautify
+
+# Check formatting (list unformatted files)
+format:
+    swiftformat Grain GrainTests --lint
+
+# Fix formatting in-place
+format-fix:
+    swiftformat Grain GrainTests
+
+# Lint Swift code
+lint:
+    swiftlint lint Grain GrainTests
+
+# Fix lint violations
+lint-fix:
+    swiftlint lint --fix Grain GrainTests
+
+# Legacy alias for sim-local
+install: sim-local
 
 # Build and install to a plugged-in iOS device
 device device_id:
     #!/usr/bin/env bash
     set -euo pipefail
     echo "Building for device {{device_id}}..."
-    xcodebuild build -scheme Grain -destination 'platform=iOS,id={{device_id}}' CODE_SIGN_STYLE=Automatic -allowProvisioningUpdates -quiet
+    set -o pipefail && xcodebuild build -scheme Grain -destination 'platform=iOS,id={{device_id}}' CODE_SIGN_STYLE=Automatic -allowProvisioningUpdates 2>&1 | xcbeautify
     APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData/Grain-*/Build/Products/Debug-iphoneos -name "Grain.app" -type d | head -1)
     echo "Installing $APP_PATH..."
     xcrun devicectl device install app --device {{device_id}} "$APP_PATH"
@@ -38,7 +76,7 @@ release:
     echo "Bumped build number: $current → $next"
     xcodegen generate
     echo "Archiving..."
-    xcodebuild archive -scheme Grain -destination 'generic/platform=iOS' -archivePath /tmp/Grain.xcarchive CODE_SIGN_STYLE=Automatic -allowProvisioningUpdates -quiet
+    set -o pipefail && xcodebuild archive -scheme Grain -destination 'generic/platform=iOS' -archivePath /tmp/Grain.xcarchive CODE_SIGN_STYLE=Automatic -allowProvisioningUpdates 2>&1 | xcbeautify
     echo "Uploading to App Store Connect..."
     cat > /tmp/ExportOptions.plist << 'PLIST'
     <?xml version="1.0" encoding="UTF-8"?>
