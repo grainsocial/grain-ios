@@ -306,6 +306,7 @@ struct GalleryDetailView: View {
 
 struct CommentRow: View {
     @Environment(StoryStatusCache.self) private var storyStatusCache
+    @Environment(ViewedStoryStorage.self) private var viewedStories
     let comment: GrainComment
     var isOwn: Bool = false
     var isReply: Bool = false
@@ -318,7 +319,7 @@ struct CommentRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             let avatarSize: CGFloat = isReply ? 24 : 28
-            StoryRingView(hasStory: storyStatusCache.hasStory(for: comment.author.did), size: avatarSize) {
+            StoryRingView(hasStory: storyStatusCache.hasStory(for: comment.author.did), viewed: viewedStories.hasViewedAll(did: comment.author.did, storyStatusCache: storyStatusCache), size: avatarSize) {
                 AvatarView(url: comment.author.avatar, size: avatarSize)
             }
             .onTapGesture {

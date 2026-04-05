@@ -20,6 +20,7 @@ struct FollowListView: View {
     @State private var selectedProfileDid: String?
     @State private var cardStoryAuthor: GrainStoryAuthor?
     @Environment(StoryStatusCache.self) private var storyStatusCache
+    @Environment(ViewedStoryStorage.self) private var viewedStories
 
     private var title: String {
         switch mode {
@@ -104,7 +105,7 @@ struct FollowListView: View {
     @ViewBuilder
     private func rowContent(item: FollowListItem) -> some View {
         HStack(alignment: .center, spacing: 14) {
-            StoryRingView(hasStory: storyStatusCache.hasStory(for: item.did), size: 50) {
+            StoryRingView(hasStory: storyStatusCache.hasStory(for: item.did), viewed: viewedStories.hasViewedAll(did: item.did, storyStatusCache: storyStatusCache), size: 50) {
                 AvatarView(url: item.avatar, size: 50)
             }
             .onTapGesture {

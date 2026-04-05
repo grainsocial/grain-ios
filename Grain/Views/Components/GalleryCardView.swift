@@ -94,6 +94,7 @@ private struct DoubleTapHeartView: View {
 struct GalleryCardView: View {
     @Environment(AuthManager.self) private var auth
     @Environment(StoryStatusCache.self) private var storyStatusCache
+    @Environment(ViewedStoryStorage.self) private var viewedStories
     @Environment(LabelDefinitionsCache.self) private var labelDefsCache
     @Binding var gallery: GrainGallery
     let client: XRPCClient
@@ -143,7 +144,7 @@ struct GalleryCardView: View {
         VStack(alignment: .leading, spacing: 0) {
             // Header — tappable for navigation
             HStack(spacing: 8) {
-                StoryRingView(hasStory: storyStatusCache.hasStory(for: gallery.creator.did), size: 32) {
+                StoryRingView(hasStory: storyStatusCache.hasStory(for: gallery.creator.did), viewed: viewedStories.hasViewedAll(did: gallery.creator.did, storyStatusCache: storyStatusCache), size: 32) {
                     AvatarView(url: gallery.creator.avatar, size: 32)
                 }
                 .onTapGesture {

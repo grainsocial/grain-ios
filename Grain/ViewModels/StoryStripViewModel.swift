@@ -5,6 +5,8 @@ import Foundation
 final class StoryStripViewModel {
     var authors: [GrainStoryAuthor] = []
     var isLoading = false
+    /// Bumped to trigger re-render without changing author order.
+    var version: Int = 0
 
     private let client: XRPCClient
 
@@ -22,5 +24,10 @@ final class StoryStripViewModel {
             // Silently fail — strip just won't show
         }
         isLoading = false
+    }
+
+    /// Signal that viewed state changed so views re-evaluate sort order.
+    func invalidate() {
+        version += 1
     }
 }

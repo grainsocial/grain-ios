@@ -8,6 +8,7 @@ enum ProfileViewMode: String, CaseIterable {
 struct ProfileView: View {
     @Namespace private var viewModeNS
     @Environment(AuthManager.self) private var auth
+    @Environment(ViewedStoryStorage.self) private var viewedStories
     @State private var showStoryViewer = false
     @State private var showAvatarOverlay = false
     @State private var viewModel: ProfileDetailViewModel
@@ -48,7 +49,7 @@ struct ProfileView: View {
                     VStack(spacing: 12) {
                         // Avatar + stats row
                         HStack(alignment: .center, spacing: 16) {
-                            StoryRingView(hasStory: !viewModel.stories.isEmpty, size: 80) {
+                            StoryRingView(hasStory: !viewModel.stories.isEmpty, viewed: viewedStories.hasViewedAll(authorDid: did, latestAt: viewModel.stories.last?.createdAt ?? ""), size: 80) {
                                 AvatarView(url: profile.avatar, size: 80)
                                     .liquidGlassCircle()
                             }
@@ -260,7 +261,7 @@ struct ProfileView: View {
                         authors: [GrainStoryAuthor(
                             profile: GrainProfile(cid: "", did: did, handle: profile.handle, displayName: profile.displayName, avatar: profile.avatar),
                             storyCount: viewModel.stories.count,
-                            latestAt: viewModel.stories.first?.createdAt ?? ""
+                            latestAt: viewModel.stories.last?.createdAt ?? ""
                         )],
                         startIndex: 0,
                         client: client,

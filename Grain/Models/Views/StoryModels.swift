@@ -15,7 +15,10 @@ struct GrainStory: Codable, Sendable, Identifiable {
     var crossPost: CrossPostInfo?
 
     var id: String { uri }
+    var storyUri: String { uri }
 }
+
+extension GrainStory: StoryIdentifiable {}
 
 /// social.grain.unspecced.getStoryAuthors#storyAuthor
 struct GrainStoryAuthor: Codable, Sendable, Identifiable {

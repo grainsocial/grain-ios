@@ -6,6 +6,7 @@ struct GrainApp: App {
     @State private var authManager = AuthManager()
     @State private var pushManager = PushManager()
     @State private var storyStatusCache = StoryStatusCache()
+    @State private var viewedStoryStorage = ViewedStoryStorage()
     @State private var labelDefsCache = LabelDefinitionsCache()
     @State private var pendingDeepLink: DeepLink?
 
@@ -17,9 +18,11 @@ struct GrainApp: App {
                         .environment(authManager)
                         .environment(pushManager)
                         .environment(storyStatusCache)
+                        .environment(viewedStoryStorage)
                         .environment(labelDefsCache)
                         .tint(Color("AccentColor"))
                         .onAppear {
+                            viewedStoryStorage.cleanup()
                             pushManager.configure(authManager: authManager)
                             appDelegate.pushManager = pushManager
                             appDelegate.onNotificationTap = { deepLink in

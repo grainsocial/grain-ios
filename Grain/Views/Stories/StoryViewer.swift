@@ -13,6 +13,7 @@ private final class StoryTimer {
         stop()
         progress = 0
         isRunning = true
+        halfwayFired = false
         task = Task {
             let tickInterval: TimeInterval = 0.05
             let totalTicks = Int(duration / tickInterval)
@@ -22,6 +23,10 @@ private final class StoryTimer {
                 } catch { return }
                 guard !Task.isCancelled else { return }
                 progress = CGFloat(tick) / CGFloat(totalTicks)
+                if !halfwayFired && progress >= 0.5 {
+                    halfwayFired = true
+                    onHalfway?()
+                }
             }
             guard !Task.isCancelled else { return }
             isRunning = false
@@ -36,11 +41,14 @@ private final class StoryTimer {
     }
 
     var onComplete: (() -> Void)?
+    var onHalfway: (() -> Void)?
+    private var halfwayFired = false
 }
 
 struct StoryViewer: View {
     @Environment(AuthManager.self) private var auth
     @Environment(LabelDefinitionsCache.self) private var labelDefsCache
+    @Environment(ViewedStoryStorage.self) private var viewedStories
     let authors: [GrainStoryAuthor]
     let client: XRPCClient
     var onProfileTap: ((String) -> Void)?
@@ -57,12 +65,18 @@ struct StoryViewer: View {
     @State private var lastNavTime: Date = .distantPast
     @State private var labelRevealed = false
 
-    init(authors: [GrainStoryAuthor], startIndex: Int = 0, client: XRPCClient, onProfileTap: ((String) -> Void)? = nil, onDismiss: (() -> Void)? = nil) {
+    init(authors: [GrainStoryAuthor], startIndex: Int = 0, startAuthorDid: String? = nil, client: XRPCClient, onProfileTap: ((String) -> Void)? = nil, onDismiss: (() -> Void)? = nil) {
         self.authors = authors
         self.client = client
         self.onProfileTap = onProfileTap
         self.onDismiss = onDismiss
-        _currentAuthorIndex = State(initialValue: startIndex)
+        let resolvedIndex: Int
+        if let did = startAuthorDid {
+            resolvedIndex = authors.firstIndex(where: { $0.profile.did == did }) ?? 0
+        } else {
+            resolvedIndex = startIndex
+        }
+        _currentAuthorIndex = State(initialValue: resolvedIndex)
     }
 
     private var currentStory: GrainStory? {
@@ -258,6 +272,7 @@ struct StoryViewer: View {
         }
         .task {
             timer.onComplete = { [self] in goToNext() }
+            timer.onHalfway = { [self] in markCurrentStoryViewed() }
             await loadStoriesForCurrentAuthor()
         }
     }
@@ -273,6 +288,7 @@ struct StoryViewer: View {
         guard !isLoadingStories, !stories.isEmpty else { return }
         guard !showReportSheet, !showDeleteConfirm else { return }
         guard Date().timeIntervalSince(lastNavTime) > 0.3 else { return }
+        markCurrentStoryViewed()
         timer.stop()
         lastNavTime = Date()
         if currentStoryIndex < stories.count - 1 {
@@ -336,7 +352,7 @@ struct StoryViewer: View {
         do {
             let response = try await client.getStories(actor: did, auth: auth.authContext())
             stories = response.stories
-            currentStoryIndex = 0
+            currentStoryIndex = viewedStories.firstUnviewedIndex(in: response.stories)
             labelRevealed = false
             let lr = storyLabelResult
             if lr.action == .none || lr.action == .badge {
@@ -346,6 +362,11 @@ struct StoryViewer: View {
             stories = []
         }
         isLoadingStories = false
+    }
+
+    private func markCurrentStoryViewed() {
+        guard let story = currentStory else { return }
+        viewedStories.markViewed(uri: story.uri, authorDid: story.creator.did, createdAt: story.createdAt)
     }
 
     private func deleteStory(_ story: GrainStory) async {

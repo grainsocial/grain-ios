@@ -3,10 +3,10 @@ import SwiftUI
 struct FeedView: View {
     @Environment(AuthManager.self) private var auth
     @Environment(StoryStatusCache.self) private var storyStatusCache
+    @Environment(ViewedStoryStorage.self) private var viewedStories
     @State private var prefsViewModel: FeedPreferencesViewModel
     @State private var storyViewModel: StoryStripViewModel
-    @State private var showStoryViewer = false
-    @State private var storyViewerStartIndex = 0
+    @State private var storyViewerDid: String?
     @State private var showStoryCreate = false
     @State private var deepLinkProfileDid: String?
     @State private var deepLinkGalleryUri: String?
@@ -25,6 +25,8 @@ struct FeedView: View {
     }
 
     var body: some View {
+        // Read version so Observation tracks it and re-renders on invalidate()
+        let _ = storyViewModel.version
         NavigationStack {
             ForEach(prefsViewModel.pinnedFeeds) { feed in
                 if feed.id == prefsViewModel.selectedFeedId {
@@ -34,9 +36,8 @@ struct FeedView: View {
                         userDID: auth.userDID,
                         storyAuthors: storyViewModel.authors,
                         userAvatar: auth.userAvatar,
-                        onStoryAuthorTap: { _, index in
-                            storyViewerStartIndex = index
-                            showStoryViewer = true
+                        onStoryAuthorTap: { author, _ in
+                            storyViewerDid = author.profile.did
                         },
                         onStoryCreateTap: { showStoryCreate = true },
                         onRefresh: { [storyStatusCache] in
@@ -64,21 +65,35 @@ struct FeedView: View {
             .onAppear {
                 Task { await prefsViewModel.refresh(auth: auth.authContext()) }
             }
-            .customFullScreenCover(isPresented: $showStoryViewer) {
-                StoryViewer(
-                    authors: storyViewModel.authors,
-                    startIndex: storyViewerStartIndex,
-                    client: client,
-                    onProfileTap: { did in
-                        showStoryViewer = false
-                        deepLinkProfileDid = did
-                    },
-                    onDismiss: { showStoryViewer = false }
-                )
+            .onChange(of: storyViewerDid) {
+                if storyViewerDid == nil {
+                    storyViewModel.invalidate()
+                }
+            }
+            .fullScreenCover(isPresented: Binding(
+                get: { storyViewerDid != nil },
+                set: { if !$0 { storyViewerDid = nil } }
+            )) {
+                if let did = storyViewerDid {
+                    StoryViewer(
+                        authors: storyViewModel.authors,
+                        startAuthorDid: did,
+                        client: client,
+                        onProfileTap: { profileDid in
+                            storyViewerDid = nil
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                deepLinkProfileDid = profileDid
+                            }
+                        },
+                        onDismiss: {
+                            storyViewerDid = nil
+                        }
+                    )
+                }
             }
             .sheet(isPresented: $showStoryCreate) {
                 StoryCreateView(client: client) {
-                    Task { await storyViewModel.load(auth: auth.authContext()) }
+                    Task { await storyViewModel.load(auth: auth.authContext(), storyStatusCache: storyStatusCache) }
                 }
             }
             .navigationDestination(item: $deepLinkProfileDid) { did in
@@ -186,7 +201,7 @@ struct FeedView: View {
                 deepLinkStoryAuthor = GrainStoryAuthor(
                     profile: creator,
                     storyCount: count,
-                    latestAt: response.stories.first?.createdAt ?? ""
+                    latestAt: response.stories.last?.createdAt ?? ""
                 )
             } else {
                 // Story expired — fall back to profile

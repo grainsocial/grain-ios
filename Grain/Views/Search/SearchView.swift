@@ -3,6 +3,7 @@ import SwiftUI
 struct SearchView: View {
     @Environment(AuthManager.self) private var auth
     @Environment(StoryStatusCache.self) private var storyStatusCache
+    @Environment(ViewedStoryStorage.self) private var viewedStories
     @State private var viewModel: SearchViewModel
     @State private var searchText = ""
     @State private var searchNavigationUri: String?
@@ -53,7 +54,7 @@ struct SearchView: View {
                                         selectedProfileDid = profile.did
                                     } label: {
                                         HStack {
-                                            StoryRingView(hasStory: storyStatusCache.hasStory(for: profile.did), size: 40) {
+                                            StoryRingView(hasStory: storyStatusCache.hasStory(for: profile.did), viewed: viewedStories.hasViewedAll(did: profile.did, storyStatusCache: storyStatusCache), size: 40) {
                                                 AvatarView(url: profile.avatar, size: 40)
                                             }
                                             VStack(alignment: .leading) {
