@@ -110,7 +110,7 @@ struct FollowListView: View {
 
     private func rowContent(item: FollowListItem) -> some View {
         HStack(alignment: .center, spacing: 14) {
-            StoryRingView(hasStory: storyStatusCache.hasStory(for: item.did), viewed: viewedStories.hasViewedAll(did: item.did, storyStatusCache: storyStatusCache), size: 50) {
+            StoryRingView(hasStory: storyStatusCache.hasStory(for: item.did), viewed: item.did != auth.userDID && viewedStories.hasViewedAll(did: item.did, storyStatusCache: storyStatusCache), size: 50) {
                 AvatarView(url: item.avatar, size: 50)
             }
             .onTapGesture {

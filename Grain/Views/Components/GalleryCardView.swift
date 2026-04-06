@@ -157,7 +157,7 @@ struct GalleryCardView: View {
     private var cardHeader: some View {
         HStack(spacing: 8) {
             let hasStory = storyStatusCache.hasStory(for: gallery.creator.did)
-            let allViewed = viewedStories.hasViewedAll(did: gallery.creator.did, storyStatusCache: storyStatusCache)
+            let allViewed = gallery.creator.did != auth.userDID && viewedStories.hasViewedAll(did: gallery.creator.did, storyStatusCache: storyStatusCache)
             StoryRingView(hasStory: hasStory, viewed: allViewed, size: 32) {
                 AvatarView(url: gallery.creator.avatar, size: 32)
             }

@@ -89,6 +89,7 @@ struct GalleryDetailView: View {
                             ForEach(threadedComments, id: \.root.id) { thread in
                                 CommentRow(
                                     comment: thread.root,
+                                    userDID: auth.userDID,
                                     isOwn: thread.root.author.did == auth.userDID,
                                     isReply: false,
                                     onProfileTap: { did in selectedProfileDid = did },
@@ -101,6 +102,7 @@ struct GalleryDetailView: View {
                                 ForEach(thread.replies) { reply in
                                     CommentRow(
                                         comment: reply,
+                                        userDID: auth.userDID,
                                         isOwn: reply.author.did == auth.userDID,
                                         isReply: true,
                                         onProfileTap: { did in selectedProfileDid = did },
@@ -308,6 +310,7 @@ struct CommentRow: View {
     @Environment(StoryStatusCache.self) private var storyStatusCache
     @Environment(ViewedStoryStorage.self) private var viewedStories
     let comment: GrainComment
+    let userDID: String?
     var isOwn: Bool = false
     var isReply: Bool = false
     var onProfileTap: ((String) -> Void)?
@@ -321,7 +324,7 @@ struct CommentRow: View {
             let avatarSize: CGFloat = isReply ? 24 : 28
             StoryRingView(
                 hasStory: storyStatusCache.hasStory(for: comment.author.did),
-                viewed: viewedStories.hasViewedAll(did: comment.author.did, storyStatusCache: storyStatusCache),
+                viewed: comment.author.did != userDID && viewedStories.hasViewedAll(did: comment.author.did, storyStatusCache: storyStatusCache),
                 size: avatarSize
             ) {
                 AvatarView(url: comment.author.avatar, size: avatarSize)
