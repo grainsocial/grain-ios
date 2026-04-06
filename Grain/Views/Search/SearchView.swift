@@ -25,7 +25,7 @@ struct SearchView: View {
         NavigationStack {
             Group {
                 if viewModel.searchText.isEmpty {
-                    if recentSearches.profiles.isEmpty && recentSearches.textSearches.isEmpty {
+                    if recentSearches.profiles.isEmpty, recentSearches.textSearches.isEmpty {
                         ContentUnavailableView("Search", systemImage: "magnifyingglass", description: Text("Search for galleries and profiles"))
                     } else {
                         recentSearchesView
@@ -55,7 +55,11 @@ struct SearchView: View {
                                         selectedProfileDid = profile.did
                                     } label: {
                                         HStack {
-                                            StoryRingView(hasStory: storyStatusCache.hasStory(for: profile.did), viewed: viewedStories.hasViewedAll(did: profile.did, storyStatusCache: storyStatusCache), size: 40) {
+                                            StoryRingView(
+                                                hasStory: storyStatusCache.hasStory(for: profile.did),
+                                                viewed: profile.did != auth.userDID && viewedStories.hasViewedAll(did: profile.did, storyStatusCache: storyStatusCache),
+                                                size: 40
+                                            ) {
                                                 AvatarView(url: profile.avatar, size: 40)
                                             }
                                             VStack(alignment: .leading) {
@@ -127,7 +131,6 @@ struct SearchView: View {
         }
     }
 
-    @ViewBuilder
     private var recentSearchesView: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
@@ -197,4 +200,11 @@ struct SearchView: View {
             .padding(.top)
         }
     }
+}
+
+#Preview {
+    SearchView(client: XRPCClient(baseURL: AuthManager.serverURL))
+        .environment(AuthManager())
+        .environment(StoryStatusCache())
+        .environment(ViewedStoryStorage())
 }

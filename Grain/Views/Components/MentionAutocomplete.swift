@@ -4,7 +4,9 @@ struct MentionSuggestion: Identifiable, Equatable {
     let handle: String
     let displayName: String?
     let avatar: String?
-    var id: String { handle }
+    var id: String {
+        handle
+    }
 }
 
 /// Detects @mention queries in text and provides autocomplete suggestions.
@@ -12,7 +14,10 @@ struct MentionSuggestion: Identifiable, Equatable {
 @MainActor
 final class MentionAutocompleteState {
     var suggestions: [MentionSuggestion] = []
-    var isActive: Bool { activeQuery != nil }
+    var isActive: Bool {
+        activeQuery != nil
+    }
+
     private(set) var activeQuery: String?
     private var searchTask: Task<Void, Never>?
 
@@ -52,8 +57,8 @@ final class MentionAutocompleteState {
     private func extractMentionQuery(from text: String) -> String? {
         // Find the last @ that's either at the start or preceded by whitespace
         guard let atIndex = text.lastIndex(of: "@") else { return nil }
-        let beforeAt = text[text.startIndex..<atIndex]
-        if !beforeAt.isEmpty && !beforeAt.last!.isWhitespace { return nil }
+        let beforeAt = text[text.startIndex ..< atIndex]
+        if !beforeAt.isEmpty, !beforeAt.last!.isWhitespace { return nil }
         let after = String(text[text.index(after: atIndex)...])
         // Must not contain spaces (still typing the handle)
         guard !after.contains(" ") else { return nil }
@@ -78,7 +83,8 @@ final class MentionAutocompleteState {
 
         guard let (data, _) = try? await URLSession.shared.data(from: url),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let actors = json["actors"] as? [[String: Any]] else {
+              let actors = json["actors"] as? [[String: Any]]
+        else {
             return
         }
 
@@ -100,38 +106,51 @@ struct MentionSuggestionOverlay: View {
     let onSelect: (MentionSuggestion) -> Void
 
     var body: some View {
-        if state.isActive && !state.suggestions.isEmpty {
+        if state.isActive, !state.suggestions.isEmpty {
             ScrollView(.horizontal, showsIndicators: false) {
-                    GlassEffectContainer(spacing: 8) {
-                        HStack(spacing: 8) {
-                            ForEach(state.suggestions) { suggestion in
-                                Button {
-                                    onSelect(suggestion)
-                                } label: {
-                                    HStack(spacing: 6) {
-                                        AvatarView(url: suggestion.avatar, size: 24)
-                                        VStack(alignment: .leading, spacing: 0) {
-                                            Text(suggestion.displayName ?? suggestion.handle)
-                                                .font(.caption.weight(.medium))
-                                                .foregroundStyle(.primary)
-                                                .lineLimit(1)
-                                            Text("@\(suggestion.handle)")
-                                                .font(.caption2)
-                                                .foregroundStyle(.secondary)
-                                                .lineLimit(1)
-                                        }
+                GlassEffectContainer(spacing: 8) {
+                    HStack(spacing: 8) {
+                        ForEach(state.suggestions) { suggestion in
+                            Button {
+                                onSelect(suggestion)
+                            } label: {
+                                HStack(spacing: 6) {
+                                    AvatarView(url: suggestion.avatar, size: 24)
+                                    VStack(alignment: .leading, spacing: 0) {
+                                        Text(suggestion.displayName ?? suggestion.handle)
+                                            .font(.caption.weight(.medium))
+                                            .foregroundStyle(.primary)
+                                            .lineLimit(1)
+                                        Text("@\(suggestion.handle)")
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(1)
                                     }
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 6)
-                                    .glassEffect(.regular.interactive())
                                 }
-                                .buttonStyle(.plain)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .glassEffect(.regular.interactive())
                             }
+                            .buttonStyle(.plain)
                         }
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
                 }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+            }
         }
     }
+}
+
+#Preview {
+    let state = MentionAutocompleteState()
+    state.suggestions = [
+        MentionSuggestion(handle: "alice.grain.social", displayName: "Alice", avatar: nil),
+        MentionSuggestion(handle: "bob.grain.social", displayName: "Bob", avatar: nil),
+    ]
+    return VStack {
+        Spacer()
+        MentionSuggestionOverlay(state: state) { _ in }
+    }
+    .frame(height: 200)
 }

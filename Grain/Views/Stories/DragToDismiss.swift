@@ -17,7 +17,8 @@ final class FadeDismissHandle {
             view.transform = CGAffineTransform(scaleX: 0.92, y: 0.92)
         }) { _ in
             if let vc = view.findViewController(),
-               let presented = vc.presentedViewController ?? (vc.isBeingPresented ? vc : nil) {
+               let presented = vc.presentedViewController ?? (vc.isBeingPresented ? vc : nil)
+            {
                 presented.dismiss(animated: false) {
                     view.alpha = 1
                     view.transform = .identity
@@ -53,7 +54,7 @@ struct DragToDismissInstaller: UIViewRepresentable {
         return view
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {
+    func updateUIView(_: UIView, context: Context) {
         context.coordinator.onDismiss = onDismiss
         context.coordinator.onDragStart = onDragStart
         context.coordinator.onDragCancel = onDragCancel
@@ -90,7 +91,14 @@ struct DragToDismissInstaller: UIViewRepresentable {
         private var panGesture: UIPanGestureRecognizer?
         private var direction: DragDirection = .none
 
-        init(handle: FadeDismissHandle, onDismiss: @escaping () -> Void, onDragStart: @escaping () -> Void, onDragCancel: @escaping () -> Void, onSwipeLeft: @escaping () -> Void, onSwipeRight: @escaping () -> Void) {
+        init(
+            handle: FadeDismissHandle,
+            onDismiss: @escaping () -> Void,
+            onDragStart: @escaping () -> Void,
+            onDragCancel: @escaping () -> Void,
+            onSwipeLeft: @escaping () -> Void,
+            onSwipeRight: @escaping () -> Void
+        ) {
             self.handle = handle
             self.onDismiss = onDismiss
             self.onDragStart = onDragStart
@@ -112,9 +120,9 @@ struct DragToDismissInstaller: UIViewRepresentable {
             panGesture = pan
         }
 
-        // Allow SwiftUI tap gestures to work simultaneously
-        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
-            return !(other is UIPanGestureRecognizer)
+        /// Allow SwiftUI tap gestures to work simultaneously
+        func gestureRecognizer(_: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+            !(other is UIPanGestureRecognizer)
         }
 
         @objc private func handlePan(_ gesture: UIPanGestureRecognizer) {
@@ -132,7 +140,7 @@ struct DragToDismissInstaller: UIViewRepresentable {
                     let absX = abs(translation.x)
                     let absY = abs(translation.y)
                     if absX > 15 || absY > 15 {
-                        if absY > absX && translation.y > 0 {
+                        if absY > absX, translation.y > 0 {
                             direction = .vertical
                             onDragStart()
                         } else if absX > absY {
@@ -157,7 +165,30 @@ struct DragToDismissInstaller: UIViewRepresentable {
 
                     let dismissThreshold = view.bounds.height * 0.35
                     if ty > dismissThreshold || velocity.y > 1200 {
-                        handle.fadeDismiss()
+                        // Throw downward off screen
+                        let screenHeight = view.bounds.height
+                        let speed = max(velocity.y, 800)
+                        let remaining = screenHeight - ty + 100
+                        let duration = min(max(Double(remaining / speed), 0.15), 0.3)
+                        UIView.animate(withDuration: duration, delay: 0, options: .curveEaseIn) {
+                            view.transform = CGAffineTransform(translationX: 0, y: screenHeight + 100)
+                                .scaledBy(x: 0.9, y: 0.9)
+                        } completion: { _ in
+                            if let vc = view.findViewController(),
+                               let presented = vc.presentedViewController ?? (vc.isBeingPresented ? vc : nil)
+                            {
+                                presented.dismiss(animated: false) {
+                                    view.alpha = 1
+                                    view.transform = .identity
+                                    view.layer.cornerRadius = 0
+                                    view.clipsToBounds = false
+                                    self.onDismiss()
+                                }
+                            } else {
+                                view.isHidden = true
+                                self.onDismiss()
+                            }
+                        }
                     } else {
                         // Spring back
                         UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 0.85, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
@@ -194,5 +225,15 @@ private extension UIView {
             responder = next
         }
         return nil
+    }
+}
+
+#Preview {
+    // DragToDismiss is a UIKit-backed gesture modifier — preview shows it applied.
+    @Previewable @State var dismissed = false
+    ZStack {
+        Color.black.ignoresSafeArea()
+        Text(dismissed ? "Dismissed" : "Drag down to dismiss")
+            .foregroundStyle(.white)
     }
 }

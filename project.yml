@@ -9,7 +9,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    DEVELOPMENT_TEAM: YN68LN9T7Z
+    DEVELOPMENT_TEAM: 54P9BCDR92
 
 packages:
   Nuke:
@@ -41,6 +41,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: social.grain.grain
         MARKETING_VERSION: "1.0.0"
         CURRENT_PROJECT_VERSION: "38"
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_ASSET_PATHS: "\"$(SRCROOT)/Grain/Preview Content\""
     dependencies:
       - package: Nuke
         product: Nuke
@@ -63,8 +65,7 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
         NSCameraUsageDescription: Grain needs camera access to take photos for your stories and galleries.
-        NSAppTransportSecurity:
-          NSAllowsLocalNetworking: true
+        NSPhotoLibraryUsageDescription: Grain needs photo library access to select photos for your galleries and stories.
         UIAppFonts:
           - Syne-Variable.ttf
         UILaunchScreen: {}
@@ -74,5 +75,8 @@ targets:
     platform: iOS
     sources:
       - path: GrainTests
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: Grain

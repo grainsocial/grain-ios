@@ -8,7 +8,9 @@ struct LocationItem: Codable, Sendable, Identifiable {
     let name: String
     let h3Index: String
     let galleryCount: Int
-    var id: String { h3Index }
+    var id: String {
+        h3Index
+    }
 }
 
 struct GetCamerasResponse: Codable, Sendable {
@@ -18,7 +20,9 @@ struct GetCamerasResponse: Codable, Sendable {
 struct CameraItem: Codable, Sendable, Identifiable {
     let camera: String
     let photoCount: Int
-    var id: String { camera }
+    var id: String {
+        camera
+    }
 }
 
 extension XRPCClient {

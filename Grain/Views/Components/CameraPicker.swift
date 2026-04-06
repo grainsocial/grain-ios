@@ -12,7 +12,7 @@ struct CameraPicker: UIViewControllerRepresentable {
         return picker
     }
 
-    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+    func updateUIViewController(_: UIImagePickerController, context _: Context) {}
 
     func makeCoordinator() -> Coordinator {
         Coordinator(dismiss: dismiss, onImagePicked: onImagePicked)
@@ -27,15 +27,25 @@ struct CameraPicker: UIViewControllerRepresentable {
             self.onImagePicked = onImagePicked
         }
 
-        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+        func imagePickerController(_: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
             if let image = info[.originalImage] as? UIImage {
                 onImagePicked(image)
             }
             dismiss()
         }
 
-        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+        func imagePickerControllerDidCancel(_: UIImagePickerController) {
             dismiss()
         }
     }
+}
+
+#Preview {
+    // CameraPicker wraps UIImagePickerController — camera unavailable in simulator.
+    // Preview shows the picker presented over a placeholder.
+    @Previewable @State var show = true
+    Color.gray.opacity(0.1)
+        .sheet(isPresented: $show) {
+            CameraPicker { _ in }
+        }
 }

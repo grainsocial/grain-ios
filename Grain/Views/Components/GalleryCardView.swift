@@ -1,3 +1,4 @@
+import Nuke
 import os
 import SwiftUI
 
@@ -22,7 +23,7 @@ private final class HeartAnimationState: Identifiable {
 
     init(position: CGPoint) {
         self.position = position
-        self.rotation = Double.random(in: -20...20)
+        rotation = Double.random(in: -20 ... 20)
     }
 
     func start() {
@@ -110,6 +111,7 @@ struct GalleryCardView: View {
     @State private var showCopiedToast = false
     @State private var shareWiggle = false
     @State private var didLongPressShare = false
+    @State private var prefetcher = ImagePrefetcher()
 
     private var isFavorited: Bool {
         gallery.viewer?.fav != nil
@@ -126,7 +128,7 @@ struct GalleryCardView: View {
 
     var body: some View {
         let lr = labelResult
-        if (lr.action == .hide || lr.action == .warnContent) && !gallery.labelRevealed {
+        if lr.action == .hide || lr.action == .warnContent, !gallery.labelRevealed {
             VStack(spacing: 0) {
                 ContentWarningOverlay(name: lr.name, action: lr.action) {
                     gallery.labelRevealed = true
@@ -138,294 +140,337 @@ struct GalleryCardView: View {
         }
     }
 
-    @ViewBuilder
     private func cardContent(lr: LabelResolution) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Header — tappable for navigation
-            HStack(spacing: 8) {
-                StoryRingView(hasStory: storyStatusCache.hasStory(for: gallery.creator.did), viewed: viewedStories.hasViewedAll(did: gallery.creator.did, storyStatusCache: storyStatusCache), size: 32) {
-                    AvatarView(url: gallery.creator.avatar, size: 32)
-                }
-                .onTapGesture {
-                    if let author = storyStatusCache.author(for: gallery.creator.did) {
-                        onStoryTap?(author)
-                    } else {
-                        onProfileTap?(gallery.creator.did)
-                    }
-                }
-                .onLongPressGesture {
-                    onProfileTap?(gallery.creator.did)
-                }
-
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 4) {
-                        Text(gallery.creator.displayName ?? gallery.creator.handle)
-                            .font(.subheadline.weight(.semibold))
-                            .lineLimit(1)
-                        Text("@\(gallery.creator.handle)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                        Text("· \(DateFormatting.relativeTime(gallery.createdAt ?? gallery.indexedAt))")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .fixedSize()
-                    }
-                    if let location = gallery.location, let locationName = location.name ?? gallery.address?.locality {
-                        Text(locationName)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .onTapGesture {
-                                onLocationTap?(location.value, locationName)
-                            }
-                    }
-                }
-
-                Spacer()
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .contentShape(Rectangle())
-            .onTapGesture { onProfileTap?(gallery.creator.did) }
-
-            // Photo carousel — tappable for navigation
+            cardHeader
             if let photos = gallery.items, !photos.isEmpty {
-                let hasPortrait = photos.contains { $0.aspectRatio.ratio < 1 }
-                let hasMixedRatios = Set(photos.map { Int($0.aspectRatio.ratio * 100) }).count > 1
-                let carouselRatio = hasMixedRatios
-                    ? max(photos.map(\.aspectRatio.ratio).min() ?? 1, 0.56)
-                    : photos[currentPage].aspectRatio.ratio
-
-                GeometryReader { geo in
-                    let height = geo.size.width / carouselRatio
-
-                    ZStack(alignment: .bottom) {
-                        TabView(selection: $currentPage) {
-                            ForEach(Array(photos.enumerated()), id: \.element.id) { index, photo in
-                                ZoomableImage(
-                                    url: photo.fullsize,
-                                    aspectRatio: photo.aspectRatio.ratio,
-                                    onDoubleTap: { point in doubleTapLike(at: point) }
-                                )
-                                .tag(index)
-                            }
-                        }
-                        .tabViewStyle(.page(indexDisplayMode: .never))
-                        .overlay {
-                            if lr.action == .warnMedia && !gallery.labelRevealed {
-                                Rectangle().fill(Color(.secondarySystemBackground))
-                            }
-                        }
-                        .allowsHitTesting(lr.action != .warnMedia || gallery.labelRevealed)
-
-                    // Page indicator (abbreviated like web — max 5 visible dots)
-                    if photos.count > 1 {
-                        HStack(spacing: 5) {
-                            let total = photos.count
-                            let maxVisible = 5
-                            let start = total <= maxVisible ? 0 : min(max(currentPage - 2, 0), total - maxVisible)
-                            let end = total <= maxVisible ? total : start + maxVisible
-
-                            ForEach(start..<end, id: \.self) { index in
-                                let distance = abs(index - currentPage)
-                                let currentIsLandscape = photos[currentPage].aspectRatio.ratio >= 1
-                                let dotColor: Color = hasPortrait && currentIsLandscape ? .secondary : .white
-                                Circle()
-                                    .fill(dotColor.opacity(index == currentPage ? 1.0 : distance == 1 ? 0.5 : distance == 2 ? 0.3 : 0.2))
-                                    .frame(
-                                        width: distance <= 1 ? 6 : distance == 2 ? 4 : 3,
-                                        height: distance <= 1 ? 6 : distance == 2 ? 4 : 3
-                                    )
-                                    .animation(.easeInOut(duration: 0.2), value: currentPage)
-                            }
-                        }
-                        .padding(.vertical, 8)
-                    }
-
-                    // Alt text overlay — centered, tap to dismiss
-                    if showingAlt, let alt = photos[currentPage].alt, !alt.isEmpty {
-                        Color.black.opacity(0.6)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .onTapGesture {
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    showingAlt = false
-                                }
-                            }
-                        Text(alt)
-                            .font(.subheadline)
-                            .foregroundStyle(.white)
-                            .multilineTextAlignment(.center)
-                            .padding(20)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .allowsHitTesting(false)
-                    }
-
-                    // ALT button — bottom right
-                    if let alt = photos[currentPage].alt, !alt.isEmpty {
-                        VStack {
-                            Spacer()
-                            HStack {
-                                Spacer()
-                                Button {
-                                    withAnimation(.easeInOut(duration: 0.2)) {
-                                        showingAlt.toggle()
-                                    }
-                                } label: {
-                                    Text("ALT")
-                                        .font(.caption2.weight(.bold))
-                                        .padding(.horizontal, 6)
-                                        .padding(.vertical, 3)
-                                        .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 4))
-                                        .foregroundStyle(.white)
-                                }
-                            }
-                            .padding(8)
-                        }
-                    }
-
-                    // Double-tap heart animations
-                    ForEach(hearts) { heart in
-                        DoubleTapHeartView(state: heart)
-                            .onChange(of: heart.isComplete) {
-                                hearts.removeAll { $0.isComplete }
-                            }
-                    }
-
-                    // Media warning overlay
-                    if lr.action == .warnMedia && !gallery.labelRevealed {
-                        MediaWarningOverlay(name: lr.name) {
-                            withAnimation { gallery.labelRevealed = true }
-                        }
-                    }
-                    }
-                    .frame(height: height)
-                }
-                .aspectRatio(carouselRatio, contentMode: .fit)
-                .onChange(of: currentPage) {
-                    showingAlt = false
-                }
+                photoCarousel(photos: photos, lr: lr)
             }
-
-            // Engagement row
-            HStack(spacing: 16) {
-                Button {
-                    guard !isFavoriting else { return }
-                    isFavoriting = true
-                    Task {
-                        await toggleFavorite()
-                        isFavoriting = false
-                    }
-                } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: isFavorited ? "heart.fill" : "heart")
-                            .font(.system(size: 22))
-                        Text("\(gallery.favCount ?? 0)")
-                    }
-                }
-                .foregroundStyle(isFavorited ? Color("AccentColor") : .secondary)
-
-                Button {
-                    onNavigate()
-                } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: "bubble.right")
-                            .font(.system(size: 20))
-                        Text("\(gallery.commentCount ?? 0)")
-                    }
-                }
-                .foregroundStyle(.secondary)
-
-                ShareLink(item: galleryShareURL) {
-                    Image(systemName: "paperplane")
-                        .font(.system(size: 20))
-                        .rotationEffect(.degrees(shareWiggle ? -15 : 0))
-                        .animation(
-                            shareWiggle
-                                ? .easeInOut(duration: 0.08).repeatCount(5, autoreverses: true)
-                                : .default,
-                            value: shareWiggle
-                        )
-                }
-                .foregroundStyle(.secondary)
-                .disabled(didLongPressShare)
-                .simultaneousGesture(
-                    LongPressGesture(minimumDuration: 0.5)
-                        .onEnded { _ in
-                            didLongPressShare = true
-                            UIPasteboard.general.url = galleryShareURL
-                            let generator = UIImpactFeedbackGenerator(style: .medium)
-                            generator.impactOccurred()
-                            shareWiggle = true
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                                shareWiggle = false
-                            }
-                            showCopiedToast = true
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                                showCopiedToast = false
-                            }
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                                didLongPressShare = false
-                            }
-                        }
-                )
-
-                Spacer()
-            }
-            .font(.subheadline)
-            .padding(.horizontal, 12)
-            .padding(.top, 12)
-            .padding(.bottom, 4)
-
-            // EXIF info
-            if let photos = gallery.items, !photos.isEmpty,
-               let exif = photos[currentPage].exif,
-               exif.hasDisplayableData {
-                ExifInfoView(exif: exif)
-                    .padding(.horizontal, 12)
-                    .padding(.top, 8)
-            }
-
-            // Title & description
-            VStack(alignment: .leading, spacing: 4) {
-                Text(gallery.title ?? "")
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
-                    .contentShape(Rectangle())
-                    .onTapGesture { onNavigate() }
-
-                if let description = gallery.description, !description.isEmpty {
-                    ExpandableDescriptionView(
-                        text: description,
-                        onMentionTap: onProfileTap,
-                        onHashtagTap: onHashtagTap
-                    )
-                }
-
-                if lr.action == .badge {
-                    LabelBadge(name: lr.name)
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.top, 8)
-            .padding(.bottom, 16)
+            engagementRow
+            captionSection(lr: lr)
         }
         .overlay {
-            if showCopiedToast {
-                HStack(spacing: 6) {
-                    Image(systemName: "doc.on.doc.fill")
-                        .font(.caption)
-                    Text("Link copied")
-                        .font(.subheadline.weight(.medium))
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(.ultraThinMaterial, in: Capsule())
-                .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
-                .transition(.scale.combined(with: .opacity))
-            }
+            copiedToastOverlay
         }
         .animation(.spring(response: 0.4, dampingFraction: 0.7), value: showCopiedToast)
+    }
+
+    private var cardHeader: some View {
+        HStack(spacing: 8) {
+            let hasStory = storyStatusCache.hasStory(for: gallery.creator.did)
+            let allViewed = gallery.creator.did != auth.userDID && viewedStories.hasViewedAll(did: gallery.creator.did, storyStatusCache: storyStatusCache)
+            StoryRingView(hasStory: hasStory, viewed: allViewed, size: 32) {
+                AvatarView(url: gallery.creator.avatar, size: 32)
+            }
+            .onTapGesture {
+                if let author = storyStatusCache.author(for: gallery.creator.did) {
+                    onStoryTap?(author)
+                } else {
+                    onProfileTap?(gallery.creator.did)
+                }
+            }
+            .onLongPressGesture {
+                onProfileTap?(gallery.creator.did)
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 4) {
+                    Text(gallery.creator.displayName ?? gallery.creator.handle)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                    Text("@\(gallery.creator.handle)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Text("· \(DateFormatting.relativeTime(gallery.createdAt ?? gallery.indexedAt))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize()
+                }
+                if let location = gallery.location, let locationName = location.name ?? gallery.address?.locality {
+                    Text(locationName)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .onTapGesture {
+                            onLocationTap?(location.value, locationName)
+                        }
+                }
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .contentShape(Rectangle())
+        .onTapGesture { onProfileTap?(gallery.creator.did) }
+    }
+
+    @ViewBuilder
+    private func photoCarousel(photos: [GrainPhoto], lr: LabelResolution) -> some View {
+        let hasPortrait = photos.contains { $0.aspectRatio.ratio < 1 }
+        let hasMixedRatios = Set(photos.map { Int($0.aspectRatio.ratio * 100) }).count > 1
+        let carouselRatio = hasMixedRatios
+            ? max(photos.map(\.aspectRatio.ratio).min() ?? 1, 0.56)
+            : photos[currentPage].aspectRatio.ratio
+
+        GeometryReader { geo in
+            let height = geo.size.width / carouselRatio
+
+            ZStack(alignment: .bottom) {
+                TabView(selection: $currentPage) {
+                    ForEach(Array(photos.enumerated()), id: \.element.id) { index, photo in
+                        ZoomableImage(
+                            url: photo.fullsize,
+                            thumbURL: photo.thumb,
+                            aspectRatio: photo.aspectRatio.ratio,
+                            onDoubleTap: { point in doubleTapLike(at: point) }
+                        )
+                        .tag(index)
+                    }
+                }
+                .tabViewStyle(.page(indexDisplayMode: .never))
+                .overlay {
+                    if lr.action == .warnMedia, !gallery.labelRevealed {
+                        Rectangle().fill(Color(.secondarySystemBackground))
+                    }
+                }
+                .allowsHitTesting(lr.action != .warnMedia || gallery.labelRevealed)
+
+                pageIndicator(photos: photos, hasPortrait: hasPortrait)
+                altTextOverlay(photos: photos)
+                altButton(photos: photos)
+
+                // Double-tap heart animations
+                ForEach(hearts) { heart in
+                    DoubleTapHeartView(state: heart)
+                        .onChange(of: heart.isComplete) {
+                            hearts.removeAll { $0.isComplete }
+                        }
+                }
+
+                // Media warning overlay
+                if lr.action == .warnMedia, !gallery.labelRevealed {
+                    MediaWarningOverlay(name: lr.name) {
+                        withAnimation { gallery.labelRevealed = true }
+                    }
+                }
+            }
+            .frame(height: height)
+        }
+        .aspectRatio(carouselRatio, contentMode: .fit)
+        .onAppear {
+            prefetchCarousel(photos: photos, page: 0)
+        }
+        .onChange(of: currentPage) {
+            showingAlt = false
+            prefetchCarousel(photos: photos, page: currentPage)
+        }
+        .onDisappear {
+            prefetcher.stopPrefetching()
+        }
+    }
+
+    @ViewBuilder
+    private func pageIndicator(photos: [GrainPhoto], hasPortrait: Bool) -> some View {
+        if photos.count > 1 {
+            HStack(spacing: 5) {
+                let total = photos.count
+                let maxVisible = 5
+                let start = total <= maxVisible ? 0 : min(max(currentPage - 2, 0), total - maxVisible)
+                let end = total <= maxVisible ? total : start + maxVisible
+
+                ForEach(start ..< end, id: \.self) { index in
+                    let distance = abs(index - currentPage)
+                    let currentIsLandscape = photos[currentPage].aspectRatio.ratio >= 1
+                    let dotColor: Color = hasPortrait && currentIsLandscape ? .secondary : .white
+                    Circle()
+                        .fill(dotColor.opacity(index == currentPage ? 1.0 : distance == 1 ? 0.5 : distance == 2 ? 0.3 : 0.2))
+                        .frame(
+                            width: distance <= 1 ? 6 : distance == 2 ? 4 : 3,
+                            height: distance <= 1 ? 6 : distance == 2 ? 4 : 3
+                        )
+                        .animation(.easeInOut(duration: 0.2), value: currentPage)
+                }
+            }
+            .padding(.vertical, 8)
+        }
+    }
+
+    @ViewBuilder
+    private func altTextOverlay(photos: [GrainPhoto]) -> some View {
+        if showingAlt, let alt = photos[currentPage].alt, !alt.isEmpty {
+            Color.black.opacity(0.6)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .onTapGesture {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showingAlt = false
+                    }
+                }
+            Text(alt)
+                .font(.subheadline)
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+                .padding(20)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .allowsHitTesting(false)
+        }
+    }
+
+    @ViewBuilder
+    private func altButton(photos: [GrainPhoto]) -> some View {
+        if let alt = photos[currentPage].alt, !alt.isEmpty {
+            VStack {
+                Spacer()
+                HStack {
+                    Spacer()
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showingAlt.toggle()
+                        }
+                    } label: {
+                        Text("ALT")
+                            .font(.caption2.weight(.bold))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 4))
+                            .foregroundStyle(.white)
+                    }
+                }
+                .padding(8)
+            }
+        }
+    }
+
+    private var engagementRow: some View {
+        HStack(spacing: 16) {
+            Button {
+                guard !isFavoriting else { return }
+                isFavoriting = true
+                Task {
+                    await toggleFavorite()
+                    isFavoriting = false
+                }
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: isFavorited ? "heart.fill" : "heart")
+                        .font(.system(size: 22))
+                    Text("\(gallery.favCount ?? 0)")
+                }
+            }
+            .foregroundStyle(isFavorited ? Color("AccentColor") : .secondary)
+
+            Button {
+                onNavigate()
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "bubble.right")
+                        .font(.system(size: 20))
+                    Text("\(gallery.commentCount ?? 0)")
+                }
+            }
+            .foregroundStyle(.secondary)
+
+            ShareLink(item: galleryShareURL) {
+                Image(systemName: "paperplane")
+                    .font(.system(size: 20))
+                    .rotationEffect(.degrees(shareWiggle ? -15 : 0))
+                    .animation(
+                        shareWiggle
+                            ? .easeInOut(duration: 0.08).repeatCount(5, autoreverses: true)
+                            : .default,
+                        value: shareWiggle
+                    )
+            }
+            .foregroundStyle(.secondary)
+            .disabled(didLongPressShare)
+            .simultaneousGesture(
+                LongPressGesture(minimumDuration: 0.5)
+                    .onEnded { _ in
+                        didLongPressShare = true
+                        UIPasteboard.general.url = galleryShareURL
+                        let generator = UIImpactFeedbackGenerator(style: .medium)
+                        generator.impactOccurred()
+                        shareWiggle = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            shareWiggle = false
+                        }
+                        showCopiedToast = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                            showCopiedToast = false
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                            didLongPressShare = false
+                        }
+                    }
+            )
+
+            Spacer()
+        }
+        .font(.subheadline)
+        .padding(.horizontal, 12)
+        .padding(.top, 12)
+        .padding(.bottom, 4)
+    }
+
+    @ViewBuilder
+    private func captionSection(lr: LabelResolution) -> some View {
+        // EXIF info
+        if let photos = gallery.items, !photos.isEmpty,
+           let exif = photos[currentPage].exif,
+           exif.hasDisplayableData
+        {
+            ExifInfoView(exif: exif)
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
+        }
+
+        // Title & description
+        VStack(alignment: .leading, spacing: 4) {
+            Text(gallery.title ?? "")
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(1)
+                .contentShape(Rectangle())
+                .onTapGesture { onNavigate() }
+
+            if let description = gallery.description, !description.isEmpty {
+                ExpandableDescriptionView(
+                    text: description,
+                    onMentionTap: onProfileTap,
+                    onHashtagTap: onHashtagTap
+                )
+            }
+
+            if lr.action == .badge {
+                LabelBadge(name: lr.name)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 8)
+        .padding(.bottom, 16)
+    }
+
+    @ViewBuilder
+    private var copiedToastOverlay: some View {
+        if showCopiedToast {
+            HStack(spacing: 6) {
+                Image(systemName: "doc.on.doc.fill")
+                    .font(.caption)
+                Text("Link copied")
+                    .font(.subheadline.weight(.medium))
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(.ultraThinMaterial, in: Capsule())
+            .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
+            .transition(.scale.combined(with: .opacity))
+        }
+    }
+
+    private func prefetchCarousel(photos: [GrainPhoto], page: Int) {
+        let input = photos.map { (thumb: $0.thumb, fullsize: $0.fullsize) }
+        let plan = ImagePrefetchPlanning.carouselPrefetchRequests(photos: input, currentPage: page)
+        prefetcher.startPrefetching(with: plan.all)
     }
 
     private func doubleTapLike(at point: CGPoint) {
@@ -479,3 +524,20 @@ struct GalleryCardView: View {
     }
 }
 
+#Preview {
+    @Previewable @State var gallery = PreviewData.gallery1
+    ScrollView {
+        GalleryCardView(
+            gallery: $gallery,
+            client: XRPCClient(baseURL: AuthManager.serverURL)
+        )
+        GalleryCardView(
+            gallery: .constant(PreviewData.gallery2),
+            client: XRPCClient(baseURL: AuthManager.serverURL)
+        )
+    }
+    .environment(AuthManager())
+    .environment(StoryStatusCache())
+    .environment(ViewedStoryStorage())
+    .environment(LabelDefinitionsCache())
+}

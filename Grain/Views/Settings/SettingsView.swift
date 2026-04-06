@@ -1,12 +1,16 @@
+import Nuke
 import SwiftUI
 
 struct SettingsView: View {
     @Environment(AuthManager.self) private var auth
     @Environment(\.dismiss) private var dismiss
     let client: XRPCClient
-    var onProfileEdited: (() -> Void)?
+    @State private var cacheSizeText = "Calculating..."
     @State private var includeExif = true
     @State private var hasLoadedExifPref = false
+    @AppStorage("privacy.includeLocation") private var includeLocation = true
+    @AppStorage("privacy.includeCameraData") private var includeCameraData = true
+    @AppStorage("privacy.showSuggestedUsers") private var showSuggestedUsers = true
 
     var body: some View {
         List {
@@ -20,12 +24,6 @@ struct SettingsView: View {
                 }
             }
 
-            Section {
-                NavigationLink("Edit Profile") {
-                    EditProfileView(client: client, onSaved: onProfileEdited)
-                }
-            }
-
             Section("Photos") {
                 Toggle("Include camera data (EXIF) when uploading", isOn: $includeExif)
                     .onChange(of: includeExif) {
@@ -35,6 +33,27 @@ struct SettingsView: View {
                             try? await client.putIncludeExif(includeExif, auth: authContext)
                         }
                     }
+            }
+
+            Section {
+                Toggle("Include location", isOn: $includeLocation)
+                Toggle("Include camera data", isOn: $includeCameraData)
+                Toggle("Show suggested users", isOn: $showSuggestedUsers)
+            } header: {
+                Text("Privacy")
+            } footer: {
+                Text("Camera data includes make, model, and exposure info. Location is auto-detected from photo metadata when available.")
+            }
+
+            Section("Storage") {
+                LabeledContent("Image Cache", value: cacheSizeText)
+                Button("Clear Image Cache", role: .destructive) {
+                    clearImageCache()
+                }
+            }
+            .task {
+                guard !isPreview else { return }
+                updateCacheSize()
             }
 
             Section("Legal") {
@@ -58,10 +77,33 @@ struct SettingsView: View {
         .task {
             if let authContext = await auth.authContext(),
                let prefs = try? await client.getPreferences(auth: authContext).preferences,
-               let exif = prefs.includeExif {
+               let exif = prefs.includeExif
+            {
                 includeExif = exif
             }
             hasLoadedExifPref = true
         }
     }
+
+    private func updateCacheSize() {
+        guard let dataCache = ImagePipeline.shared.configuration.dataCache as? DataCache else {
+            cacheSizeText = "Unknown"
+            return
+        }
+        let size = dataCache.totalSize
+        cacheSizeText = ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)
+    }
+
+    private func clearImageCache() {
+        ImagePipeline.shared.cache.removeAll()
+        if let dataCache = ImagePipeline.shared.configuration.dataCache as? DataCache {
+            dataCache.removeAll()
+        }
+        cacheSizeText = "Zero KB"
+    }
+}
+
+#Preview {
+    SettingsView(client: XRPCClient(baseURL: AuthManager.serverURL))
+        .environment(AuthManager())
 }

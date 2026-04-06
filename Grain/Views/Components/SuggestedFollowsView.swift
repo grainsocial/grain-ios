@@ -85,7 +85,7 @@ struct SuggestedFollowsView: View {
             guard let authContext = await auth.authContext() else { return }
             let record = AnyCodable([
                 "subject": item.did,
-                "createdAt": DateFormatting.nowISO()
+                "createdAt": DateFormatting.nowISO(),
             ])
             let repo = TokenStorage.userDID ?? ""
             do {
@@ -95,4 +95,16 @@ struct SuggestedFollowsView: View {
             followingInProgress.remove(item.did)
         }
     }
+}
+
+#Preview {
+    @Previewable @State var suggestions = [
+        SuggestedItem(did: "did:plc:a", handle: "alice.bsky.social", displayName: "Alice", description: "Photographer"),
+        SuggestedItem(did: "did:plc:b", handle: "bob.bsky.social", displayName: "Bob"),
+    ]
+    SuggestedFollowsView(
+        client: XRPCClient(baseURL: AuthManager.serverURL),
+        suggestions: $suggestions
+    )
+    .environment(AuthManager())
 }

@@ -17,6 +17,8 @@ struct StoryCreateView: View {
     @State private var locationSuggestions: [NominatimResult] = []
     @State private var isSearchingLocation = false
     @State private var locationSearchTask: Task<Void, Never>?
+    @State private var photoLocationResult: NominatimResult?
+    @AppStorage("privacy.includeLocation") private var includeLocation = true
     @State private var isUploading = false
     @State private var errorMessage: String?
     @State private var postToBluesky = false
@@ -61,6 +63,24 @@ struct StoryCreateView: View {
                             }
                         }
                     } else {
+                        if let photoLoc = photoLocationResult {
+                            Button { selectLocation(photoLoc) } label: {
+                                HStack(spacing: 10) {
+                                    Image(systemName: "location.fill")
+                                        .foregroundStyle(.secondary)
+                                        .frame(width: 20)
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text("Use photo location")
+                                            .font(.subheadline)
+                                        Text(photoLoc.name)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                            .foregroundStyle(.primary)
+                        }
+
                         HStack {
                             Image(systemName: "magnifyingglass")
                                 .foregroundStyle(.secondary)
@@ -156,6 +176,7 @@ struct StoryCreateView: View {
         resolvedLocation = nil
         locationQuery = ""
         locationSuggestions = []
+        photoLocationResult = nil
     }
 
     // MARK: - Photo Loading
@@ -163,7 +184,8 @@ struct StoryCreateView: View {
     private func loadPhoto() async {
         guard let item = selectedPhoto,
               let data = try? await item.loadTransferable(type: Data.self),
-              let image = UIImage(data: data) else {
+              let image = UIImage(data: data)
+        else {
             photoData = nil
             previewImage = nil
             return
@@ -174,8 +196,12 @@ struct StoryCreateView: View {
         resolvedLocation = nil
         locationQuery = ""
         locationSuggestions = []
-        if let gps = ImageProcessing.extractGPS(from: data) {
-            if let result = await LocationServices.reverseGeocode(latitude: gps.latitude, longitude: gps.longitude) {
+        photoLocationResult = nil
+        if let gps = ImageProcessing.extractGPS(from: data),
+           let result = await LocationServices.reverseGeocode(latitude: gps.latitude, longitude: gps.longitude)
+        {
+            photoLocationResult = result
+            if includeLocation {
                 selectLocation(result)
             }
         }
@@ -199,22 +225,22 @@ struct StoryCreateView: View {
                 "$type": AnyCodable(response.blob.type ?? "blob"),
                 "ref": AnyCodable(["$link": AnyCodable(response.blob.ref?.link ?? "")] as [String: AnyCodable]),
                 "mimeType": AnyCodable(response.blob.mimeType ?? "image/jpeg"),
-                "size": AnyCodable(response.blob.size ?? 0)
+                "size": AnyCodable(response.blob.size ?? 0),
             ]
 
             var record: [String: AnyCodable] = [
                 "media": AnyCodable(blobDict),
                 "aspectRatio": AnyCodable([
                     "width": AnyCodable(Int(size.width)),
-                    "height": AnyCodable(Int(size.height))
+                    "height": AnyCodable(Int(size.height)),
                 ] as [String: AnyCodable]),
-                "createdAt": AnyCodable(DateFormatting.nowISO())
+                "createdAt": AnyCodable(DateFormatting.nowISO()),
             ]
 
             if let loc = resolvedLocation {
                 record["location"] = AnyCodable([
                     "value": AnyCodable(loc.h3),
-                    "name": AnyCodable(loc.name)
+                    "name": AnyCodable(loc.name),
                 ] as [String: AnyCodable])
                 if let addr = loc.address {
                     record["address"] = AnyCodable(addr)
@@ -224,7 +250,7 @@ struct StoryCreateView: View {
                 let labelValues = selectedLabels.map { ["val": AnyCodable($0)] as [String: AnyCodable] }
                 record["labels"] = AnyCodable([
                     "$type": AnyCodable("com.atproto.label.defs#selfLabels"),
-                    "values": AnyCodable(labelValues as [[String: AnyCodable]])
+                    "values": AnyCodable(labelValues as [[String: AnyCodable]]),
                 ] as [String: AnyCodable])
             }
 
@@ -282,4 +308,9 @@ struct StoryCreateView: View {
         locationQuery = ""
         locationSuggestions = []
     }
+}
+
+#Preview {
+    StoryCreateView(client: XRPCClient(baseURL: AuthManager.serverURL))
+        .environment(AuthManager())
 }

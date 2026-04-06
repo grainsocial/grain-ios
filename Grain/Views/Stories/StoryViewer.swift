@@ -1,5 +1,6 @@
-import SwiftUI
+import Nuke
 import NukeUI
+import SwiftUI
 
 @Observable
 @MainActor
@@ -13,19 +14,19 @@ private final class StoryTimer {
         stop()
         progress = 0
         isRunning = true
-        halfwayFired = false
+        quarterFired = false
         task = Task {
             let tickInterval: TimeInterval = 0.05
             let totalTicks = Int(duration / tickInterval)
-            for tick in 0...totalTicks {
+            for tick in 0 ... totalTicks {
                 do {
                     try await Task.sleep(for: .milliseconds(Int(tickInterval * 1000)))
                 } catch { return }
                 guard !Task.isCancelled else { return }
                 progress = CGFloat(tick) / CGFloat(totalTicks)
-                if !halfwayFired && progress >= 0.5 {
-                    halfwayFired = true
-                    onHalfway?()
+                if !quarterFired, progress >= 0.25 {
+                    quarterFired = true
+                    onQuarter?()
                 }
             }
             guard !Task.isCancelled else { return }
@@ -41,8 +42,8 @@ private final class StoryTimer {
     }
 
     var onComplete: (() -> Void)?
-    var onHalfway: (() -> Void)?
-    private var halfwayFired = false
+    var onQuarter: (() -> Void)?
+    private var quarterFired = false
 }
 
 struct StoryViewer: View {
@@ -62,22 +63,25 @@ struct StoryViewer: View {
     @State private var showReportSheet = false
     @State private var reportStoryUri = ""
     @State private var reportStoryCid = ""
+    @State private var showLocationCopied = false
     @State private var lastNavTime: Date = .distantPast
     @State private var labelRevealed = false
+    @State private var imageLoaded = false
     @State private var fadeDismissHandle = FadeDismissHandle()
     @State private var prefetchedStories: [String: [GrainStory]] = [:]
+    @State private var unreadOnly = false
+    @State private var authorTransition: CGFloat = 1.0
+    @State private var slideOffset: CGFloat = 0
+    @State private var authorHistory: [(authorIndex: Int, storyIndex: Int)] = []
+    @State private var imagePrefetcher = ImagePrefetcher()
+    @State private var nextStoryFromTrailing = true
 
-    init(authors: [GrainStoryAuthor], startIndex: Int = 0, startAuthorDid: String? = nil, client: XRPCClient, onProfileTap: ((String) -> Void)? = nil, onDismiss: (() -> Void)? = nil) {
+    init(authors: [GrainStoryAuthor], startAuthorDid: String? = nil, client: XRPCClient, onProfileTap: ((String) -> Void)? = nil, onDismiss: (() -> Void)? = nil) {
         self.authors = authors
         self.client = client
         self.onProfileTap = onProfileTap
         self.onDismiss = onDismiss
-        let resolvedIndex: Int
-        if let did = startAuthorDid {
-            resolvedIndex = authors.firstIndex(where: { $0.profile.did == did }) ?? 0
-        } else {
-            resolvedIndex = startIndex
-        }
+        let resolvedIndex = startAuthorDid.flatMap { did in authors.firstIndex { $0.profile.did == did } } ?? 0
         _currentAuthorIndex = State(initialValue: resolvedIndex)
     }
 
@@ -92,44 +96,50 @@ struct StoryViewer: View {
 
     var body: some View {
         storyContent
-        .background(
-            DragToDismissInstaller(
-                handle: fadeDismissHandle,
-                onDismiss: { onDismiss?() },
-                onDragStart: { timer.stop() },
-                onDragCancel: { timer.start() },
-                onSwipeLeft: { goToNextAuthor() },
-                onSwipeRight: { goToPreviousAuthor() }
+            .offset(x: slideOffset)
+            .scaleEffect(0.85 + 0.15 * authorTransition)
+            .opacity(0.3 + 0.7 * Double(authorTransition))
+            .background(
+                DragToDismissInstaller(
+                    handle: fadeDismissHandle,
+                    onDismiss: { onDismiss?() },
+                    onDragStart: { timer.stop() },
+                    onDragCancel: { startTimerIfSafe() },
+                    onSwipeLeft: { goToNextAuthor() },
+                    onSwipeRight: { goToPreviousAuthor() }
+                )
             )
-        )
-        .statusBarHidden()
-        .confirmationDialog("Delete this story?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
-            Button("Delete", role: .destructive) {
-                if let story = currentStory {
-                    Task { await deleteStory(story) }
+            .confirmationDialog("Delete this story?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+                Button("Delete", role: .destructive) {
+                    if let story = currentStory {
+                        Task { await deleteStory(story) }
+                    }
+                }
+                Button("Cancel", role: .cancel) {
+                    timer.start()
                 }
             }
-            Button("Cancel", role: .cancel) {
-                timer.start()
+            .fullScreenCover(isPresented: $showReportSheet) {
+                ReportView(client: client, subjectUri: reportStoryUri, subjectCid: reportStoryCid)
+                    .environment(auth)
             }
-        }
-        .fullScreenCover(isPresented: $showReportSheet) {
-            ReportView(client: client, subjectUri: reportStoryUri, subjectCid: reportStoryCid)
-                .environment(auth)
-        }
-        .onChange(of: showReportSheet) {
-            if !showReportSheet {
-                timer.start()
+            .onChange(of: showReportSheet) {
+                if !showReportSheet {
+                    timer.start()
+                }
             }
-        }
-        .task {
-            timer.onComplete = { [self] in goToNext() }
-            timer.onHalfway = { [self] in markCurrentStoryViewed() }
-            await loadStoriesForCurrentAuthor()
-        }
+            .task {
+                guard !isPreview else { return }
+                let startAuthor = authors[currentAuthorIndex]
+                let isOwn = startAuthor.profile.did == auth.userDID
+                let hasUnreads = !viewedStories.hasViewedAll(authorDid: startAuthor.profile.did, latestAt: startAuthor.latestAt)
+                unreadOnly = isOwn || hasUnreads
+                timer.onComplete = { [self] in goToNext() }
+                timer.onQuarter = { [self] in markCurrentStoryViewed() }
+                await loadStoriesForCurrentAuthor()
+            }
     }
 
-    @ViewBuilder
     private var storyContent: some View {
         ZStack {
             Color.black.ignoresSafeArea()
@@ -139,30 +149,52 @@ struct StoryViewer: View {
 
                 // Story image
                 ZStack {
-                    LazyImage(url: URL(string: story.fullsize)) { state in
+                    LazyImage(request: {
+                        guard lr.action != .hide || labelRevealed,
+                              let url = URL(string: story.fullsize) else { return ImageRequest(url: nil) }
+                        return ImageRequest(url: url, priority: .veryHigh)
+                    }()) { state in
                         if let image = state.image {
                             image
                                 .resizable()
                                 .aspectRatio(story.aspectRatio.ratio, contentMode: .fit)
                                 .frame(maxWidth: .infinity)
-                        } else if state.isLoading {
-                            ProgressView()
-                                .tint(.white)
+                                .onAppear {
+                                    if !imageLoaded {
+                                        imageLoaded = true
+                                        startTimerIfSafe()
+                                    }
+                                }
+                        } else {
+                            ZStack {
+                                LazyImage(url: URL(string: story.thumb)) { thumbState in
+                                    if let thumb = thumbState.image {
+                                        thumb
+                                            .resizable()
+                                            .aspectRatio(story.aspectRatio.ratio, contentMode: .fit)
+                                            .blur(radius: 20)
+                                            .clipped()
+                                    }
+                                }
+                                ProgressView()
+                                    .tint(.white)
+                            }
                         }
                     }
-                    .overlay {
-                        if (lr.action == .warnMedia || lr.action == .warnContent || lr.action == .hide) && !labelRevealed {
-                            Rectangle().fill(Color(.secondarySystemBackground))
-                        }
-                    }
+                    .blur(radius: (lr.action == .warnMedia || lr.action == .warnContent) && !labelRevealed ? 24 : 0)
 
-                    if (lr.action == .warnContent || lr.action == .warnMedia || lr.action == .hide) && !labelRevealed {
+                    if lr.action == .warnContent || lr.action == .warnMedia || lr.action == .hide, !labelRevealed {
                         MediaWarningOverlay(name: lr.name) {
                             withAnimation { labelRevealed = true }
-                            timer.start()
+                            startTimerIfSafe()
                         }
                     }
                 }
+                .id(story.uri)
+                .transition(.asymmetric(
+                    insertion: .move(edge: nextStoryFromTrailing ? .trailing : .leading).combined(with: .opacity),
+                    removal: .move(edge: nextStoryFromTrailing ? .leading : .trailing).combined(with: .opacity)
+                ))
 
                 // Tap zones
                 VStack(spacing: 0) {
@@ -182,33 +214,44 @@ struct StoryViewer: View {
                         }
                     }
                 }
-                .allowsHitTesting(!showReportSheet && !showDeleteConfirm)
+                .allowsHitTesting(!showReportSheet && !showDeleteConfirm && (labelRevealed || storyLabelResult.action == .none || storyLabelResult.action == .badge))
+            } else {
+                ProgressView()
+                    .tint(.white)
+            }
 
-                // Header overlay
-                VStack(spacing: 0) {
-                    StoryProgressBars(timer: timer, stories: stories, currentStoryIndex: currentStoryIndex)
-                        .padding(.horizontal)
-                        .padding(.top, 8)
+            // Header overlay — always visible regardless of loading state
+            let author = authors[currentAuthorIndex].profile
+            let story = currentStory
+            VStack(spacing: 0) {
+                StoryProgressBars(timer: timer, stories: stories, currentStoryIndex: currentStoryIndex, placeholderCount: authors[currentAuthorIndex].storyCount)
+                    .padding(.horizontal)
+                    .padding(.top, 8)
 
-                    HStack(alignment: .center) {
-                        Button {
+                HStack(alignment: .center) {
+                    Button {
+                        if let story {
                             close()
                             onProfileTap?(story.creator.did)
-                        } label: {
-                            HStack(alignment: .center, spacing: 8) {
-                                AvatarView(url: story.creator.avatar, size: 32)
-                                VStack(alignment: .leading, spacing: 0) {
-                                    Text(story.creator.displayName ?? story.creator.handle)
-                                        .font(.subheadline.bold())
-                                        .foregroundStyle(.white)
+                        }
+                    } label: {
+                        HStack(alignment: .center, spacing: 8) {
+                            AvatarView(url: story?.creator.avatar ?? author.avatar, size: 32)
+                            VStack(alignment: .leading, spacing: 0) {
+                                Text(story?.creator.displayName ?? story?.creator.handle ?? author.displayName ?? author.handle)
+                                    .font(.subheadline.bold())
+                                    .foregroundStyle(.white)
+                                if let story {
                                     Text(relativeTime(story.createdAt))
                                         .font(.caption2)
                                         .foregroundStyle(.white.opacity(0.7))
                                 }
                             }
                         }
-                        Spacer()
+                    }
+                    Spacer()
 
+                    if let story {
                         if story.creator.did == auth.userDID {
                             Button {
                                 timer.stop()
@@ -230,40 +273,46 @@ struct StoryViewer: View {
                                     .frame(width: 36, height: 36)
                             }
                         }
-
-                        Button { close() } label: {
-                            Image(systemName: "xmark")
-                                .foregroundStyle(.white)
-                                .font(.body.weight(.semibold))
-                                .frame(width: 36, height: 36)
-                        }
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
 
-                    Spacer()
-                        .allowsHitTesting(false)
-
-                    if let locationText = storyLocationText(story) {
-                        HStack {
-                            HStack(spacing: 4) {
-                                Image(systemName: "location.fill")
-                                Text(locationText)
-                            }
-                            .font(.caption)
+                    Button { close() } label: {
+                        Image(systemName: "xmark")
                             .foregroundStyle(.white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(.ultraThinMaterial, in: Capsule())
-                            Spacer()
-                        }
-                        .padding(.horizontal)
-                        .padding(.bottom, 32)
+                            .font(.body.weight(.semibold))
+                            .frame(width: 36, height: 36)
                     }
                 }
-            } else if isLoadingStories {
-                ProgressView()
-                    .tint(.white)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+
+                Spacer()
+                    .allowsHitTesting(false)
+
+                if let story, let locationText = storyLocationText(story) {
+                    HStack {
+                        HStack(spacing: 4) {
+                            Image(systemName: showLocationCopied ? "checkmark" : "location.fill")
+                            Text(showLocationCopied ? "Copied" : locationText)
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(.ultraThinMaterial, in: Capsule())
+                        .contentTransition(.symbolEffect(.replace))
+                        .id(story.uri)
+                        .onTapGesture {
+                            UIPasteboard.general.string = locationText
+                            withAnimation(.easeInOut(duration: 0.15)) { showLocationCopied = true }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                                withAnimation(.easeInOut(duration: 0.15)) { showLocationCopied = false }
+                            }
+                        }
+                        Spacer()
+                    }
+                    .padding(.horizontal)
+                    .padding(.bottom, 32)
+                }
             }
         }
     }
@@ -275,63 +324,125 @@ struct StoryViewer: View {
         fadeDismissHandle.fadeDismiss()
     }
 
+    private func canNavigate() -> Bool {
+        !isLoadingStories && !stories.isEmpty
+            && !showReportSheet && !showDeleteConfirm
+            && Date().timeIntervalSince(lastNavTime) > 0.3
+    }
+
+    private func startTimerIfSafe() {
+        guard imageLoaded else { return }
+        let action = storyLabelResult.action
+        if action == .none || action == .badge { timer.start() }
+    }
+
     private func goToNext() {
-        guard !isLoadingStories, !stories.isEmpty else { return }
-        guard !showReportSheet, !showDeleteConfirm else { return }
-        guard Date().timeIntervalSince(lastNavTime) > 0.3 else { return }
+        guard canNavigate() else { return }
         markCurrentStoryViewed()
         timer.stop()
         lastNavTime = Date()
         if currentStoryIndex < stories.count - 1 {
-            currentStoryIndex += 1
-            labelRevealed = false
-            timer.start()
+            animateToStory(forward: true) {
+                currentStoryIndex += 1
+                imageLoaded = false
+                labelRevealed = false
+                showLocationCopied = false
+            }
+            prefetchStoryImages()
         } else {
             goToNextAuthor()
         }
     }
 
     private func goToPrevious() {
-        guard !isLoadingStories, !stories.isEmpty else { return }
-        guard !showReportSheet, !showDeleteConfirm else { return }
-        guard Date().timeIntervalSince(lastNavTime) > 0.3 else { return }
+        guard canNavigate() else { return }
         timer.stop()
         lastNavTime = Date()
         if currentStoryIndex > 0 {
-            currentStoryIndex -= 1
-            labelRevealed = false
-            timer.start()
+            animateToStory(forward: false) {
+                currentStoryIndex -= 1
+                imageLoaded = false
+                labelRevealed = false
+                showLocationCopied = false
+            }
+            prefetchStoryImages()
         } else {
             goToPreviousAuthor()
         }
     }
 
+    private func animateToStory(forward: Bool, _ action: () -> Void) {
+        nextStoryFromTrailing = forward
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.88)) {
+            action()
+        }
+    }
+
     private func goToNextAuthor() {
-        if currentAuthorIndex < authors.count - 1 {
-            currentAuthorIndex += 1
-            switchToCurrentAuthor()
+        if let next = findAuthorIndex(from: currentAuthorIndex, forward: true) {
+            authorHistory.append((authorIndex: currentAuthorIndex, storyIndex: currentStoryIndex))
+            transitionToAuthor(next, direction: 1)
         } else {
             close()
         }
     }
 
     private func goToPreviousAuthor() {
-        if currentAuthorIndex > 0 {
-            currentAuthorIndex -= 1
-            switchToCurrentAuthor()
+        if let prev = authorHistory.popLast() {
+            transitionToAuthor(prev.authorIndex, direction: -1, resumeIndex: prev.storyIndex)
+            return
+        }
+        // No history (entered mid-strip in reads mode) — walk backward ignoring the reads filter
+        var i = currentAuthorIndex - 1
+        while i >= 0 {
+            if authors[i].profile.did != auth.userDID {
+                transitionToAuthor(i, direction: -1)
+                return
+            }
+            i -= 1
         }
     }
 
-    private func switchToCurrentAuthor() {
+    private func transitionToAuthor(_ index: Int, direction: CGFloat, resumeIndex: Int? = nil) {
+        timer.stop()
+        withAnimation(.easeIn(duration: 0.15)) {
+            authorTransition = 0
+            slideOffset = -80 * direction
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            currentAuthorIndex = index
+            switchToCurrentAuthor(resumeIndex: resumeIndex)
+            slideOffset = 80 * direction
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                authorTransition = 1
+                slideOffset = 0
+            }
+        }
+    }
+
+    private func findAuthorIndex(from index: Int, forward: Bool) -> Int? {
+        let step = forward ? 1 : -1
+        var i = index + step
+        while i >= 0, i < authors.count {
+            let author = authors[i]
+            if author.profile.did == auth.userDID { i += step; continue }
+            if !unreadOnly || authorHasUnreads(author) { return i }
+            i += step
+        }
+        return nil
+    }
+
+    private func authorHasUnreads(_ author: GrainStoryAuthor) -> Bool {
+        !viewedStories.hasViewedAll(authorDid: author.profile.did, latestAt: author.latestAt)
+    }
+
+    // MARK: - Data
+
+    private func switchToCurrentAuthor(resumeIndex: Int? = nil) {
         timer.stop()
         let did = authors[currentAuthorIndex].profile.did
         if let cached = prefetchedStories.removeValue(forKey: did) {
-            stories = cached
-            currentStoryIndex = viewedStories.firstUnviewedIndex(in: cached)
-            labelRevealed = false
-            isLoadingStories = false
-            timer.start()
-            prefetchAdjacentAuthors()
+            presentStories(cached, resumeIndex: resumeIndex)
         } else {
             currentStoryIndex = 0
             stories = []
@@ -340,8 +451,6 @@ struct StoryViewer: View {
         }
     }
 
-    // MARK: - Data
-
     private func loadStoriesForCurrentAuthor() async {
         guard currentAuthorIndex < authors.count else { return }
         let did = authors[currentAuthorIndex].profile.did
@@ -349,35 +458,77 @@ struct StoryViewer: View {
         timer.stop()
 
         do {
-            let fetched: [GrainStory]
-            if let cached = prefetchedStories.removeValue(forKey: did) {
-                fetched = cached
+            let fetched: [GrainStory] = if let cached = prefetchedStories.removeValue(forKey: did) {
+                cached
             } else {
-                fetched = try await client.getStories(actor: did, auth: await auth.authContext()).stories
+                try await client.getStories(actor: did, auth: auth.authContext()).stories
             }
-            stories = fetched
-            currentStoryIndex = viewedStories.firstUnviewedIndex(in: fetched)
-            labelRevealed = false
-            timer.start()
+            presentStories(fetched)
         } catch {
             stories = []
+            isLoadingStories = false
         }
-        isLoadingStories = false
+    }
 
-        // Prefetch next author's stories
+    private func presentStories(_ fetched: [GrainStory], resumeIndex: Int? = nil) {
+        imageLoaded = false
+        showLocationCopied = false
+        stories = fetched
+        if let resume = resumeIndex {
+            currentStoryIndex = min(resume, max(fetched.count - 1, 0))
+        } else {
+            let isOwn = fetched.first?.creator.did == auth.userDID
+            currentStoryIndex = (unreadOnly && isOwn) ? 0 : viewedStories.firstUnviewedIndex(in: fetched)
+        }
+        labelRevealed = false
+        isLoadingStories = false
+        startTimerIfSafe()
         prefetchAdjacentAuthors()
+        prefetchStoryImages()
     }
 
     private func prefetchAdjacentAuthors() {
-        let nextIndex = currentAuthorIndex + 1
-        guard nextIndex < authors.count else { return }
+        guard let nextIndex = findAuthorIndex(from: currentAuthorIndex, forward: true) else { return }
         let did = authors[nextIndex].profile.did
         guard prefetchedStories[did] == nil else { return }
         Task {
-            if let response = try? await client.getStories(actor: did, auth: await auth.authContext()) {
+            if let response = try? await client.getStories(actor: did, auth: auth.authContext()) {
                 prefetchedStories[did] = response.stories
             }
         }
+    }
+
+    private func prefetchStoryImages() {
+        let current = stories.map { (thumb: $0.thumb, fullsize: $0.fullsize) }
+
+        // Resolve next authors' stories from prefetched data
+        let nextDid = findAuthorIndex(from: currentAuthorIndex, forward: true).map { authors[$0].profile.did }
+        let nextStories = nextDid.flatMap { prefetchedStories[$0] }?.map { (thumb: $0.thumb, fullsize: $0.fullsize) }
+
+        let secondNextIdx = findAuthorIndex(from: currentAuthorIndex, forward: true)
+            .flatMap { findAuthorIndex(from: $0, forward: true) }
+        let secondNextDid = secondNextIdx.map { authors[$0].profile.did }
+        let secondNextStories = secondNextDid.flatMap { prefetchedStories[$0] }?.map { (thumb: $0.thumb, fullsize: $0.fullsize) }
+
+        let thirdNextIdx = secondNextIdx.flatMap { findAuthorIndex(from: $0, forward: true) }
+        let thirdFirst = thirdNextIdx
+            .flatMap { prefetchedStories[authors[$0].profile.did]?.first }
+            .map { (thumb: $0.thumb, fullsize: $0.fullsize) }
+
+        let fourthNextIdx = thirdNextIdx.flatMap { findAuthorIndex(from: $0, forward: true) }
+        let fourthFirst = fourthNextIdx
+            .flatMap { prefetchedStories[authors[$0].profile.did]?.first }
+            .map { (thumb: $0.thumb, fullsize: $0.fullsize) }
+
+        let plan = ImagePrefetchPlanning.storyPrefetchRequests(
+            currentStories: current,
+            currentStoryIndex: currentStoryIndex,
+            nextAuthorStories: nextStories,
+            secondNextAuthorStories: secondNextStories,
+            thirdNextFirstStory: thirdFirst,
+            fourthNextFirstStory: fourthFirst
+        )
+        imagePrefetcher.startPrefetching(with: plan.all)
     }
 
     private func markCurrentStoryViewed() {
@@ -431,15 +582,20 @@ struct StoryViewer: View {
     }
 }
 
-// Extracted so progress ticks only redraw this view, not the entire StoryViewer
+/// Extracted so progress ticks only redraw this view, not the entire StoryViewer
 private struct StoryProgressBars: View {
     let timer: StoryTimer
     let stories: [GrainStory]
     let currentStoryIndex: Int
+    var placeholderCount: Int = 0
+
+    private var barCount: Int {
+        stories.isEmpty ? placeholderCount : stories.count
+    }
 
     var body: some View {
         HStack(spacing: 4) {
-            ForEach(0..<stories.count, id: \.self) { index in
+            ForEach(0 ..< barCount, id: \.self) { index in
                 GeometryReader { geo in
                     Capsule()
                         .fill(Color.white.opacity(0.3))
@@ -453,6 +609,7 @@ private struct StoryProgressBars: View {
     }
 
     private func barWidth(for index: Int, totalWidth: CGFloat) -> CGFloat {
+        guard !stories.isEmpty else { return 0 }
         if index < currentStoryIndex {
             return totalWidth
         } else if index == currentStoryIndex {
@@ -461,4 +618,11 @@ private struct StoryProgressBars: View {
             return 0
         }
     }
+}
+
+#Preview {
+    StoryViewer(authors: PreviewData.storyAuthors, client: XRPCClient(baseURL: AuthManager.serverURL))
+        .environment(AuthManager())
+        .environment(LabelDefinitionsCache())
+        .environment(ViewedStoryStorage())
 }

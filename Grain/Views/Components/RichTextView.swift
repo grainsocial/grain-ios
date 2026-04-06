@@ -11,32 +11,31 @@ struct RichTextView: View {
     var onHashtagTap: ((String) -> Void)?
 
     private var attributedString: AttributedString {
-        let segments: [Segment]
-        if let facets, !facets.isEmpty {
-            segments = segmentsFromFacets(text: text, facets: facets)
+        let segments: [Segment] = if let facets, !facets.isEmpty {
+            segmentsFromFacets(text: text, facets: facets)
         } else {
-            segments = segmentsFromRegex(text: text)
+            segmentsFromRegex(text: text)
         }
 
         var result = AttributedString()
         for segment in segments {
             var part: AttributedString
             switch segment {
-            case .plain(let str):
+            case let .plain(str):
                 part = AttributedString(str)
                 part.foregroundColor = color
-            case .link(let str, let url):
+            case let .link(str, url):
                 part = AttributedString(str)
                 if let linkURL = URL(string: url) {
                     part.link = linkURL
                 }
                 part.foregroundColor = Color("AccentColor")
-            case .mention(let str, let did):
+            case let .mention(str, did):
                 part = AttributedString(str)
                 let encoded = did.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? did
                 part.link = URL(string: "grain-mention://\(encoded)")
                 part.foregroundColor = Color("AccentColor")
-            case .hashtag(let str, let tag):
+            case let .hashtag(str, tag):
                 part = AttributedString(str)
                 let encoded = tag.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? tag
                 part.link = URL(string: "grain-hashtag://\(encoded)")
@@ -85,18 +84,18 @@ struct RichTextView: View {
             guard start >= cursor, end > start else { continue }
 
             if start > cursor {
-                let plain = String(bytes: utf8[cursor..<start], encoding: .utf8) ?? ""
+                let plain = String(bytes: utf8[cursor ..< start], encoding: .utf8) ?? ""
                 segments.append(.plain(plain))
             }
 
-            let slice = String(bytes: utf8[start..<end], encoding: .utf8) ?? ""
+            let slice = String(bytes: utf8[start ..< end], encoding: .utf8) ?? ""
             if let feature = facet.features.first {
                 switch feature {
-                case .link(let uri):
+                case let .link(uri):
                     segments.append(.link(slice, url: uri))
-                case .mention(let did):
+                case let .mention(did):
                     segments.append(.mention(slice, did: did))
-                case .tag(let tag):
+                case let .tag(tag):
                     segments.append(.hashtag(slice, tag: tag))
                 }
             } else {
@@ -129,8 +128,8 @@ struct RichTextView: View {
 
         if let regex = try? NSRegularExpression(pattern: urlPattern) {
             let nsRange = NSRange(text.startIndex..., in: text)
-            for m in regex.matches(in: text, range: nsRange) {
-                if let range = Range(m.range, in: text) {
+            for matchResult in regex.matches(in: text, range: nsRange) {
+                if let range = Range(matchResult.range, in: text) {
                     let str = String(text[range])
                     matches.append(Match(range: range, segment: .link(str, url: str)))
                 }
@@ -139,8 +138,8 @@ struct RichTextView: View {
 
         if let regex = try? NSRegularExpression(pattern: mentionPattern) {
             let nsRange = NSRange(text.startIndex..., in: text)
-            for m in regex.matches(in: text, range: nsRange) {
-                if let range = Range(m.range, in: text) {
+            for matchResult in regex.matches(in: text, range: nsRange) {
+                if let range = Range(matchResult.range, in: text) {
                     if matches.contains(where: { $0.range.overlaps(range) }) { continue }
                     let str = String(text[range])
                     matches.append(Match(range: range, segment: .mention(str, did: String(str.dropFirst()))))
@@ -150,8 +149,8 @@ struct RichTextView: View {
 
         if let regex = try? NSRegularExpression(pattern: hashtagPattern) {
             let nsRange = NSRange(text.startIndex..., in: text)
-            for m in regex.matches(in: text, range: nsRange) {
-                if let range = Range(m.range, in: text) {
+            for matchResult in regex.matches(in: text, range: nsRange) {
+                if let range = Range(matchResult.range, in: text) {
                     if matches.contains(where: { $0.range.overlaps(range) }) { continue }
                     let str = String(text[range])
                     matches.append(Match(range: range, segment: .hashtag(str, tag: String(str.dropFirst()))))
@@ -166,7 +165,7 @@ struct RichTextView: View {
 
         for match in matches {
             if match.range.lowerBound > cursor {
-                segments.append(.plain(String(text[cursor..<match.range.lowerBound])))
+                segments.append(.plain(String(text[cursor ..< match.range.lowerBound])))
             }
             segments.append(match.segment)
             cursor = match.range.upperBound
@@ -185,4 +184,17 @@ private enum Segment {
     case link(String, url: String)
     case mention(String, did: String)
     case hashtag(String, tag: String)
+}
+
+#Preview {
+    VStack(alignment: .leading, spacing: 12) {
+        RichTextView(text: "Plain text with no links.")
+        RichTextView(
+            text: "Check out @alice.grain.social and the #35mm tag.",
+            onMentionTap: { _ in },
+            onHashtagTap: { _ in }
+        )
+        RichTextView(text: "Visit https://grain.social for more.")
+    }
+    .padding()
 }

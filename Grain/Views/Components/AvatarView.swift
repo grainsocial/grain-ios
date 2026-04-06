@@ -1,5 +1,5 @@
-import SwiftUI
 import NukeUI
+import SwiftUI
 
 struct AvatarView: View {
     let url: String?
@@ -31,4 +31,13 @@ struct AvatarView: View {
                 .foregroundStyle(Color.gray.opacity(0.6))
         }
     }
+}
+
+#Preview {
+    HStack(spacing: 20) {
+        AvatarView(url: nil)
+        AvatarView(url: nil, size: 48)
+        AvatarView(url: nil, size: 80)
+    }
+    .padding()
 }

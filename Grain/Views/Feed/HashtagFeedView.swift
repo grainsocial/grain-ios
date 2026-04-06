@@ -16,7 +16,9 @@ struct HashtagFeedView: View {
     let client: XRPCClient
     let tag: String
 
-    private var feedId: String { "hashtag:\(tag)" }
+    private var feedId: String {
+        "hashtag:\(tag)"
+    }
 
     var body: some View {
         ScrollView {
@@ -67,6 +69,7 @@ struct HashtagFeedView: View {
             }
         }
         .task {
+            guard !isPreview else { return }
             await checkPinned()
         }
         .navigationDestination(item: $selectedUri) { uri in
@@ -94,6 +97,12 @@ struct HashtagFeedView: View {
             .environment(auth)
         }
         .task {
+            guard !isPreview else {
+                #if DEBUG
+                    galleries = PreviewData.galleries
+                #endif
+                return
+            }
             if galleries.isEmpty {
                 await loadInitial()
             }
@@ -141,4 +150,12 @@ struct HashtagFeedView: View {
             isPinned.toggle()
         } catch {}
     }
+}
+
+#Preview {
+    HashtagFeedView(client: XRPCClient(baseURL: AuthManager.serverURL), tag: "35mm")
+        .environment(AuthManager())
+        .environment(StoryStatusCache())
+        .environment(ViewedStoryStorage())
+        .environment(LabelDefinitionsCache())
 }

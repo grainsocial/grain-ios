@@ -1,3 +1,4 @@
+import Nuke
 import SwiftUI
 
 struct FeedView: View {
@@ -25,8 +26,7 @@ struct FeedView: View {
     }
 
     var body: some View {
-        // Read version so Observation tracks it and re-renders on invalidate()
-        let _ = storyViewModel.version
+        let storySortVersion = storyViewModel.version
         NavigationStack {
             ForEach(prefsViewModel.pinnedFeeds) { feed in
                 if feed.id == prefsViewModel.selectedFeedId {
@@ -35,13 +35,14 @@ struct FeedView: View {
                         pinnedFeed: feed,
                         userDID: auth.userDID,
                         storyAuthors: storyViewModel.authors,
+                        storySortVersion: storySortVersion,
                         userAvatar: auth.userAvatar,
                         onStoryAuthorTap: { author, _ in
                             storyViewerDid = author.profile.did
                         },
                         onStoryCreateTap: { showStoryCreate = true },
                         onRefresh: { [storyStatusCache] in
-                            await storyViewModel.load(auth: await auth.authContext(), storyStatusCache: storyStatusCache)
+                            await storyViewModel.load(auth: auth.authContext(), storyStatusCache: storyStatusCache)
                         },
                         prefsViewModel: prefsViewModel
                     )
@@ -59,11 +60,12 @@ struct FeedView: View {
                 .sharedBackgroundVisibility(.hidden)
             }
             .task {
-                await prefsViewModel.loadIfNeeded(auth: await auth.authContext())
-                await storyViewModel.load(auth: await auth.authContext(), storyStatusCache: storyStatusCache)
+                guard !isPreview else { return }
+                await prefsViewModel.loadIfNeeded(auth: auth.authContext())
+                await storyViewModel.load(auth: auth.authContext(), storyStatusCache: storyStatusCache)
             }
             .onAppear {
-                Task { await prefsViewModel.refresh(auth: await auth.authContext()) }
+                Task { await prefsViewModel.refresh(auth: auth.authContext()) }
             }
             .onChange(of: storyViewerDid) {
                 if storyViewerDid == nil {
@@ -93,7 +95,7 @@ struct FeedView: View {
             }
             .sheet(isPresented: $showStoryCreate) {
                 StoryCreateView(client: client) {
-                    Task { await storyViewModel.load(auth: await auth.authContext(), storyStatusCache: storyStatusCache) }
+                    Task { await storyViewModel.load(auth: auth.authContext(), storyStatusCache: storyStatusCache) }
                 }
             }
             .navigationDestination(item: $deepLinkProfileDid) { did in
@@ -110,7 +112,10 @@ struct FeedView: View {
                         deepLinkStoryAuthor = nil
                         deepLinkProfileDid = did
                     },
-                    onDismiss: { deepLinkStoryAuthor = nil }
+                    onDismiss: {
+                        deepLinkStoryAuthor = nil
+                        storyViewModel.invalidate()
+                    }
                 )
                 .environment(auth)
             }
@@ -123,7 +128,6 @@ struct FeedView: View {
         }
     }
 
-    @ViewBuilder
     private var leadingToolbarContent: some View {
         Menu {
             ForEach(prefsViewModel.pinnedFeeds) { feed in
@@ -142,7 +146,7 @@ struct FeedView: View {
                 Divider()
                 Button(role: .destructive) {
                     Task {
-                        await prefsViewModel.unpinFeed(prefsViewModel.selectedFeedId, auth: await auth.authContext())
+                        await prefsViewModel.unpinFeed(prefsViewModel.selectedFeedId, auth: auth.authContext())
                     }
                 } label: {
                     Label("Unpin", systemImage: "pin.slash")
@@ -166,7 +170,6 @@ struct FeedView: View {
         .tint(.primary)
     }
 
-    @ViewBuilder
     private var trailingToolbarContent: some View {
         Button {
             showCreate = true
@@ -184,18 +187,18 @@ struct FeedView: View {
         guard let link = pendingDeepLink else { return }
         pendingDeepLink = nil
         switch link {
-        case .profile(let did):
+        case let .profile(did):
             deepLinkProfileDid = did
         case .gallery:
             deepLinkGalleryUri = link.galleryUri
-        case .story(let did, _):
+        case let .story(did, _):
             Task { await openStoryDeepLink(did: did) }
         }
     }
 
     private func openStoryDeepLink(did: String) async {
         do {
-            let response = try await client.getStories(actor: did, auth: await auth.authContext())
+            let response = try await client.getStories(actor: did, auth: auth.authContext())
             let count = response.stories.count
             if count > 0, let creator = response.stories.first?.creator {
                 deepLinkStoryAuthor = GrainStoryAuthor(
@@ -212,7 +215,6 @@ struct FeedView: View {
             deepLinkProfileDid = did
         }
     }
-
 }
 
 private struct FeedTabContent: View {
@@ -226,20 +228,35 @@ private struct FeedTabContent: View {
     @State private var deletedGalleryUri: String?
     @State private var zoomState = ImageZoomState()
     @State private var cardStoryAuthor: GrainStoryAuthor?
+    @AppStorage("privacy.showSuggestedUsers") private var showSuggestedUsers = true
     @State private var suggestedFollows: [SuggestedItem] = []
     @State private var suggestedLoaded = false
     @State private var lastLoadTime: Date = .now
+    @State private var feedPrefetcher = ImagePrefetcher()
     let client: XRPCClient
     let storyAuthors: [GrainStoryAuthor]
+    var storySortVersion: Int = 0
     let userAvatar: String?
     let onStoryAuthorTap: (GrainStoryAuthor, Int) -> Void
     let onStoryCreateTap: () -> Void
     let onRefresh: (@Sendable () async -> Void)?
     let prefsViewModel: FeedPreferencesViewModel
 
-    init(client: XRPCClient, pinnedFeed: PinnedFeed, userDID: String? = nil, storyAuthors: [GrainStoryAuthor] = [], userAvatar: String? = nil, onStoryAuthorTap: @escaping (GrainStoryAuthor, Int) -> Void = { _, _ in }, onStoryCreateTap: @escaping () -> Void = {}, onRefresh: (@Sendable () async -> Void)? = nil, prefsViewModel: FeedPreferencesViewModel) {
+    init(
+        client: XRPCClient,
+        pinnedFeed: PinnedFeed,
+        userDID: String? = nil,
+        storyAuthors: [GrainStoryAuthor] = [],
+        storySortVersion: Int = 0,
+        userAvatar: String? = nil,
+        onStoryAuthorTap: @escaping (GrainStoryAuthor, Int) -> Void = { _, _ in },
+        onStoryCreateTap: @escaping () -> Void = {},
+        onRefresh: (@Sendable () async -> Void)? = nil,
+        prefsViewModel: FeedPreferencesViewModel
+    ) {
         self.client = client
         self.storyAuthors = storyAuthors
+        self.storySortVersion = storySortVersion
         self.userAvatar = userAvatar
         self.onStoryAuthorTap = onStoryAuthorTap
         self.onStoryCreateTap = onStoryCreateTap
@@ -253,7 +270,9 @@ private struct FeedTabContent: View {
             LazyVStack(spacing: 12) {
                 StoryStripView(
                     authors: storyAuthors,
+                    userDid: auth.userDID,
                     userAvatar: userAvatar,
+                    sortVersion: storySortVersion,
                     onAuthorTap: onStoryAuthorTap,
                     onAuthorLongPress: { did in selectedProfileDid = did },
                     onCreateTap: onStoryCreateTap
@@ -272,12 +291,20 @@ private struct FeedTabContent: View {
                         cardStoryAuthor = author
                     })
                     .onAppear {
-                        if gallery.id == viewModel.galleries.last?.id {
-                            Task { await viewModel.loadMore(auth: await auth.authContext()) }
+                        // Trigger loadMore when 5 items from the end
+                        let remaining = viewModel.galleries.count - index
+                        if remaining <= 5 {
+                            Task { await viewModel.loadMore(auth: auth.authContext()) }
                         }
+                        // Prefetch first image of next 3 galleries
+                        let input = viewModel.galleries.map { g in
+                            (firstThumb: g.items?.first?.thumb, firstFullsize: g.items?.first?.fullsize)
+                        }
+                        let plan = ImagePrefetchPlanning.feedPrefetchRequests(galleries: input, currentIndex: index)
+                        feedPrefetcher.startPrefetching(with: plan.all)
                     }
 
-                    if index == 4 {
+                    if index == 4, showSuggestedUsers {
                         SuggestedFollowsView(client: client, suggestions: $suggestedFollows, onProfileTap: { did in
                             selectedProfileDid = did
                         })
@@ -325,13 +352,19 @@ private struct FeedTabContent: View {
             .environment(auth)
         }
         .task {
+            guard !isPreview else {
+                #if DEBUG
+                    viewModel.galleries = PreviewData.galleries
+                #endif
+                return
+            }
             if viewModel.galleries.isEmpty {
-                await viewModel.loadInitial(auth: await auth.authContext())
+                await viewModel.loadInitial(auth: auth.authContext())
                 lastLoadTime = .now
             }
-            if !suggestedLoaded, let did = auth.userDID {
+            if showSuggestedUsers, !suggestedLoaded, let did = auth.userDID {
                 do {
-                    let response = try await client.getSuggestedFollows(actor: did, auth: await auth.authContext())
+                    let response = try await client.getSuggestedFollows(actor: did, auth: auth.authContext())
                     suggestedFollows = response.items ?? []
                 } catch {}
                 suggestedLoaded = true
@@ -340,7 +373,7 @@ private struct FeedTabContent: View {
         .onChange(of: scenePhase) {
             if scenePhase == .active, Date.now.timeIntervalSince(lastLoadTime) > 300 {
                 Task {
-                    await viewModel.loadInitial(auth: await auth.authContext())
+                    await viewModel.loadInitial(auth: auth.authContext())
                     lastLoadTime = .now
                 }
             }
@@ -352,4 +385,12 @@ private struct FeedTabContent: View {
             }
         }
     }
+}
+
+#Preview {
+    FeedView(client: XRPCClient(baseURL: AuthManager.serverURL))
+        .environment(AuthManager())
+        .environment(StoryStatusCache())
+        .environment(ViewedStoryStorage())
+        .environment(LabelDefinitionsCache())
 }

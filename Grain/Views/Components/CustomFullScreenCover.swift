@@ -1,11 +1,11 @@
 import SwiftUI
 
 extension View {
-    func customFullScreenCover<Content: View>(
+    func customFullScreenCover(
         isPresented: Binding<Bool>,
         transition: AnyTransition = .scale(scale: 0.9).combined(with: .opacity),
         animation: Animation = .easeInOut(duration: 0.25),
-        @ViewBuilder content: @escaping () -> Content
+        @ViewBuilder content: @escaping () -> some View
     ) -> some View {
         modifier(
             CustomFullScreenCoverModifier(
@@ -55,5 +55,18 @@ private struct CustomFullScreenCoverModifier<PresentedView: View>: ViewModifier 
                     }
                 }
             }
+    }
+}
+
+#Preview {
+    @Previewable @State var show = false
+    VStack {
+        Button("Show Cover") { show = true }
+    }
+    .customFullScreenCover(isPresented: $show) {
+        ZStack {
+            Color.blue.ignoresSafeArea()
+            Text("Custom Cover").foregroundStyle(.white)
+        }
     }
 }

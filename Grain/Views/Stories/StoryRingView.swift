@@ -6,8 +6,13 @@ struct StoryRingView<Content: View>: View {
     let size: CGFloat
     @ViewBuilder let content: () -> Content
 
-    private var lineWidth: CGFloat { size <= 28 ? 1.5 : size <= 40 ? 2.5 : 3.5 }
-    private var ringSize: CGFloat { size + (size <= 28 ? 4 : size <= 40 ? 6 : 8) }
+    private var lineWidth: CGFloat {
+        size <= 28 ? 1.5 : size <= 40 ? 2.5 : 3.5
+    }
+
+    private var ringSize: CGFloat {
+        size + (size <= 28 ? 4 : size <= 40 ? 6 : 8)
+    }
 
     var body: some View {
         content()
@@ -22,9 +27,9 @@ struct StoryRingView<Content: View>: View {
                             .strokeBorder(
                                 LinearGradient(
                                     colors: [
-                                        Color(red: 0xc9/255, green: 0x7c/255, blue: 0xf8/255),
-                                        Color(red: 0x85/255, green: 0xa1/255, blue: 0xff/255),
-                                        Color(red: 0x5b/255, green: 0xf0/255, blue: 0xd6/255)
+                                        Color(red: 0xC9 / 255, green: 0x7C / 255, blue: 0xF8 / 255),
+                                        Color(red: 0x85 / 255, green: 0xA1 / 255, blue: 0xFF / 255),
+                                        Color(red: 0x5B / 255, green: 0xF0 / 255, blue: 0xD6 / 255),
                                     ],
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
@@ -36,4 +41,19 @@ struct StoryRingView<Content: View>: View {
                 }
             }
     }
+}
+
+#Preview {
+    HStack(spacing: 24) {
+        StoryRingView(hasStory: false, size: 48) {
+            AvatarView(url: nil, size: 48)
+        }
+        StoryRingView(hasStory: true, viewed: false, size: 48) {
+            AvatarView(url: nil, size: 48)
+        }
+        StoryRingView(hasStory: true, viewed: true, size: 48) {
+            AvatarView(url: nil, size: 48)
+        }
+    }
+    .padding()
 }

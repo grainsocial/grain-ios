@@ -74,3 +74,22 @@ struct LabelBadge: View {
         .background(.quaternary, in: .capsule)
     }
 }
+
+#Preview("ContentWarningOverlay") {
+    ContentWarningOverlay(name: "Nudity", action: .hide) {}
+        .frame(height: 200)
+}
+
+#Preview("MediaWarningOverlay") {
+    MediaWarningOverlay(name: "Sexual Content") {}
+        .frame(height: 200)
+        .background(Color.gray.opacity(0.2))
+}
+
+#Preview("LabelBadge") {
+    HStack {
+        LabelBadge(name: "sensitive")
+        LabelBadge(name: "gore")
+    }
+    .padding()
+}

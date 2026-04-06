@@ -1,5 +1,5 @@
-import SwiftUI
 import NukeUI
+import SwiftUI
 
 struct NotificationsView: View {
     @Environment(AuthManager.self) private var auth
@@ -18,31 +18,31 @@ struct NotificationsView: View {
         NavigationStack {
             List {
                 ForEach(viewModel.notifications) { notification in
-                    NotificationRow(notification: notification, onProfileTap: { did in
-                            selectedProfileDid = did
-                        }, onStoryTap: { author in
-                            cardStoryAuthor = author
-                        })
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            if notification.reasonType == .follow {
-                                selectedProfileDid = notification.author.did
-                            } else if let galleryUri = notification.galleryUri {
-                                selectedGalleryUri = galleryUri
-                            }
+                    NotificationRow(notification: notification, userDID: auth.userDID, onProfileTap: { did in
+                        selectedProfileDid = did
+                    }, onStoryTap: { author in
+                        cardStoryAuthor = author
+                    })
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        if notification.reasonType == .follow {
+                            selectedProfileDid = notification.author.did
+                        } else if let galleryUri = notification.galleryUri {
+                            selectedGalleryUri = galleryUri
                         }
-                        .swipeActions(edge: .leading) {
-                            Button {
-                                selectedProfileDid = notification.author.did
-                            } label: {
-                                Label("Profile", systemImage: "person")
-                            }
+                    }
+                    .swipeActions(edge: .leading) {
+                        Button {
+                            selectedProfileDid = notification.author.did
+                        } label: {
+                            Label("Profile", systemImage: "person")
                         }
-                        .onAppear {
-                            if notification.id == viewModel.notifications.last?.id {
-                                Task { await viewModel.loadMore(auth: await auth.authContext()) }
-                            }
+                    }
+                    .onAppear {
+                        if notification.id == viewModel.notifications.last?.id {
+                            Task { await viewModel.loadMore(auth: auth.authContext()) }
                         }
+                    }
                 }
 
                 if viewModel.isLoading {
@@ -55,7 +55,7 @@ struct NotificationsView: View {
             }
             .listStyle(.plain)
             .refreshable {
-                await viewModel.loadInitial(auth: await auth.authContext())
+                await viewModel.loadInitial(auth: auth.authContext())
             }
             .navigationTitle("Notifications")
             .navigationDestination(item: $selectedGalleryUri) { uri in
@@ -78,9 +78,9 @@ struct NotificationsView: View {
             }
             .task(id: viewModel.unseenCount) {
                 if viewModel.notifications.isEmpty || viewModel.unseenCount > 0 {
-                    await viewModel.loadInitial(auth: await auth.authContext())
+                    await viewModel.loadInitial(auth: auth.authContext())
                 }
-                await viewModel.markAsSeen(auth: await auth.authContext())
+                await viewModel.markAsSeen(auth: auth.authContext())
             }
         }
     }
@@ -90,12 +90,13 @@ struct NotificationRow: View {
     @Environment(StoryStatusCache.self) private var storyStatusCache
     @Environment(ViewedStoryStorage.self) private var viewedStories
     let notification: GrainNotification
+    let userDID: String?
     var onProfileTap: ((String) -> Void)?
     var onStoryTap: ((GrainStoryAuthor) -> Void)?
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            StoryRingView(hasStory: storyStatusCache.hasStory(for: notification.author.did), viewed: viewedStories.hasViewedAll(did: notification.author.did, storyStatusCache: storyStatusCache), size: 36) {
+            StoryRingView(hasStory: storyStatusCache.hasStory(for: notification.author.did), viewed: notification.author.did != userDID && viewedStories.hasViewedAll(did: notification.author.did, storyStatusCache: storyStatusCache), size: 36) {
                 AvatarView(url: notification.author.avatar, size: 36)
             }
             .onTapGesture {
@@ -153,4 +154,13 @@ struct NotificationRow: View {
         case .unknown: ""
         }
     }
+}
+
+#Preview {
+    let client = XRPCClient(baseURL: AuthManager.serverURL)
+    let vm = NotificationsViewModel(client: client)
+    vm.notifications = PreviewData.notifications
+    vm.unseenCount = 3
+    return NotificationsView(client: client, viewModel: vm)
+        .environment(AuthManager())
 }

@@ -1,5 +1,5 @@
-import SwiftUI
 import NukeUI
+import SwiftUI
 
 struct GalleryDetailView: View {
     @Environment(AuthManager.self) private var auth
@@ -90,6 +90,7 @@ struct GalleryDetailView: View {
                             ForEach(threadedComments, id: \.root.id) { thread in
                                 CommentRow(
                                     comment: thread.root,
+                                    userDID: auth.userDID,
                                     isOwn: thread.root.author.did == auth.userDID,
                                     isReply: false,
                                     onProfileTap: { did in selectedProfileDid = did },
@@ -102,6 +103,7 @@ struct GalleryDetailView: View {
                                 ForEach(thread.replies) { reply in
                                     CommentRow(
                                         comment: reply,
+                                        userDID: auth.userDID,
                                         isOwn: reply.author.did == auth.userDID,
                                         isReply: true,
                                         onProfileTap: { did in selectedProfileDid = did },
@@ -115,7 +117,7 @@ struct GalleryDetailView: View {
                         }
                     }
                 }
-            } else if viewModel.isLoading {
+            } else {
                 ProgressView()
                     .padding(.top, 100)
             }
@@ -207,7 +209,7 @@ struct GalleryDetailView: View {
                         .font(.body)
                         .focused($commentFocused)
                         .padding()
-                        .lineLimit(5...10)
+                        .lineLimit(5 ... 10)
                         .onChange(of: commentText) { mentionState.update(text: commentText) }
 
                     Spacer()
@@ -244,7 +246,14 @@ struct GalleryDetailView: View {
             }
         }
         .task {
-            await viewModel.load(uri: galleryUri, auth: await auth.authContext())
+            guard !isPreview else {
+                #if DEBUG
+                    viewModel.gallery = PreviewData.gallery1
+                    viewModel.comments = PreviewData.comments
+                #endif
+                return
+            }
+            await viewModel.load(uri: galleryUri, auth: auth.authContext())
         }
     }
 
@@ -268,7 +277,7 @@ struct GalleryDetailView: View {
         var recordDict: [String: String] = [
             "text": text,
             "subject": galleryUri,
-            "createdAt": DateFormatting.nowISO()
+            "createdAt": DateFormatting.nowISO(),
         ]
         if let replyTarget = replyingTo {
             recordDict["replyTo"] = replyTarget.uri
@@ -315,6 +324,7 @@ struct CommentRow: View {
     @Environment(StoryStatusCache.self) private var storyStatusCache
     @Environment(ViewedStoryStorage.self) private var viewedStories
     let comment: GrainComment
+    let userDID: String?
     var isOwn: Bool = false
     var isReply: Bool = false
     var onProfileTap: ((String) -> Void)?
@@ -326,7 +336,11 @@ struct CommentRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             let avatarSize: CGFloat = isReply ? 24 : 28
-            StoryRingView(hasStory: storyStatusCache.hasStory(for: comment.author.did), viewed: viewedStories.hasViewedAll(did: comment.author.did, storyStatusCache: storyStatusCache), size: avatarSize) {
+            StoryRingView(
+                hasStory: storyStatusCache.hasStory(for: comment.author.did),
+                viewed: comment.author.did != userDID && viewedStories.hasViewedAll(did: comment.author.did, storyStatusCache: storyStatusCache),
+                size: avatarSize
+            ) {
                 AvatarView(url: comment.author.avatar, size: avatarSize)
             }
             .onTapGesture {
@@ -385,5 +399,13 @@ struct CommentRow: View {
         .padding(.trailing, 12)
         .padding(.vertical, 8)
     }
+}
 
+#Preview {
+    GalleryDetailView(
+        client: XRPCClient(baseURL: AuthManager.serverURL),
+        galleryUri: "at://did:plc:preview/social.grain.gallery/r1"
+    )
+    .environment(AuthManager())
+    .environment(LabelDefinitionsCache())
 }

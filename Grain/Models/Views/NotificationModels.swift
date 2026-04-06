@@ -12,7 +12,9 @@ struct GrainNotification: Codable, Sendable, Identifiable {
     var commentText: String?
     var replyToText: String?
 
-    var id: String { uri }
+    var id: String {
+        uri
+    }
 
     var reasonType: NotificationReason {
         NotificationReason(rawValue: reason) ?? .unknown

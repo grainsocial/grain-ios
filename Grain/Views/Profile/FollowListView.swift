@@ -1,5 +1,5 @@
-import SwiftUI
 import NukeUI
+import SwiftUI
 
 enum FollowListMode: Hashable {
     case followers
@@ -36,14 +36,20 @@ struct FollowListView: View {
 
     var body: some View {
         Group {
-            if !hasLoaded && isLoading {
+            if !hasLoaded, isLoading {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if hasLoaded && items.isEmpty {
+            } else if hasLoaded, items.isEmpty {
                 ContentUnavailableView(
                     "No \(title)",
                     systemImage: mode == .knownFollowers ? "person.2" : mode == .followers ? "person.2" : "person.badge.plus",
-                    description: Text(mode == .knownFollowers ? "None of the people you follow are following this account." : mode == .followers ? "No one is following this account yet." : "This account isn't following anyone yet.")
+                    description: Text(
+                        mode == .knownFollowers
+                            ? "None of the people you follow are following this account."
+                            : mode == .followers
+                            ? "No one is following this account yet."
+                            : "This account isn't following anyone yet."
+                    )
                 )
             } else {
                 List {
@@ -102,10 +108,9 @@ struct FollowListView: View {
         }
     }
 
-    @ViewBuilder
     private func rowContent(item: FollowListItem) -> some View {
         HStack(alignment: .center, spacing: 14) {
-            StoryRingView(hasStory: storyStatusCache.hasStory(for: item.did), viewed: viewedStories.hasViewedAll(did: item.did, storyStatusCache: storyStatusCache), size: 50) {
+            StoryRingView(hasStory: storyStatusCache.hasStory(for: item.did), viewed: item.did != auth.userDID && viewedStories.hasViewedAll(did: item.did, storyStatusCache: storyStatusCache), size: 50) {
                 AvatarView(url: item.avatar, size: 50)
             }
             .onTapGesture {
@@ -171,7 +176,7 @@ struct FollowListView: View {
 
     private func loadMore() async {
         guard !isLoading else { return }
-        if !items.isEmpty && cursor == nil { return }
+        if !items.isEmpty, cursor == nil { return }
         isLoading = true
         defer { isLoading = false }
 
@@ -210,7 +215,7 @@ struct FollowListView: View {
             items[index].followingUri = nil
             do {
                 try await client.deleteRecord(collection: "social.grain.graph.follow", rkey: rkey, auth: authContext)
-                if mode == .following && did == repo {
+                if mode == .following, did == repo {
                     if let idx = items.firstIndex(where: { $0.did == targetDid }) {
                         items.remove(at: idx)
                     }
@@ -226,7 +231,7 @@ struct FollowListView: View {
             do {
                 let record = AnyCodable([
                     "subject": item.did,
-                    "createdAt": DateFormatting.nowISO()
+                    "createdAt": DateFormatting.nowISO(),
                 ])
                 let result = try await client.createRecord(
                     collection: "social.grain.graph.follow",
@@ -253,23 +258,34 @@ struct FollowListItem: Identifiable {
     var description: String?
     var avatar: String?
     var followingUri: String?
-    var id: String { did }
+    var id: String {
+        did
+    }
 
     init(from follower: FollowerItem) {
-        self.did = follower.did
-        self.handle = follower.handle
-        self.displayName = follower.displayName
-        self.description = follower.description
-        self.avatar = follower.avatar
-        self.followingUri = follower.viewer?.following
+        did = follower.did
+        handle = follower.handle
+        displayName = follower.displayName
+        description = follower.description
+        avatar = follower.avatar
+        followingUri = follower.viewer?.following
     }
 
     init(from following: FollowingItem) {
-        self.did = following.did
-        self.handle = following.handle
-        self.displayName = following.displayName
-        self.description = following.description
-        self.avatar = following.avatar
-        self.followingUri = following.viewer?.following
+        did = following.did
+        handle = following.handle
+        displayName = following.displayName
+        description = following.description
+        avatar = following.avatar
+        followingUri = following.viewer?.following
     }
+}
+
+#Preview {
+    FollowListView(
+        client: XRPCClient(baseURL: AuthManager.serverURL),
+        did: "did:plc:preview",
+        mode: .followers
+    )
+    .environment(AuthManager())
 }

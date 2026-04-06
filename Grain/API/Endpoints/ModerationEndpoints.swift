@@ -6,7 +6,9 @@ struct LabelDefinition: Codable, Sendable, Identifiable {
     var blurs: String?
     var defaultSetting: String?
 
-    var id: String { identifier }
+    var id: String {
+        identifier
+    }
 
     var displayName: String {
         locales?.first?.name ?? identifier

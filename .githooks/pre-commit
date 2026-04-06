@@ -1,0 +1,9 @@
+#!/bin/sh
+
+# Only format/lint staged Swift files
+FILES=$(git diff --cached --name-only --diff-filter=ACM -- '*.swift')
+[ -z "$FILES" ] && exit 0
+
+echo "$FILES" | xargs swiftformat 2>/dev/null
+echo "$FILES" | xargs swiftlint lint --fix 2>/dev/null | grep -v "^Linting\|^Done linting"
+echo "$FILES" | xargs git add

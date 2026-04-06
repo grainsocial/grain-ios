@@ -1,5 +1,5 @@
-import Foundation
 import CryptoKit
+import Foundation
 import Security
 
 /// DPoP (Demonstration of Proof-of-Possession) proof generator using ES256.
@@ -12,20 +12,20 @@ final class DPoP: Sendable {
         self.privateKey = privateKey
         let publicKey = privateKey.publicKey
         let rawRepresentation = publicKey.rawRepresentation
-        let x = rawRepresentation.prefix(32)
-        let y = rawRepresentation.suffix(32)
+        let xCoord = rawRepresentation.prefix(32)
+        let yCoord = rawRepresentation.suffix(32)
 
-        self.publicJWK = [
+        publicJWK = [
             "kty": "EC",
             "crv": "P-256",
-            "x": x.base64URLEncoded(),
-            "y": y.base64URLEncoded()
+            "x": xCoord.base64URLEncoded(),
+            "y": yCoord.base64URLEncoded(),
         ]
 
         // JWK thumbprint (RFC 7638) — lexicographic JSON of required members
-        let thumbprintInput = #"{"crv":"P-256","kty":"EC","x":"\#(x.base64URLEncoded())","y":"\#(y.base64URLEncoded())"}"#
+        let thumbprintInput = #"{"crv":"P-256","kty":"EC","x":"\#(xCoord.base64URLEncoded())","y":"\#(yCoord.base64URLEncoded())"}"#
         let hash = SHA256.hash(data: Data(thumbprintInput.utf8))
-        self.thumbprint = Data(hash).base64URLEncoded()
+        thumbprint = Data(hash).base64URLEncoded()
     }
 
     /// Create a DPoP proof JWT.
@@ -45,7 +45,7 @@ final class DPoP: Sendable {
         let header: [String: Any] = [
             "typ": "dpop+jwt",
             "alg": "ES256",
-            "jwk": publicJWK
+            "jwk": publicJWK,
         ]
 
         // Payload
@@ -53,7 +53,7 @@ final class DPoP: Sendable {
             "jti": UUID().uuidString,
             "htm": httpMethod.uppercased(),
             "htu": htu,
-            "iat": Int(Date().timeIntervalSince1970)
+            "iat": Int(Date().timeIntervalSince1970),
         ]
 
         if let accessToken {
@@ -96,7 +96,7 @@ extension DPoP {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: keychainAccount
+            kSecAttrAccount as String: keychainAccount,
         ]
         SecItemDelete(query as CFDictionary)
     }
@@ -106,7 +106,7 @@ extension DPoP {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
             kSecAttrAccount as String: keychainAccount,
-            kSecReturnData as String: true
+            kSecReturnData as String: true,
         ]
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
@@ -120,7 +120,7 @@ extension DPoP {
             kSecAttrService as String: keychainService,
             kSecAttrAccount as String: keychainAccount,
             kSecValueData as String: key.rawRepresentation,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
         ]
         let status = SecItemAdd(query as CFDictionary, nil)
         guard status == errSecSuccess else {

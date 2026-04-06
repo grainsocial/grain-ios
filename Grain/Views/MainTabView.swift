@@ -16,7 +16,7 @@ struct MainTabView: View {
     @State private var notificationsVM = NotificationsViewModel(client: XRPCClient(baseURL: AuthManager.serverURL))
     @Binding var pendingDeepLink: DeepLink?
 
-    static let badgeAppearanceConfigured: Bool = {
+    @MainActor static let badgeAppearanceConfigured: Bool = MainActor.assumeIsolated {
         let color = UIColor(named: "AccentColor")
         let textAttrs: [NSAttributedString.Key: Any] = [.foregroundColor: UIColor.white]
         let appearance = UITabBarAppearance()
@@ -32,7 +32,7 @@ struct MainTabView: View {
         UITabBar.appearance().standardAppearance = appearance
         UITabBar.appearance().scrollEdgeAppearance = appearance
         return true
-    }()
+    }
 
     var body: some View {
         let _ = Self.badgeAppearanceConfigured
@@ -78,8 +78,8 @@ struct MainTabView: View {
             if let uiImage = auth.avatarImage {
                 avatarTabImage = circularAvatar(uiImage, size: 26)
             }
-            await notificationsVM.fetchUnseenCount(auth: await auth.authContext())
-            await labelDefsCache.loadIfNeeded(client: c, auth: await auth.authContext())
+            await notificationsVM.fetchUnseenCount(auth: auth.authContext())
+            await labelDefsCache.loadIfNeeded(client: c, auth: auth.authContext())
         }
         .onChange(of: auth.avatarImage) {
             if let uiImage = auth.avatarImage {
@@ -95,8 +95,8 @@ struct MainTabView: View {
             if scenePhase == .active {
                 Task {
                     try? await auth.refreshIfNeeded()
-                    await notificationsVM.fetchUnseenCount(auth: await auth.authContext())
-                    await labelDefsCache.loadIfNeeded(client: client, auth: await auth.authContext())
+                    await notificationsVM.fetchUnseenCount(auth: auth.authContext())
+                    await labelDefsCache.loadIfNeeded(client: client, auth: auth.authContext())
                 }
             }
         }
@@ -104,6 +104,20 @@ struct MainTabView: View {
             CreateGalleryView(client: client) {
                 selectedTab = .feed
                 feedRefreshID = UUID()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .grainShortcutAction)) { notification in
+            guard let rawValue = notification.object as? String,
+                  let action = GrainShortcutAction(rawValue: rawValue)
+            else { return }
+            switch action {
+            case .feed: selectedTab = .feed
+            case .search: selectedTab = .search
+            case .notifications: selectedTab = .notifications
+            case .profile: selectedTab = .profile
+            case .createGallery:
+                selectedTab = .feed
+                showCreate = true
             }
         }
     }
@@ -117,4 +131,13 @@ struct MainTabView: View {
         }
         return circled.withRenderingMode(.alwaysOriginal)
     }
+}
+
+#Preview {
+    MainTabView(pendingDeepLink: .constant(nil))
+        .environment(AuthManager())
+        .environment(PushManager())
+        .environment(StoryStatusCache())
+        .environment(ViewedStoryStorage())
+        .environment(LabelDefinitionsCache())
 }

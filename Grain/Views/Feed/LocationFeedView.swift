@@ -18,7 +18,9 @@ struct LocationFeedView: View {
     let h3Index: String
     let locationName: String
 
-    private var feedId: String { "location:\(h3Index)" }
+    private var feedId: String {
+        "location:\(h3Index)"
+    }
 
     private var coordinate: CLLocationCoordinate2D? {
         LocationServices.h3ToCoordinate(h3Index)
@@ -98,6 +100,7 @@ struct LocationFeedView: View {
             }
         }
         .task {
+            guard !isPreview else { return }
             await checkPinned()
         }
         .navigationDestination(item: $selectedUri) { uri in
@@ -122,6 +125,12 @@ struct LocationFeedView: View {
             .environment(auth)
         }
         .task {
+            guard !isPreview else {
+                #if DEBUG
+                    galleries = PreviewData.galleries
+                #endif
+                return
+            }
             if galleries.isEmpty {
                 await loadInitial()
             }
@@ -174,5 +183,19 @@ struct LocationFeedView: View {
 struct LocationDestination: Hashable, Identifiable {
     let h3Index: String
     let name: String
-    var id: String { h3Index }
+    var id: String {
+        h3Index
+    }
+}
+
+#Preview {
+    LocationFeedView(
+        client: XRPCClient(baseURL: AuthManager.serverURL),
+        h3Index: "8928308280fffff",
+        locationName: "San Francisco"
+    )
+    .environment(AuthManager())
+    .environment(StoryStatusCache())
+    .environment(ViewedStoryStorage())
+    .environment(LabelDefinitionsCache())
 }

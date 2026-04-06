@@ -42,7 +42,7 @@ struct ReportView: View {
 
                         Section("Details (optional)") {
                             TextField("Provide additional context...", text: $reason, axis: .vertical)
-                                .lineLimit(3...6)
+                                .lineLimit(3 ... 6)
                         }
 
                         if let error {
@@ -107,4 +107,13 @@ struct ReportView: View {
         }
         isSubmitting = false
     }
+}
+
+#Preview {
+    ReportView(
+        client: XRPCClient(baseURL: AuthManager.serverURL),
+        subjectUri: "at://did:plc:preview/social.grain.gallery/r1",
+        subjectCid: "cid"
+    )
+    .environment(AuthManager())
 }

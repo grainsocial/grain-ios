@@ -1,3 +1,4 @@
+import Nuke
 import NukeUI
 import SwiftUI
 
@@ -79,7 +80,7 @@ struct PinchZoomOverlay: UIViewRepresentable {
         return view
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {}
+    func updateUIView(_: UIView, context _: Context) {}
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -94,8 +95,8 @@ struct PinchZoomOverlay: UIViewRepresentable {
             self.parent = parent
         }
 
-        nonisolated func gestureRecognizer(
-            _ gestureRecognizer: UIGestureRecognizer,
+        @MainActor func gestureRecognizer(
+            _: UIGestureRecognizer,
             shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
         ) -> Bool {
             let dominated = otherGestureRecognizer.view is UIScrollView
@@ -135,8 +136,8 @@ struct PinchZoomOverlay: UIViewRepresentable {
             switch gesture.state {
             case .changed:
                 guard parent.zoomState.scale > 1 else { return }
-                let t = gesture.translation(in: gesture.view)
-                parent.zoomState.offset = CGSize(width: t.x, height: t.y)
+                let translation = gesture.translation(in: gesture.view)
+                parent.zoomState.offset = CGSize(width: translation.x, height: translation.y)
             case .ended, .cancelled:
                 parent.onEnded()
             default:
@@ -150,6 +151,7 @@ struct PinchZoomOverlay: UIViewRepresentable {
 
 struct ZoomableImage: View {
     let url: String
+    var thumbURL: String?
     let aspectRatio: CGFloat
     var onDoubleTap: ((CGPoint) -> Void)?
     @Environment(ImageZoomState.self) private var zoomState: ImageZoomState?
@@ -157,11 +159,25 @@ struct ZoomableImage: View {
     @State private var snapBackTask: Task<Void, Never>?
 
     var body: some View {
-        LazyImage(url: URL(string: url)) { state in
+        LazyImage(request: ImageRequest(url: URL(string: url), priority: .veryHigh)) { state in
             if let image = state.image {
                 image
                     .resizable()
                     .aspectRatio(aspectRatio, contentMode: .fit)
+            } else if let thumbURL {
+                LazyImage(url: URL(string: thumbURL)) { thumbState in
+                    if let thumb = thumbState.image {
+                        thumb
+                            .resizable()
+                            .aspectRatio(aspectRatio, contentMode: .fit)
+                            .blur(radius: 20)
+                            .clipped()
+                    } else {
+                        Rectangle()
+                            .fill(.quaternary)
+                            .aspectRatio(aspectRatio, contentMode: .fit)
+                    }
+                }
             } else {
                 Rectangle()
                     .fill(.quaternary)
@@ -212,3 +228,9 @@ struct ZoomableImage: View {
     }
 }
 
+#Preview {
+    ZoomableImage(url: "", aspectRatio: 4 / 3)
+        .environment(ImageZoomState())
+        .frame(maxWidth: .infinity)
+        .padding()
+}
