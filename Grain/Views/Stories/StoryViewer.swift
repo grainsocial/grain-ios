@@ -71,9 +71,7 @@ struct StoryViewer: View {
     @State private var isLoadingStories = false
     @State private var timer = StoryTimer()
     @State private var showDeleteConfirm = false
-    @State private var showReportSheet = false
-    @State private var reportStoryUri = ""
-    @State private var reportStoryCid = ""
+    @State private var reportTarget: GrainStory?
     @State private var showLocationCopied = false
     @State private var lastNavTime: Date = .distantPast
     @State private var labelRevealed = false
@@ -87,7 +85,6 @@ struct StoryViewer: View {
     @State private var transitionGeneration = 0
     @State private var authorHistory: [(authorIndex: Int, storyIndex: Int)] = []
     @State private var imagePrefetcher = ImagePrefetcher()
-    @State private var nextStoryFromTrailing = true
     @State private var isDragging = false
 
     init(authors: [GrainStoryAuthor], startAuthorDid: String? = nil, client: XRPCClient, onProfileTap: ((String) -> Void)? = nil, onDismiss: (() -> Void)? = nil) {
@@ -153,14 +150,12 @@ struct StoryViewer: View {
                 timer.start()
             }
         }
-        .fullScreenCover(isPresented: $showReportSheet) {
-            ReportView(client: client, subjectUri: reportStoryUri, subjectCid: reportStoryCid)
+        .fullScreenCover(item: $reportTarget) { story in
+            ReportView(client: client, subjectUri: story.uri, subjectCid: story.cid)
                 .environment(auth)
         }
-        .onChange(of: showReportSheet) {
-            if !showReportSheet {
-                timer.start()
-            }
+        .onChange(of: reportTarget?.uri) {
+            if reportTarget == nil { timer.start() }
         }
         .task {
             guard !isPreview else { return }
@@ -332,10 +327,6 @@ struct StoryViewer: View {
                     }
                 }
                 .id(story.uri)
-                .transition(.asymmetric(
-                    insertion: .move(edge: nextStoryFromTrailing ? .trailing : .leading).combined(with: .opacity),
-                    removal: .move(edge: nextStoryFromTrailing ? .leading : .trailing).combined(with: .opacity)
-                ))
 
                 // Tap zones
                 VStack(spacing: 0) {
@@ -355,7 +346,7 @@ struct StoryViewer: View {
                         }
                     }
                 }
-                .allowsHitTesting(!showReportSheet && !showDeleteConfirm && (labelRevealed || storyLabelResult.action == .none || storyLabelResult.action == .badge))
+                .allowsHitTesting(reportTarget == nil && !showDeleteConfirm && (labelRevealed || storyLabelResult.action == .none || storyLabelResult.action == .badge))
             } else {
                 ProgressView()
                     .tint(.white)
@@ -406,9 +397,7 @@ struct StoryViewer: View {
                         Button {
                             guard let story else { return }
                             timer.stop()
-                            reportStoryUri = story.uri
-                            reportStoryCid = story.cid
-                            showReportSheet = true
+                            reportTarget = story
                         } label: {
                             Image(systemName: "flag")
                                 .foregroundStyle(.white)
@@ -467,7 +456,7 @@ struct StoryViewer: View {
 
     private func canNavigate() -> Bool {
         !isLoadingStories && !stories.isEmpty
-            && !showReportSheet && !showDeleteConfirm
+            && reportTarget == nil && !showDeleteConfirm
             && !isDragging
             && Date().timeIntervalSince(lastNavTime) > 0.3
     }
@@ -484,12 +473,7 @@ struct StoryViewer: View {
         timer.stop()
         lastNavTime = Date()
         if currentStoryIndex < stories.count - 1 {
-            timer.progress = 0
-            currentStoryIndex += 1
-            imageLoaded = false
-            labelRevealed = false
-            showLocationCopied = false
-            prefetchStoryImages()
+            advanceStory(by: 1)
         } else {
             goToNextAuthor()
         }
@@ -500,15 +484,19 @@ struct StoryViewer: View {
         timer.stop()
         lastNavTime = Date()
         if currentStoryIndex > 0 {
-            timer.progress = 0
-            currentStoryIndex -= 1
-            imageLoaded = false
-            labelRevealed = false
-            showLocationCopied = false
-            prefetchStoryImages()
+            advanceStory(by: -1)
         } else {
             goToPreviousAuthor()
         }
+    }
+
+    private func advanceStory(by delta: Int) {
+        timer.progress = 0
+        currentStoryIndex += delta
+        imageLoaded = false
+        labelRevealed = false
+        showLocationCopied = false
+        prefetchStoryImages()
     }
 
     private func goToNextAuthor() {
