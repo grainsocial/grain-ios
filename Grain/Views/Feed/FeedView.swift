@@ -226,6 +226,7 @@ private struct FeedTabContent: View {
     @State private var deletedGalleryUri: String?
     @State private var zoomState = ImageZoomState()
     @State private var cardStoryAuthor: GrainStoryAuthor?
+    @AppStorage("privacy.showSuggestedUsers") private var showSuggestedUsers = true
     @State private var suggestedFollows: [SuggestedItem] = []
     @State private var suggestedLoaded = false
     @State private var feedPrefetcher = ImagePrefetcher()
@@ -300,7 +301,7 @@ private struct FeedTabContent: View {
                         feedPrefetcher.startPrefetching(with: plan.all)
                     }
 
-                    if index == 4 {
+                    if index == 4, showSuggestedUsers {
                         SuggestedFollowsView(client: client, suggestions: $suggestedFollows, onProfileTap: { did in
                             selectedProfileDid = did
                         })
@@ -350,7 +351,7 @@ private struct FeedTabContent: View {
             if viewModel.galleries.isEmpty {
                 await viewModel.loadInitial(auth: auth.authContext())
             }
-            if !suggestedLoaded, let did = auth.userDID {
+            if showSuggestedUsers, !suggestedLoaded, let did = auth.userDID {
                 do {
                     let response = try await client.getSuggestedFollows(actor: did, auth: auth.authContext())
                     suggestedFollows = response.items ?? []
