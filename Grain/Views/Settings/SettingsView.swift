@@ -1,3 +1,4 @@
+import Nuke
 import SwiftUI
 
 struct SettingsView: View {
@@ -5,6 +6,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     let client: XRPCClient
     var onProfileEdited: (() -> Void)?
+    @State private var cacheSizeText = "Calculating..."
 
     var body: some View {
         List {
@@ -22,6 +24,16 @@ struct SettingsView: View {
                 NavigationLink("Edit Profile") {
                     EditProfileView(client: client, onSaved: onProfileEdited)
                 }
+            }
+
+            Section("Storage") {
+                LabeledContent("Image Cache", value: cacheSizeText)
+                Button("Clear Image Cache", role: .destructive) {
+                    clearImageCache()
+                }
+            }
+            .task {
+                updateCacheSize()
             }
 
             Section("Legal") {
@@ -42,5 +54,22 @@ struct SettingsView: View {
             }
         }
         .navigationTitle("Settings")
+    }
+
+    private func updateCacheSize() {
+        guard let dataCache = ImagePipeline.shared.configuration.dataCache as? DataCache else {
+            cacheSizeText = "Unknown"
+            return
+        }
+        let size = dataCache.totalSize
+        cacheSizeText = ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)
+    }
+
+    private func clearImageCache() {
+        ImagePipeline.shared.cache.removeAll()
+        if let dataCache = ImagePipeline.shared.configuration.dataCache as? DataCache {
+            dataCache.removeAll()
+        }
+        cacheSizeText = "Zero KB"
     }
 }
