@@ -19,9 +19,6 @@ struct PhotoEditor: View {
             altTextField(for: idx)
             exifRow(for: items[idx])
         }
-        ReorderablePhotoGrid(items: $items, selectedPhotoID: $selectedPhotoID)
-            .listRowInsets(EdgeInsets())
-            .listRowSeparator(.hidden)
     }
 
     // MARK: - Zoomable Viewer

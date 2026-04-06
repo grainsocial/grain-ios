@@ -41,11 +41,11 @@ struct CreateGalleryView: View {
                 photosSection
                 gallerySection
                 photoEditorSection
+                cameraDataSection
                 ContentLabelPicker(selectedLabels: $selectedLabels)
                 Section {
                     Toggle("Post to Bluesky", isOn: $postToBluesky)
                 }
-                cameraDataSection
                 errorSection
             }
             .safeAreaInset(edge: .bottom) {

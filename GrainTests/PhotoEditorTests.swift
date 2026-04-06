@@ -3,62 +3,6 @@ import UIKit
 import XCTest
 
 final class PhotoEditorTests: XCTestCase {
-    // MARK: - Grid Target Index Calculation
-
-    func testTargetIndexSameCell() {
-        // Small drag within same cell → stays put
-        let result = ReorderablePhotoGrid.targetIndex(
-            currentIndex: 4, dragOffset: CGSize(width: 5, height: 3),
-            cellSize: 100, spacing: 4, itemCount: 9
-        )
-        XCTAssertEqual(result, 4)
-    }
-
-    func testTargetIndexMoveRight() {
-        // Drag one full cell to the right
-        let result = ReorderablePhotoGrid.targetIndex(
-            currentIndex: 0, dragOffset: CGSize(width: 104, height: 0),
-            cellSize: 100, spacing: 4, itemCount: 6
-        )
-        XCTAssertEqual(result, 1)
-    }
-
-    func testTargetIndexMoveDown() {
-        // Drag one full row down
-        let result = ReorderablePhotoGrid.targetIndex(
-            currentIndex: 1, dragOffset: CGSize(width: 0, height: 104),
-            cellSize: 100, spacing: 4, itemCount: 9
-        )
-        XCTAssertEqual(result, 4)
-    }
-
-    func testTargetIndexClampsToLastItem() {
-        // Drag way past the end → clamps to last item
-        let result = ReorderablePhotoGrid.targetIndex(
-            currentIndex: 0, dragOffset: CGSize(width: 500, height: 500),
-            cellSize: 100, spacing: 4, itemCount: 5
-        )
-        XCTAssertEqual(result, 4)
-    }
-
-    func testTargetIndexClampsToFirst() {
-        // Drag way before the start → clamps to 0
-        let result = ReorderablePhotoGrid.targetIndex(
-            currentIndex: 4, dragOffset: CGSize(width: -1000, height: -1000),
-            cellSize: 100, spacing: 4, itemCount: 5
-        )
-        XCTAssertEqual(result, 0)
-    }
-
-    func testTargetIndexColumnClamp() {
-        // From rightmost column, drag right → stays in column 2
-        let result = ReorderablePhotoGrid.targetIndex(
-            currentIndex: 2, dragOffset: CGSize(width: 200, height: 0),
-            cellSize: 100, spacing: 4, itemCount: 9
-        )
-        XCTAssertEqual(result, 2)
-    }
-
     // MARK: - PhotoItem Selection Stability
 
     func testSelectionStableThroughReorder() throws {
