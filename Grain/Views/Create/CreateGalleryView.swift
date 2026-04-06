@@ -27,6 +27,7 @@ struct CreateGalleryView: View {
     @State private var selectedPhotoID: UUID?
     @State private var photoLocationResult: NominatimResult?
     @State private var sendExif = true
+    @State private var includeExif = true
     @AppStorage("privacy.includeLocation") private var includeLocation = true
     @AppStorage("privacy.includeCameraData") private var includeCameraData = true
 

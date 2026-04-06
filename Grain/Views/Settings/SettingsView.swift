@@ -6,6 +6,8 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     let client: XRPCClient
     @State private var cacheSizeText = "Calculating..."
+    @State private var includeExif = true
+    @State private var hasLoadedExifPref = false
     @AppStorage("privacy.includeLocation") private var includeLocation = true
     @AppStorage("privacy.includeCameraData") private var includeCameraData = true
     @AppStorage("privacy.showSuggestedUsers") private var showSuggestedUsers = true
