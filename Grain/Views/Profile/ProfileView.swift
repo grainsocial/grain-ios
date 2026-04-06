@@ -146,19 +146,34 @@ struct ProfileView: View {
                             }
                         }
                         .padding(.horizontal)
-                    } else if let germUrl = germDMUrl(profile: profile) {
-                        Link(destination: germUrl) {
-                            HStack(spacing: 4) {
-                                Image("germ-logo")
-                                    .resizable()
-                                    .frame(width: 14, height: 14)
-                                Text("Germ DM")
+                    } else {
+                        HStack(spacing: 8) {
+                            NavigationLink {
+                                EditProfileView(client: client, onSaved: {
+                                    Task { await viewModel.load(did: did) }
+                                })
+                            } label: {
+                                Text("Edit Profile")
                                     .font(.subheadline.weight(.semibold))
+                                    .frame(maxWidth: .infinity)
                             }
-                            .frame(maxWidth: .infinity)
+                            .buttonStyle(.bordered)
+
+                            if let germUrl = germDMUrl(profile: profile) {
+                                Link(destination: germUrl) {
+                                    HStack(spacing: 4) {
+                                        Image("germ-logo")
+                                            .resizable()
+                                            .frame(width: 14, height: 14)
+                                        Text("Germ DM")
+                                            .font(.subheadline.weight(.semibold))
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.bordered)
+                                .tint(Color(red: 0.52, green: 0.63, blue: 1.0))
+                            }
                         }
-                        .buttonStyle(.bordered)
-                        .tint(Color(red: 0.52, green: 0.63, blue: 1.0))
                         .padding(.horizontal)
                     }
 
@@ -247,9 +262,7 @@ struct ProfileView: View {
             if did == auth.userDID {
                 ToolbarItem(placement: .topBarTrailing) {
                     NavigationLink {
-                        SettingsView(client: client, onProfileEdited: {
-                            Task { await viewModel.load(did: actor, viewer: auth.userDID, auth: auth.authContext()) }
-                        })
+                        SettingsView(client: client)
                     } label: {
                         Image(systemName: "gearshape")
                     }

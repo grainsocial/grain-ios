@@ -5,7 +5,6 @@ struct SettingsView: View {
     @Environment(AuthManager.self) private var auth
     @Environment(\.dismiss) private var dismiss
     let client: XRPCClient
-    var onProfileEdited: (() -> Void)?
     @State private var cacheSizeText = "Calculating..."
 
     var body: some View {
@@ -17,12 +16,6 @@ struct SettingsView: View {
                 if let did = auth.userDID {
                     LabeledContent("DID", value: did)
                         .font(.caption)
-                }
-            }
-
-            Section {
-                NavigationLink("Edit Profile") {
-                    EditProfileView(client: client, onSaved: onProfileEdited)
                 }
             }
 
