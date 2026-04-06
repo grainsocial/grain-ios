@@ -373,8 +373,19 @@ struct StoryViewer: View {
     }
 
     private func goToPreviousAuthor() {
-        guard let prev = authorHistory.popLast() else { return }
-        transitionToAuthor(prev.authorIndex, direction: -1, resumeIndex: prev.storyIndex)
+        if let prev = authorHistory.popLast() {
+            transitionToAuthor(prev.authorIndex, direction: -1, resumeIndex: prev.storyIndex)
+            return
+        }
+        // No history (entered mid-strip in reads mode) — walk backward ignoring the reads filter
+        var i = currentAuthorIndex - 1
+        while i >= 0 {
+            if authors[i].profile.did != auth.userDID {
+                transitionToAuthor(i, direction: -1)
+                return
+            }
+            i -= 1
+        }
     }
 
     private func transitionToAuthor(_ index: Int, direction: CGFloat, resumeIndex: Int? = nil) {
