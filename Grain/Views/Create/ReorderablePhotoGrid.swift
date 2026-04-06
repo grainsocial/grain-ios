@@ -33,6 +33,7 @@ struct ReorderablePhotoGrid: View {
                             isSelected: item.id == selectedPhotoID,
                             cornerRadius: 6
                         )
+                        .zIndex(draggingID == item.id ? 1 : 0)
                         .offset(draggingID == item.id ? dragOffset : .zero)
                         .simultaneousGesture(TapGesture().onEnded {
                             guard draggingID == nil else { return }
@@ -111,7 +112,7 @@ struct ReorderablePhotoGrid: View {
             let rowDelta = (target / 3) - (currentIndex / 3)
             let step = cellSize + spacing
 
-            withAnimation(.spring(response: 0.28, dampingFraction: 0.65, blendDuration: 0)) {
+            withAnimation(.spring(response: 0.45, dampingFraction: 0.7, blendDuration: 0)) {
                 items.move(fromOffsets: IndexSet(integer: currentIndex), toOffset: target > currentIndex ? target + 1 : target)
             }
 
