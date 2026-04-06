@@ -20,16 +20,24 @@ struct ReorderablePhotoGrid: View {
                         .scaledToFill()
                         .frame(width: cellSize, height: cellSize)
                         .clipped()
+                        .overlay(alignment: .bottomLeading) {
+                            let hasAlt = !item.alt.trimmingCharacters(in: .whitespaces).isEmpty
+                            Image(systemName: hasAlt ? "text.bubble.fill" : "text.bubble")
+                                .font(.system(size: 20))
+                                .foregroundStyle(hasAlt ? .white : .white.opacity(0.5))
+                                .shadow(color: .black.opacity(0.5), radius: 2, y: 1)
+                                .padding(4)
+                        }
                         .reorderableThumbnail(
                             isDragging: draggingID == item.id,
                             isSelected: item.id == selectedPhotoID,
                             cornerRadius: 6
                         )
                         .offset(draggingID == item.id ? dragOffset : .zero)
-                        .onTapGesture {
+                        .simultaneousGesture(TapGesture().onEnded {
                             guard draggingID == nil else { return }
                             selectedPhotoID = item.id
-                        }
+                        })
                         .gesture(
                             LongPressGesture(minimumDuration: 0.2)
                                 .sequenced(before: DragGesture())
