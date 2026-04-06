@@ -193,7 +193,7 @@ struct GalleryCardView: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .onTapGesture {
-                            onLocationTap?(LocationServices.h3ToCity(location.value), locationName)
+                            onLocationTap?(location.value, locationName)
                         }
                 }
             }
