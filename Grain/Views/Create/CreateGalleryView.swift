@@ -24,6 +24,7 @@ struct CreateGalleryView: View {
     @State private var mentionState = MentionAutocompleteState()
     @State private var postToBluesky = false
     @State private var selectedLabels: Set<String> = []
+    @State private var selectedPhotoID: UUID?
     @State private var photoLocationResult: NominatimResult?
     @State private var sendExif = true
     @AppStorage("privacy.includeLocation") private var includeLocation = true
@@ -39,9 +40,8 @@ struct CreateGalleryView: View {
         NavigationStack {
             Form {
                 photosSection
-                altTextSection
-                detailsSection
-                locationSection
+                gallerySection
+                photoEditorSection
                 ContentLabelPicker(selectedLabels: $selectedLabels)
                 Section {
                     Toggle("Post to Bluesky", isOn: $postToBluesky)
@@ -58,13 +58,20 @@ struct CreateGalleryView: View {
             .onChange(of: selectedPhotos) {
                 Task {
                     await loadPickerPhotos()
+                    if let id = selectedPhotoID, !photoItems.contains(where: { $0.id == id }) {
+                        selectedPhotoID = photoItems.first?.id
+                    } else if selectedPhotoID == nil {
+                        selectedPhotoID = photoItems.first?.id
+                    }
                     await detectLocation()
                 }
             }
             .fullScreenCover(isPresented: $showCamera) {
                 CameraPicker { image in
                     let thumb = PhotoItem.makeThumbnail(from: image)
-                    photoItems.append(PhotoItem(thumbnail: thumb, source: .camera(image)))
+                    let item = PhotoItem(thumbnail: thumb, source: .camera(image))
+                    photoItems.append(item)
+                    if selectedPhotoID == nil { selectedPhotoID = item.id }
                 }
                 .ignoresSafeArea()
             }
@@ -111,67 +118,33 @@ struct CreateGalleryView: View {
                 Label("Select Photos", systemImage: "photo.on.rectangle.angled")
             }
 
-            Button {
-                showCamera = true
-            } label: {
-                Label("Take Photo", systemImage: "camera")
-            }
-
-            if !photoItems.isEmpty {
-                ReorderablePhotoStrip(items: $photoItems)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var altTextSection: some View {
-        if !photoItems.isEmpty {
-            Section("Alt Text") {
-                ForEach($photoItems) { $item in
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(alignment: .top, spacing: 12) {
-                            Image(uiImage: item.thumbnail)
-                                .resizable()
-                                .scaledToFill()
-                                .frame(width: 60, height: 60)
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
-
-                            TextField("Describe this photo...", text: $item.alt, axis: .vertical)
-                                .font(.subheadline)
-                                .lineLimit(2 ... 4)
-                        }
-
-                        if let exif = item.exifSummary {
-                            VStack(alignment: .leading, spacing: 4) {
-                                if let camera = exif.camera {
-                                    HStack(spacing: 6) {
-                                        Image(systemName: "camera").font(.caption2)
-                                        Text(camera).font(.caption)
-                                    }
-                                }
-                                if let lens = exif.lens {
-                                    HStack(spacing: 6) {
-                                        Image(systemName: "circle.circle").font(.caption2)
-                                        Text(lens).font(.caption)
-                                    }
-                                }
-                                if let exposure = exif.exposure {
-                                    Text(exposure).font(.caption)
-                                }
-                            }
-                            .foregroundStyle(sendExif ? .secondary : .tertiary)
-                        }
-                    }
-                    .padding(.vertical, 4)
+            if photoItems.isEmpty {
+                Button {
+                    showCamera = true
+                } label: {
+                    Label("Take Photo", systemImage: "camera")
                 }
             }
         }
     }
 
-    private var detailsSection: some View {
-        Section(header: Text("Details"), footer: Text("Title is required.")) {
+    @ViewBuilder
+    private var photoEditorSection: some View {
+        if !photoItems.isEmpty {
+            Section {
+                PhotoEditor(
+                    items: $photoItems,
+                    selectedPhotoID: $selectedPhotoID,
+                    sendExif: sendExif
+                )
+            }
+        }
+    }
+
+    private var gallerySection: some View {
+        Section("Gallery") {
             VStack(alignment: .leading, spacing: 4) {
-                TextField("Add a title...", text: $title)
+                TextField("Add a title (required)...", text: $title)
                 Text("\(title.count)/\(maxTitle)")
                     .font(.caption2)
                     .foregroundStyle(title.count > maxTitle ? .red : .secondary)
@@ -187,57 +160,58 @@ struct CreateGalleryView: View {
                     .foregroundStyle(description.count > maxDescription ? .red : .secondary)
                     .frame(maxWidth: .infinity, alignment: .trailing)
             }
+
+            locationRow
         }
     }
 
-    private var locationSection: some View {
-        Section("Location") {
-            if let loc = resolvedLocation {
-                HStack {
-                    Label(loc.name, systemImage: "mappin.and.ellipse")
-                        .font(.subheadline)
-                        .lineLimit(1)
-                    Spacer()
-                    Button {
-                        resolvedLocation = nil
-                        locationQuery = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
-                    }
+    @ViewBuilder
+    private var locationRow: some View {
+        if let loc = resolvedLocation {
+            HStack {
+                Label(loc.name, systemImage: "mappin.and.ellipse")
+                    .font(.subheadline)
+                    .lineLimit(1)
+                Spacer()
+                Button {
+                    resolvedLocation = nil
+                    locationQuery = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
                 }
-            } else {
-                if let photoLoc = photoLocationResult {
-                    Button { selectLocation(photoLoc) } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: "location.fill")
+            }
+        } else {
+            if let photoLoc = photoLocationResult {
+                Button { selectLocation(photoLoc) } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "location.fill")
+                            .foregroundStyle(.secondary)
+                            .frame(width: 20)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("Use photo location")
+                                .font(.subheadline)
+                            Text(photoLoc.name)
+                                .font(.caption)
                                 .foregroundStyle(.secondary)
-                                .frame(width: 20)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text("Use photo location")
-                                    .font(.subheadline)
-                                Text(photoLoc.name)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
                         }
                     }
-                    .foregroundStyle(.primary)
                 }
-                locationSearchField
-                ForEach(locationSuggestions, id: \.placeId) { result in
-                    Button {
-                        selectLocation(result)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(result.name)
-                                .font(.subheadline)
-                                .foregroundStyle(.primary)
-                            if let context = result.context {
-                                Text(context)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
+                .foregroundStyle(.primary)
+            }
+            locationSearchField
+            ForEach(locationSuggestions, id: \.placeId) { result in
+                Button {
+                    selectLocation(result)
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(result.name)
+                            .font(.subheadline)
+                            .foregroundStyle(.primary)
+                        if let context = result.context {
+                            Text(context)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
