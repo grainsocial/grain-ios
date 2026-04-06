@@ -22,6 +22,7 @@ struct CreateGalleryView: View {
     @State private var showCamera = false
     @State private var photoItems: [PhotoItem] = []
     @State private var photoLocationResult: NominatimResult?
+    @State private var sendExif = true
     @AppStorage("privacy.includeLocation") private var includeLocation = true
     @AppStorage("privacy.includeCameraData") private var includeCameraData = true
 
@@ -38,8 +39,10 @@ struct CreateGalleryView: View {
                 altTextSection
                 detailsSection
                 locationSection
+                cameraDataSection
                 errorSection
             }
+            .onAppear { sendExif = includeCameraData }
             .onChange(of: selectedPhotos) {
                 Task {
                     await loadPickerPhotos()
@@ -105,11 +108,30 @@ struct CreateGalleryView: View {
             Section("Alt Text") {
                 ForEach($photoItems) { $item in
                     HStack(alignment: .top, spacing: 12) {
-                        Image(uiImage: item.thumbnail)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 60, height: 60)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        VStack(alignment: .leading, spacing: 4) {
+                            Image(uiImage: item.thumbnail)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 60, height: 60)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                            if let exif = item.exifSummary {
+                                VStack(alignment: .leading, spacing: 1) {
+                                    if let camera = exif.camera {
+                                        Text(camera).lineLimit(1)
+                                    }
+                                    if let lens = exif.lens {
+                                        Text(lens).lineLimit(1)
+                                    }
+                                    if let exposure = exif.exposure {
+                                        Text(exposure).lineLimit(1)
+                                    }
+                                }
+                                .font(.system(size: 9))
+                                .foregroundStyle(.tertiary)
+                                .frame(width: 60, alignment: .leading)
+                            }
+                        }
 
                         TextField("Describe this photo...", text: $item.alt, axis: .vertical)
                             .font(.subheadline)
@@ -220,6 +242,17 @@ struct CreateGalleryView: View {
     }
 
     @ViewBuilder
+    private var cameraDataSection: some View {
+        if !photoItems.isEmpty {
+            Section {
+                Toggle("Include camera data", isOn: $sendExif)
+            } footer: {
+                Text("Camera make, model, lens, and exposure settings.")
+            }
+        }
+    }
+
+    @ViewBuilder
     private var errorSection: some View {
         if let errorMessage {
             Section {
@@ -255,7 +288,8 @@ struct CreateGalleryView: View {
                let image = UIImage(data: data)
             {
                 let thumb = PhotoItem.makeThumbnail(from: image)
-                photoItems.append(PhotoItem(thumbnail: thumb, source: .picker(item)))
+                let exif = makeExifSummary(from: data)
+                photoItems.append(PhotoItem(thumbnail: thumb, source: .picker(item), exifSummary: exif))
             }
         }
     }
@@ -300,7 +334,7 @@ struct CreateGalleryView: View {
 
         do {
             let altTexts = photoItems.map(\.alt)
-            let processed = try await processGalleryPhotos(items: photoItems, client: client, authContext: authContext, skipExif: !includeCameraData)
+            let processed = try await processGalleryPhotos(items: photoItems, client: client, authContext: authContext, skipExif: !sendExif)
             let now = DateFormatting.nowISO()
             let photoUris = try await createGalleryPhotoRecords(
                 processed: processed,
@@ -366,11 +400,18 @@ struct CreateGalleryView: View {
 
 // MARK: - Photo Item Model
 
+struct ExifSummary {
+    var camera: String?
+    var lens: String?
+    var exposure: String?
+}
+
 struct PhotoItem: Identifiable {
     let id = UUID()
     let thumbnail: UIImage
     let source: PhotoSource
     var alt: String = ""
+    var exifSummary: ExifSummary?
 
     static func makeThumbnail(from image: UIImage, maxSize: CGFloat = 150) -> UIImage {
         let scale = min(maxSize / image.size.width, maxSize / image.size.height, 1)
@@ -550,6 +591,48 @@ private func extractExposureInfo(
             result["dateTimeOriginal"] = AnyCodable(ISO8601DateFormatter().string(from: date))
         }
     }
+}
+
+private func makeExifSummary(from data: Data) -> ExifSummary? {
+    guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+          let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any]
+    else { return nil }
+
+    let exifDict = properties[kCGImagePropertyExifDictionary as String] as? [String: Any]
+    let tiffDict = properties[kCGImagePropertyTIFFDictionary as String] as? [String: Any]
+    let exifAux = properties[kCGImagePropertyExifAuxDictionary as String] as? [String: Any]
+
+    var summary = ExifSummary()
+
+    let make = (tiffDict?[kCGImagePropertyTIFFMake as String] as? String)?.trimmingCharacters(in: .whitespaces)
+    let model = (tiffDict?[kCGImagePropertyTIFFModel as String] as? String)?.trimmingCharacters(in: .whitespaces)
+    if let model {
+        summary.camera = (make.map { model.lowercased().hasPrefix($0.lowercased()) } == true) ? model : [make, model].compactMap(\.self).joined(separator: " ")
+    }
+
+    let lens = (exifAux?["LensModel"] as? String ?? exifDict?[kCGImagePropertyExifLensModel as String] as? String)?.trimmingCharacters(in: .whitespaces)
+    summary.lens = lens
+
+    var parts: [String] = []
+    if let et = exifDict?[kCGImagePropertyExifExposureTime as String] as? Double {
+        parts.append(et < 1 ? "1/\(Int((1 / et).rounded()))s" : "\(et)s")
+    }
+    if let fn = exifDict?[kCGImagePropertyExifFNumber as String] as? Double {
+        parts.append("f/\(fn)")
+    }
+    if let isoRaw = exifDict?[kCGImagePropertyExifISOSpeedRatings as String] as? [Any],
+       let iso = (isoRaw.first as? NSNumber)?.intValue
+    {
+        parts.append("ISO \(iso)")
+    }
+    if let focal = exifDict?[kCGImagePropertyExifFocalLenIn35mmFilm as String] {
+        let mm = (focal as? Int) ?? Int((focal as? Double) ?? 0)
+        if mm > 0 { parts.append("\(mm)mm") }
+    }
+    if !parts.isEmpty { summary.exposure = parts.joined(separator: "  ") }
+
+    guard summary.camera != nil || summary.lens != nil || summary.exposure != nil else { return nil }
+    return summary
 }
 
 private func extractGalleryExif(from data: Data) -> [String: AnyCodable]? {
