@@ -74,6 +74,7 @@ struct StoryViewer: View {
     @State private var slideOffset: CGFloat = 0
     @State private var authorHistory: [(authorIndex: Int, storyIndex: Int)] = []
     @State private var imagePrefetcher = ImagePrefetcher()
+    @State private var nextStoryFromTrailing = true
 
     init(authors: [GrainStoryAuthor], startAuthorDid: String? = nil, client: XRPCClient, onProfileTap: ((String) -> Void)? = nil, onDismiss: (() -> Void)? = nil) {
         self.authors = authors
@@ -180,7 +181,6 @@ struct StoryViewer: View {
                             }
                         }
                     }
-                    .id(story.uri)
                     .blur(radius: (lr.action == .warnMedia || lr.action == .warnContent) && !labelRevealed ? 24 : 0)
 
                     if lr.action == .warnContent || lr.action == .warnMedia || lr.action == .hide, !labelRevealed {
@@ -190,6 +190,11 @@ struct StoryViewer: View {
                         }
                     }
                 }
+                .id(story.uri)
+                .transition(.asymmetric(
+                    insertion: .move(edge: nextStoryFromTrailing ? .trailing : .leading).combined(with: .opacity),
+                    removal: .move(edge: nextStoryFromTrailing ? .leading : .trailing).combined(with: .opacity)
+                ))
 
                 // Tap zones
                 VStack(spacing: 0) {
@@ -337,11 +342,12 @@ struct StoryViewer: View {
         timer.stop()
         lastNavTime = Date()
         if currentStoryIndex < stories.count - 1 {
-            currentStoryIndex += 1
-            imageLoaded = false
-            labelRevealed = false
-            showLocationCopied = false
-            startTimerIfSafe()
+            animateToStory(forward: true) {
+                currentStoryIndex += 1
+                imageLoaded = false
+                labelRevealed = false
+                showLocationCopied = false
+            }
             prefetchStoryImages()
         } else {
             goToNextAuthor()
@@ -353,14 +359,22 @@ struct StoryViewer: View {
         timer.stop()
         lastNavTime = Date()
         if currentStoryIndex > 0 {
-            currentStoryIndex -= 1
-            imageLoaded = false
-            labelRevealed = false
-            showLocationCopied = false
-            startTimerIfSafe()
+            animateToStory(forward: false) {
+                currentStoryIndex -= 1
+                imageLoaded = false
+                labelRevealed = false
+                showLocationCopied = false
+            }
             prefetchStoryImages()
         } else {
             goToPreviousAuthor()
+        }
+    }
+
+    private func animateToStory(forward: Bool, _ action: () -> Void) {
+        nextStoryFromTrailing = forward
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.88)) {
+            action()
         }
     }
 
