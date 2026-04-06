@@ -2,11 +2,13 @@ import NukeUI
 import SwiftUI
 
 enum ProfileViewMode: String, CaseIterable {
-    case grid, list
+    case grid, stories
 }
+
 
 struct ProfileView: View {
     @Namespace private var viewModeNS
+    @Namespace private var galleryZoomNS
     @Environment(AuthManager.self) private var auth
     @Environment(ViewedStoryStorage.self) private var viewedStories
     @Environment(LabelDefinitionsCache.self) private var labelDefsCache
@@ -23,6 +25,7 @@ struct ProfileView: View {
     @State private var cardStoryAuthor: GrainStoryAuthor?
     @State private var avatarPressed = false
     let client: XRPCClient
+    @State private var selectedArchivedStory: GrainStory?
     let actor: String
     var isRoot = false
 
@@ -165,7 +168,7 @@ struct ProfileView: View {
                                     .frame(maxWidth: .infinity)
                                 }
                                 .buttonStyle(.bordered)
-                            .tint(.primary)
+                                .tint(.primary)
                             }
                         }
                         .padding(.horizontal)
@@ -201,72 +204,39 @@ struct ProfileView: View {
                         .padding(.horizontal)
                     }
 
-                    // Galleries
-                    if viewModel.galleries.isEmpty, !viewModel.isLoading {
-                        Text("No galleries yet")
-                            .font(.subheadline)
-                            .foregroundStyle(.tertiary)
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, 60)
-                    } else {
-                        LazyVGrid(columns: [
-                            GridItem(.flexible(), spacing: 2),
-                            GridItem(.flexible(), spacing: 2),
-                            GridItem(.flexible(), spacing: 2),
-                        ], spacing: 2) {
-                            ForEach(viewModel.galleries) { gallery in
-                                Button {
-                                    selectedGalleryUri = gallery.uri
-                                } label: {
-                                    Color.clear
-                                        .aspectRatio(3.0 / 4.0, contentMode: .fit)
-                                        .overlay {
-                                            if let photo = gallery.items?.first {
-                                                LazyImage(url: URL(string: photo.thumb)) { state in
-                                                    if let image = state.image {
-                                                        image
-                                                            .resizable()
-                                                            .scaledToFill()
-                                                    } else {
-                                                        Rectangle().fill(.quaternary)
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        .clipped()
-                                        .overlay {
-                                            let lr = resolveLabels(gallery.labels, definitions: labelDefsCache.definitions)
-                                            if lr.action >= .warnMedia {
-                                                Rectangle().fill(Color(.secondarySystemBackground))
-                                                HStack(spacing: 4) {
-                                                    Image(systemName: "info.circle.fill")
-                                                        .font(.caption2)
-                                                    Text(lr.name)
-                                                        .font(.system(size: 9))
-                                                }
-                                                .foregroundStyle(.secondary)
-                                            }
-                                        }
-                                        .overlay(alignment: .topTrailing) {
-                                            if (gallery.items?.count ?? 0) > 1 {
-                                                Image(systemName: "square.on.square.fill")
-                                                    .font(.system(size: 14))
-                                                    .rotationEffect(.degrees(180))
-                                                    .foregroundStyle(.white)
-                                                    .shadow(color: .black.opacity(0.5), radius: 2, x: 0, y: 1)
-                                                    .padding(6)
-                                            }
-                                        }
-                                }
-                                .buttonStyle(.plain)
-                                .onAppear {
-                                    if gallery.id == viewModel.galleries.last?.id {
-                                        Task { await viewModel.loadMoreGalleries(did: did, auth: auth.authContext()) }
-                                    }
-                                }
+                    // Tabs + grid
+                    VStack(spacing: 0) {
+                        if did == auth.userDID {
+                            HStack(spacing: 0) {
+                                tabButton(icon: "square.grid.3x3.fill", mode: .grid)
+                                tabButton(icon: "clock.fill", mode: .stories)
                             }
                         }
+
+                        if viewMode == .grid {
+                            galleriesGrid
+                        }
+
+                        if viewMode == .stories {
+                            storyArchiveGrid
+                        }
                     }
+                    .highPriorityGesture(
+                        did == auth.userDID ?
+                            DragGesture(minimumDistance: 30, coordinateSpace: .local)
+                                .onEnded { value in
+                                    let h = value.translation.width
+                                    let v = value.translation.height
+                                    guard abs(h) > abs(v) else { return }
+                                    if h < 0, viewMode == .grid {
+                                        withAnimation(.easeInOut(duration: 0.2)) { viewMode = .stories }
+                                        Task { await viewModel.loadStoryArchive(did: did, auth: auth.authContext()) }
+                                    } else if h > 0, viewMode == .stories {
+                                        withAnimation(.easeInOut(duration: 0.2)) { viewMode = .grid }
+                                    }
+                                }
+                            : nil
+                    )
                 }
             } else if viewModel.error != nil {
                 VStack(spacing: 16) {
@@ -309,6 +279,7 @@ struct ProfileView: View {
         }
         .navigationDestination(item: $selectedGalleryUri) { uri in
             GalleryDetailView(client: client, galleryUri: uri, deletedGalleryUri: $deletedGalleryUri)
+                .navigationTransition(.zoom(sourceID: uri, in: galleryZoomNS))
         }
         .navigationDestination(item: $selectedProfileDid) { did in
             ProfileView(client: client, did: did)
@@ -345,6 +316,27 @@ struct ProfileView: View {
                 onDismiss: { cardStoryAuthor = nil }
             )
             .environment(auth)
+        }
+        .fullScreenCover(item: $selectedArchivedStory) { story in
+            if let profile = viewModel.profile,
+               let storyIndex = viewModel.archivedStories.firstIndex(where: { $0.id == story.id })
+            {
+                StoryViewer(
+                    authors: [GrainStoryAuthor(
+                        profile: GrainProfile(cid: "", did: did, handle: profile.handle, displayName: profile.displayName, avatar: profile.avatar),
+                        storyCount: 1,
+                        latestAt: story.createdAt
+                    )],
+                    initialStories: [story],
+                    client: client,
+                    onProfileTap: { did in
+                        selectedArchivedStory = nil
+                        selectedProfileDid = did
+                    },
+                    onDismiss: { selectedArchivedStory = nil }
+                )
+                .environment(auth)
+            }
         }
         .fullScreenCover(isPresented: $showStoryCreate) {
             StoryCreateView(client: client, onCreated: {
@@ -423,6 +415,162 @@ struct ProfileView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal)
+    }
+
+    private func tabButton(icon: String, mode: ProfileViewMode) -> some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) { viewMode = mode }
+            if mode == .stories {
+                Task { await viewModel.loadStoryArchive(did: did, auth: auth.authContext()) }
+            }
+        } label: {
+            VStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.system(size: 18))
+                    .foregroundStyle(viewMode == mode ? .primary : .tertiary)
+                Rectangle()
+                    .fill(viewMode == mode ? Color.primary : .clear)
+                    .frame(width: 32, height: 2.5)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private var galleriesGrid: some View {
+        if viewModel.galleries.isEmpty, !viewModel.isLoading {
+            Text("No galleries yet")
+                .font(.subheadline)
+                .foregroundStyle(.tertiary)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 60)
+        } else {
+            LazyVGrid(columns: [
+                GridItem(.flexible(), spacing: 2),
+                GridItem(.flexible(), spacing: 2),
+                GridItem(.flexible(), spacing: 2),
+            ], spacing: 2) {
+                ForEach(viewModel.galleries) { gallery in
+                    Button {
+                        selectedGalleryUri = nil
+                        DispatchQueue.main.async {
+                            selectedGalleryUri = gallery.uri
+                        }
+                    } label: {
+                        Color.clear
+                            .aspectRatio(3.0 / 4.0, contentMode: .fit)
+                            .overlay {
+                                if let photo = gallery.items?.first {
+                                    LazyImage(url: URL(string: photo.thumb)) { state in
+                                        if let image = state.image {
+                                            image
+                                                .resizable()
+                                                .scaledToFill()
+                                        } else {
+                                            Rectangle().fill(.quaternary)
+                                        }
+                                    }
+                                }
+                            }
+                            .clipped()
+                            .overlay {
+                                let lr = resolveLabels(gallery.labels, definitions: labelDefsCache.definitions)
+                                if lr.action >= .warnMedia {
+                                    Rectangle().fill(Color(.secondarySystemBackground))
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "info.circle.fill")
+                                            .font(.caption2)
+                                        Text(lr.name)
+                                            .font(.system(size: 9))
+                                    }
+                                    .foregroundStyle(.secondary)
+                                }
+                            }
+                            .overlay(alignment: .topTrailing) {
+                                if (gallery.items?.count ?? 0) > 1 {
+                                    Image(systemName: "square.on.square.fill")
+                                        .font(.system(size: 14))
+                                        .rotationEffect(.degrees(180))
+                                        .foregroundStyle(.white)
+                                        .shadow(color: .black.opacity(0.5), radius: 2, x: 0, y: 1)
+                                        .padding(6)
+                                }
+                            }
+                    }
+                    .buttonStyle(.plain)
+                    .matchedTransitionSource(id: gallery.uri, in: galleryZoomNS)
+                    .onAppear {
+                        if gallery.id == viewModel.galleries.last?.id {
+                            Task { await viewModel.loadMoreGalleries(did: did, auth: auth.authContext()) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var storyArchiveGrid: some View {
+        if viewModel.archivedStories.isEmpty, !viewModel.isLoading {
+            Text("No stories yet")
+                .font(.subheadline)
+                .foregroundStyle(.tertiary)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 60)
+        } else {
+            LazyVGrid(columns: [
+                GridItem(.flexible(), spacing: 2),
+                GridItem(.flexible(), spacing: 2),
+                GridItem(.flexible(), spacing: 2),
+            ], spacing: 2) {
+                ForEach(viewModel.archivedStories) { story in
+                    Button {
+                        if let index = viewModel.archivedStories.firstIndex(where: { $0.id == story.id }) {
+                            selectedArchivedStory = viewModel.archivedStories[index]
+                        }
+                    } label: {
+                        Color.clear
+                            .aspectRatio(3.0 / 4.0, contentMode: .fit)
+                            .overlay {
+                                LazyImage(url: URL(string: story.thumb)) { state in
+                                    if let image = state.image {
+                                        image
+                                            .resizable()
+                                            .scaledToFill()
+                                    } else {
+                                        Rectangle().fill(.quaternary)
+                                    }
+                                }
+                            }
+                            .clipped()
+                            .overlay(alignment: .bottomLeading) {
+                                Text(storyDateLabel(story.createdAt))
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(.white)
+                                    .shadow(color: .black.opacity(0.6), radius: 2, y: 1)
+                                    .padding(6)
+                            }
+                    }
+                    .buttonStyle(.plain)
+                    .onAppear {
+                        if story.id == viewModel.archivedStories.last?.id {
+                            Task { await viewModel.loadMoreArchive(did: did, auth: auth.authContext()) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func storyDateLabel(_ iso: String) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        guard let date = formatter.date(from: iso) ?? ISO8601DateFormatter().date(from: iso) else { return "" }
+        let display = DateFormatter()
+        display.dateFormat = "MMM d"
+        return display.string(from: date)
     }
 
     @ViewBuilder

@@ -76,13 +76,20 @@ struct StoryViewer: View {
     @State private var imagePrefetcher = ImagePrefetcher()
     @State private var nextStoryFromTrailing = true
 
-    init(authors: [GrainStoryAuthor], startAuthorDid: String? = nil, client: XRPCClient, onProfileTap: ((String) -> Void)? = nil, onDismiss: (() -> Void)? = nil) {
+    init(authors: [GrainStoryAuthor], startAuthorDid: String? = nil, initialStories: [GrainStory]? = nil, startStoryIndex: Int? = nil, client: XRPCClient, onProfileTap: ((String) -> Void)? = nil, onDismiss: (() -> Void)? = nil) {
         self.authors = authors
         self.client = client
         self.onProfileTap = onProfileTap
         self.onDismiss = onDismiss
         let resolvedIndex = startAuthorDid.flatMap { did in authors.firstIndex { $0.profile.did == did } } ?? 0
         _currentAuthorIndex = State(initialValue: resolvedIndex)
+        if let initialStories {
+            let did = authors[resolvedIndex].profile.did
+            _prefetchedStories = State(initialValue: [did: initialStories])
+            if let startStoryIndex {
+                _currentStoryIndex = State(initialValue: startStoryIndex)
+            }
+        }
     }
 
     private var currentStory: GrainStory? {
