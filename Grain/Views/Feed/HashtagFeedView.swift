@@ -146,3 +146,11 @@ struct HashtagFeedView: View {
         } catch {}
     }
 }
+
+#Preview {
+    HashtagFeedView(client: XRPCClient(baseURL: AuthManager.serverURL), tag: "35mm")
+        .environment(AuthManager())
+        .environment(StoryStatusCache())
+        .environment(ViewedStoryStorage())
+        .environment(LabelDefinitionsCache())
+}

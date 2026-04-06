@@ -96,3 +96,15 @@ struct SuggestedFollowsView: View {
         }
     }
 }
+
+#Preview {
+    @Previewable @State var suggestions = [
+        SuggestedItem(did: "did:plc:a", handle: "alice.bsky.social", displayName: "Alice", description: "Photographer"),
+        SuggestedItem(did: "did:plc:b", handle: "bob.bsky.social", displayName: "Bob"),
+    ]
+    SuggestedFollowsView(
+        client: XRPCClient(baseURL: AuthManager.serverURL),
+        suggestions: $suggestions
+    )
+    .environment(AuthManager())
+}

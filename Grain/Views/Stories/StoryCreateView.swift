@@ -250,7 +250,7 @@ struct StoryCreateView: View {
                 let labelValues = selectedLabels.map { ["val": AnyCodable($0)] as [String: AnyCodable] }
                 record["labels"] = AnyCodable([
                     "$type": AnyCodable("com.atproto.label.defs#selfLabels"),
-                    "values": AnyCodable(labelValues as [[String: AnyCodable]])
+                    "values": AnyCodable(labelValues as [[String: AnyCodable]]),
                 ] as [String: AnyCodable])
             }
 
@@ -308,4 +308,9 @@ struct StoryCreateView: View {
         locationQuery = ""
         locationSuggestions = []
     }
+}
+
+#Preview {
+    StoryCreateView(client: XRPCClient(baseURL: AuthManager.serverURL))
+        .environment(AuthManager())
 }

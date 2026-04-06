@@ -132,3 +132,12 @@ struct MainTabView: View {
         return circled.withRenderingMode(.alwaysOriginal)
     }
 }
+
+#Preview {
+    MainTabView(pendingDeepLink: .constant(nil))
+        .environment(AuthManager())
+        .environment(PushManager())
+        .environment(StoryStatusCache())
+        .environment(ViewedStoryStorage())
+        .environment(LabelDefinitionsCache())
+}

@@ -314,3 +314,8 @@ private struct ActorSuggestion: Identifiable, Equatable {
         handle
     }
 }
+
+#Preview {
+    LoginView()
+        .environment(AuthManager())
+}

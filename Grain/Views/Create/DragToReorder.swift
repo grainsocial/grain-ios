@@ -29,3 +29,21 @@ extension View {
         modifier(ReorderableThumbnail(isDragging: isDragging, isSelected: isSelected, cornerRadius: cornerRadius))
     }
 }
+
+#Preview {
+    HStack(spacing: 8) {
+        RoundedRectangle(cornerRadius: 8)
+            .fill(Color.gray.opacity(0.3))
+            .frame(width: 72, height: 72)
+            .reorderableThumbnail(isDragging: false, isSelected: false)
+        RoundedRectangle(cornerRadius: 8)
+            .fill(Color.gray.opacity(0.3))
+            .frame(width: 72, height: 72)
+            .reorderableThumbnail(isDragging: false, isSelected: true)
+        RoundedRectangle(cornerRadius: 8)
+            .fill(Color.gray.opacity(0.3))
+            .frame(width: 72, height: 72)
+            .reorderableThumbnail(isDragging: true, isSelected: false)
+    }
+    .padding()
+}

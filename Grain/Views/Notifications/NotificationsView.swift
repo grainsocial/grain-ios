@@ -155,3 +155,12 @@ struct NotificationRow: View {
         }
     }
 }
+
+#Preview {
+    let client = XRPCClient(baseURL: AuthManager.serverURL)
+    NotificationsView(
+        client: client,
+        viewModel: NotificationsViewModel(client: client)
+    )
+    .environment(AuthManager())
+}

@@ -100,3 +100,8 @@ struct SettingsView: View {
         cacheSizeText = "Zero KB"
     }
 }
+
+#Preview {
+    SettingsView(client: XRPCClient(baseURL: AuthManager.serverURL))
+        .environment(AuthManager())
+}

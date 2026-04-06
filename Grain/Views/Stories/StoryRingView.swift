@@ -42,3 +42,18 @@ struct StoryRingView<Content: View>: View {
             }
     }
 }
+
+#Preview {
+    HStack(spacing: 24) {
+        StoryRingView(hasStory: false, size: 48) {
+            AvatarView(url: nil, size: 48)
+        }
+        StoryRingView(hasStory: true, viewed: false, size: 48) {
+            AvatarView(url: nil, size: 48)
+        }
+        StoryRingView(hasStory: true, viewed: true, size: 48) {
+            AvatarView(url: nil, size: 48)
+        }
+    }
+    .padding()
+}

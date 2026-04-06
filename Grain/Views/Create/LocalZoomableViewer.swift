@@ -61,3 +61,7 @@ struct LocalZoomableViewer: View {
             }
     }
 }
+
+#Preview {
+    LocalZoomableViewer(image: UIImage(named: "login-bg") ?? UIImage(systemName: "photo")!)
+}

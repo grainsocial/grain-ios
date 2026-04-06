@@ -108,3 +108,12 @@ struct ReportView: View {
         isSubmitting = false
     }
 }
+
+#Preview {
+    ReportView(
+        client: XRPCClient(baseURL: AuthManager.serverURL),
+        subjectUri: "at://did:plc:preview/social.grain.gallery/r1",
+        subjectCid: "cid"
+    )
+    .environment(AuthManager())
+}

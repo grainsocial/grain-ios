@@ -62,3 +62,18 @@ struct PhotoEditor: View {
             .lineLimit(2 ... 4)
     }
 }
+
+#Preview {
+    @Previewable @State var state: [PhotoItem] = ([UIColor.systemBlue, .systemGreen, .systemOrange] as [UIColor]).map { color in
+        let thumb = UIGraphicsImageRenderer(size: CGSize(width: 100, height: 100)).image { ctx in
+            color.setFill()
+            ctx.fill(CGRect(origin: .zero, size: CGSize(width: 100, height: 100)))
+        }
+        return PhotoItem(thumbnail: thumb, source: .camera(thumb))
+    }
+    @Previewable @State var selected: UUID?
+    ScrollView {
+        PhotoEditor(items: $state, selectedPhotoID: $selected, sendExif: false)
+            .padding()
+    }
+}

@@ -51,3 +51,11 @@ struct ContentLabelPicker: View {
         }
     }
 }
+
+#Preview {
+    @Previewable @State var labels = Set<String>()
+    Form {
+        ContentLabelPicker(selectedLabels: $labels)
+    }
+    .environment(LabelDefinitionsCache())
+}

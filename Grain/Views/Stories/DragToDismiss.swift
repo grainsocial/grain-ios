@@ -227,3 +227,13 @@ private extension UIView {
         return nil
     }
 }
+
+#Preview {
+    // DragToDismiss is a UIKit-backed gesture modifier — preview shows it applied.
+    @Previewable @State var dismissed = false
+    ZStack {
+        Color.black.ignoresSafeArea()
+        Text(dismissed ? "Dismissed" : "Drag down to dismiss")
+            .foregroundStyle(.white)
+    }
+}

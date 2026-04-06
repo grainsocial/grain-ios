@@ -381,3 +381,11 @@ private struct FeedTabContent: View {
         }
     }
 }
+
+#Preview {
+    FeedView(client: XRPCClient(baseURL: AuthManager.serverURL))
+        .environment(AuthManager())
+        .environment(StoryStatusCache())
+        .environment(ViewedStoryStorage())
+        .environment(LabelDefinitionsCache())
+}

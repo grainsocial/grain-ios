@@ -31,3 +31,20 @@ struct ExifInfoView: View {
         }
     }
 }
+
+#Preview {
+    ExifInfoView(exif: GrainExif(
+        uri: "at://preview",
+        cid: "cid",
+        photo: "at://preview/photo",
+        createdAt: "2024-06-15T18:00:00Z",
+        exposureTime: "1/500",
+        fNumber: "f/2.0",
+        focalLengthIn35mmFormat: "35mm",
+        iSO: 200,
+        lensModel: "Summilux-M 35mm f/1.4",
+        make: "Leica",
+        model: "M11"
+    ))
+    .padding()
+}

@@ -201,3 +201,10 @@ struct SearchView: View {
         }
     }
 }
+
+#Preview {
+    SearchView(client: XRPCClient(baseURL: AuthManager.serverURL))
+        .environment(AuthManager())
+        .environment(StoryStatusCache())
+        .environment(ViewedStoryStorage())
+}

@@ -280,3 +280,12 @@ struct FollowListItem: Identifiable {
         followingUri = following.viewer?.following
     }
 }
+
+#Preview {
+    FollowListView(
+        client: XRPCClient(baseURL: AuthManager.serverURL),
+        did: "did:plc:preview",
+        mode: .followers
+    )
+    .environment(AuthManager())
+}

@@ -394,3 +394,12 @@ struct CommentRow: View {
         .padding(.vertical, 8)
     }
 }
+
+#Preview {
+    GalleryDetailView(
+        client: XRPCClient(baseURL: AuthManager.serverURL),
+        galleryUri: "at://did:plc:preview/social.grain.gallery/r1"
+    )
+    .environment(AuthManager())
+    .environment(LabelDefinitionsCache())
+}

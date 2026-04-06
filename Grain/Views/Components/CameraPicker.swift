@@ -39,3 +39,13 @@ struct CameraPicker: UIViewControllerRepresentable {
         }
     }
 }
+
+#Preview {
+    // CameraPicker wraps UIImagePickerController — camera unavailable in simulator.
+    // Preview shows the picker presented over a placeholder.
+    @Previewable @State var show = true
+    Color.gray.opacity(0.1)
+        .sheet(isPresented: $show) {
+            CameraPicker { _ in }
+        }
+}

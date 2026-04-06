@@ -57,3 +57,16 @@ private struct CustomFullScreenCoverModifier<PresentedView: View>: ViewModifier 
             }
     }
 }
+
+#Preview {
+    @Previewable @State var show = false
+    VStack {
+        Button("Show Cover") { show = true }
+    }
+    .customFullScreenCover(isPresented: $show) {
+        ZStack {
+            Color.blue.ignoresSafeArea()
+            Text("Custom Cover").foregroundStyle(.white)
+        }
+    }
+}

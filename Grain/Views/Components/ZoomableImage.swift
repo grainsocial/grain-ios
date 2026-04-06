@@ -227,3 +227,10 @@ struct ZoomableImage: View {
         }
     }
 }
+
+#Preview {
+    ZoomableImage(url: "", aspectRatio: 4 / 3)
+        .environment(ImageZoomState())
+        .frame(maxWidth: .infinity)
+        .padding()
+}
