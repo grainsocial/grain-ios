@@ -29,11 +29,6 @@
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
-	<key>NSAppTransportSecurity</key>
-	<dict>
-		<key>NSAllowsLocalNetworking</key>
-		<true/>
-	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>Grain needs camera access to take photos for your stories and galleries.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

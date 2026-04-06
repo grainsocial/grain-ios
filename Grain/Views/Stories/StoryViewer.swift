@@ -108,7 +108,6 @@ struct StoryViewer: View {
                     onSwipeRight: { goToPreviousAuthor() }
                 )
             )
-            .statusBarHidden()
             .confirmationDialog("Delete this story?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
                 Button("Delete", role: .destructive) {
                     if let story = currentStory {
