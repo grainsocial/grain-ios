@@ -57,7 +57,7 @@ struct SearchView: View {
                                         HStack {
                                             StoryRingView(
                                                 hasStory: storyStatusCache.hasStory(for: profile.did),
-                                                viewed: viewedStories.hasViewedAll(did: profile.did, storyStatusCache: storyStatusCache),
+                                                viewed: profile.did != auth.userDID && viewedStories.hasViewedAll(did: profile.did, storyStatusCache: storyStatusCache),
                                                 size: 40
                                             ) {
                                                 AvatarView(url: profile.avatar, size: 40)

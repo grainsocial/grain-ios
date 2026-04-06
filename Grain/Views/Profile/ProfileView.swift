@@ -53,7 +53,7 @@ struct ProfileView: View {
                 VStack(spacing: 12) {
                     // Avatar + stats row
                     HStack(alignment: .center, spacing: 16) {
-                        StoryRingView(hasStory: !viewModel.stories.isEmpty, viewed: viewedStories.hasViewedAll(authorDid: did, latestAt: viewModel.stories.last?.createdAt ?? ""), size: 80) {
+                        StoryRingView(hasStory: !viewModel.stories.isEmpty, viewed: did != auth.userDID && viewedStories.hasViewedAll(authorDid: did, latestAt: viewModel.stories.last?.createdAt ?? ""), size: 80) {
                             AvatarView(url: profile.avatar, size: 80)
                                 .liquidGlassCircle()
                         }
@@ -288,7 +288,6 @@ struct ProfileView: View {
                         storyCount: viewModel.stories.count,
                         latestAt: viewModel.stories.last?.createdAt ?? ""
                     )],
-                    startIndex: 0,
                     client: client,
                     onProfileTap: { did in
                         showStoryViewer = false

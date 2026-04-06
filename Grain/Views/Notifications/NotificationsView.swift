@@ -18,7 +18,7 @@ struct NotificationsView: View {
         NavigationStack {
             List {
                 ForEach(viewModel.notifications) { notification in
-                    NotificationRow(notification: notification, onProfileTap: { did in
+                    NotificationRow(notification: notification, userDID: auth.userDID, onProfileTap: { did in
                         selectedProfileDid = did
                     }, onStoryTap: { author in
                         cardStoryAuthor = author
@@ -90,12 +90,13 @@ struct NotificationRow: View {
     @Environment(StoryStatusCache.self) private var storyStatusCache
     @Environment(ViewedStoryStorage.self) private var viewedStories
     let notification: GrainNotification
+    let userDID: String?
     var onProfileTap: ((String) -> Void)?
     var onStoryTap: ((GrainStoryAuthor) -> Void)?
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            StoryRingView(hasStory: storyStatusCache.hasStory(for: notification.author.did), viewed: viewedStories.hasViewedAll(did: notification.author.did, storyStatusCache: storyStatusCache), size: 36) {
+            StoryRingView(hasStory: storyStatusCache.hasStory(for: notification.author.did), viewed: notification.author.did != userDID && viewedStories.hasViewedAll(did: notification.author.did, storyStatusCache: storyStatusCache), size: 36) {
                 AvatarView(url: notification.author.avatar, size: 36)
             }
             .onTapGesture {
