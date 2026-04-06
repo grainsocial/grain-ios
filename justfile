@@ -9,12 +9,16 @@ generate:
     xcodegen generate
     git config core.hooksPath .githooks
 
-# Build for simulator
+# Build for simulator (production API)
 build:
+    set -o pipefail && xcodebuild build -scheme Grain -destination 'generic/platform=iOS Simulator' SWIFT_ACTIVE_COMPILATION_CONDITIONS='$(inherited) PRODUCTION_API' 2>&1 | xcbeautify
+
+# Build for simulator (local/dev API)
+build-local:
     set -o pipefail && xcodebuild build -scheme Grain -destination 'generic/platform=iOS Simulator' 2>&1 | xcbeautify
 
 # Build + install + launch on simulator (local/dev API)
-sim-local: build
+sim-local: build-local
     #!/usr/bin/env bash
     set -euo pipefail
     APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData/Grain-*/Build/Products/Debug-iphonesimulator -name "Grain.app" -type d | head -1)
