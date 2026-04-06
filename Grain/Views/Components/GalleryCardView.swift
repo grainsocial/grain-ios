@@ -295,6 +295,13 @@ struct GalleryCardView: View {
                     }
                 }
             }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                let photo = currentPage < photos.count ? photos[currentPage] : nil
+                if let alt = photo?.alt, !alt.isEmpty {
+                    withAnimation(.easeInOut(duration: 0.2)) { showingAlt.toggle() }
+                }
+            }
             .frame(height: height)
         }
         .aspectRatio(carouselRatio, contentMode: .fit)
@@ -393,7 +400,12 @@ struct GalleryCardView: View {
                         .font(.system(size: 22))
                         .contentTransition(.symbolEffect(.replace.downUp.byLayer, options: .nonRepeating))
                         .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isFavorited)
-                    Text("\(gallery.favCount ?? 0)")
+                    ZStack {
+                        let count = gallery.favCount ?? 0
+                        Text(String(repeating: "8", count: max(1, "\(count)".count)))
+                            .hidden()
+                        Text("\(count)")
+                    }
                 }
             }
             .foregroundStyle(isFavorited ? Color("AccentColor") : .secondary)
