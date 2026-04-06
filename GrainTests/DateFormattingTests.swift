@@ -57,14 +57,14 @@ final class DateFormattingTests: XCTestCase {
     }
 
     func testRelativeTimeDaysAgo() {
-        let twoDaysAgo = Date().addingTimeInterval(-172_800)
+        let twoDaysAgo = Date().addingTimeInterval(-180_000) // 50 hours, well within the 2d bucket
         let iso = isoString(from: twoDaysAgo)
         let result = DateFormatting.relativeTime(iso)
         XCTAssertEqual(result, "2d")
     }
 
     func testRelativeTimeWeeksAgo() {
-        let twoWeeksAgo = Date().addingTimeInterval(-1_209_600)
+        let twoWeeksAgo = Date().addingTimeInterval(-1_300_000) // ~2.17 weeks, well within the 2w bucket
         let iso = isoString(from: twoWeeksAgo)
         let result = DateFormatting.relativeTime(iso)
         XCTAssertEqual(result, "2w")
