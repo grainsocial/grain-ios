@@ -21,11 +21,11 @@ generate:
 
 # Build for simulator (production API — matches Xcode Run)
 build:
-    set -o pipefail && xcodebuild build -scheme Grain -destination 'generic/platform=iOS Simulator' {{sim_sign}} 2>&1 | xcbeautify
+    set -o pipefail && xcodebuild build -scheme Grain -destination 'generic/platform=iOS Simulator' PRODUCT_BUNDLE_IDENTIFIER={{bundle_id}} {{sim_sign}} 2>&1 | xcbeautify
 
 # Build for simulator (local/dev API — overrides default PRODUCTION_API flag)
 build-local:
-    set -o pipefail && xcodebuild build -scheme Grain -destination 'generic/platform=iOS Simulator' SWIFT_ACTIVE_COMPILATION_CONDITIONS='DEBUG' {{sim_sign}} 2>&1 | xcbeautify
+    set -o pipefail && xcodebuild build -scheme Grain -destination 'generic/platform=iOS Simulator' PRODUCT_BUNDLE_IDENTIFIER={{bundle_id}} SWIFT_ACTIVE_COMPILATION_CONDITIONS='DEBUG' {{sim_sign}} 2>&1 | xcbeautify
 
 # Build + install + launch on simulator (local/dev API)
 sim-local: build-local
@@ -33,22 +33,22 @@ sim-local: build-local
     set -euo pipefail
     APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData/Grain-*/Build/Products/Debug-iphonesimulator -name "Grain.app" -type d | head -1)
     xcrun simctl install booted "$APP_PATH"
-    xcrun simctl launch booted social.grain.grain
+    xcrun simctl launch booted {{bundle_id}}
     echo "Installed and launched on simulator (local/dev API)"
 
 # Build + install + launch on simulator (production API — grain.social; same as Xcode Run)
 sim:
     #!/usr/bin/env bash
     set -euo pipefail
-    set -o pipefail && xcodebuild build -scheme Grain -destination 'generic/platform=iOS Simulator' {{sim_sign}} 2>&1 | xcbeautify
+    set -o pipefail && xcodebuild build -scheme Grain -destination 'generic/platform=iOS Simulator' PRODUCT_BUNDLE_IDENTIFIER={{bundle_id}} {{sim_sign}} 2>&1 | xcbeautify
     APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData/Grain-*/Build/Products/Debug-iphonesimulator -name "Grain.app" -type d | head -1)
     xcrun simctl install booted "$APP_PATH"
-    xcrun simctl launch booted social.grain.grain
+    xcrun simctl launch booted {{bundle_id}}
     echo "Installed and launched on simulator (grain.social)"
 
 # Run tests
 test:
-    set -o pipefail && xcodebuild test -scheme Grain -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max' 2>&1 | xcbeautify
+    set -o pipefail && xcodebuild test -scheme Grain -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max' PRODUCT_BUNDLE_IDENTIFIER={{bundle_id}} 2>&1 | xcbeautify
 
 # Check formatting (list unformatted files)
 format:
@@ -74,7 +74,7 @@ device device_id:
     #!/usr/bin/env bash
     set -euo pipefail
     echo "Building for device {{device_id}}..."
-    set -o pipefail && xcodebuild build -scheme Grain -destination 'platform=iOS,id={{device_id}}' -allowProvisioningUpdates 2>&1 | xcbeautify
+    set -o pipefail && xcodebuild build -scheme Grain -destination 'platform=iOS,id={{device_id}}' PRODUCT_BUNDLE_IDENTIFIER={{bundle_id}} -allowProvisioningUpdates 2>&1 | xcbeautify
     APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData/Grain-*/Build/Products/Debug-iphoneos -name "Grain.app" -type d | head -1)
     echo "Installing $APP_PATH..."
     xcrun devicectl device install app --device {{device_id}} "$APP_PATH"
