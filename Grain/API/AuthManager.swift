@@ -399,7 +399,7 @@ final class WebAuthContextProvider: NSObject, ASWebAuthenticationPresentationCon
         if let scene {
             return ASPresentationAnchor(windowScene: scene)
         }
-        return ASPresentationAnchor()
+        preconditionFailure("No window scene available for ASPresentationAnchor")
     }
 }
 

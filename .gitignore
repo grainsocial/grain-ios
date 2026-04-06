@@ -33,4 +33,6 @@ Pods/
 # Icon/logo working files
 icons/
 logo-options/
+
+# Local environment variables
 .env
