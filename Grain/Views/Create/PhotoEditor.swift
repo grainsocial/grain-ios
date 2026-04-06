@@ -38,21 +38,16 @@ struct PhotoEditor: View {
     @ViewBuilder
     private func exifRow(for item: PhotoItem) -> some View {
         if let exif = item.exifSummary {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 2) {
                 if let camera = exif.camera {
-                    HStack(spacing: 6) {
-                        Image(systemName: "camera").font(.caption2)
-                        Text(camera).font(.caption)
-                    }
+                    Text(camera).font(.caption)
                 }
-                if let lens = exif.lens {
-                    HStack(spacing: 6) {
-                        Image(systemName: "circle.circle").font(.caption2)
-                        Text(lens).font(.caption)
-                    }
-                }
-                if let exposure = exif.exposure {
-                    Text(exposure).font(.caption)
+                HStack {
+                    Text([exif.shutterSpeed, exif.iso].compactMap(\.self).joined(separator: "  "))
+                        .font(.caption)
+                    Spacer()
+                    Text([exif.focalLength, exif.aperture].compactMap(\.self).joined(separator: "  "))
+                        .font(.caption)
                 }
             }
             .foregroundStyle(sendExif ? .primary : .tertiary)

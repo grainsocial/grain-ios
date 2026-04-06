@@ -162,6 +162,17 @@ struct CreateGalleryView: View {
             }
 
             locationRow
+
+            if !photoItems.isEmpty {
+                let filled = photoItems.count(where: { !$0.alt.trimmingCharacters(in: .whitespaces).isEmpty })
+                HStack {
+                    Label("Alt Text", systemImage: "text.below.photo")
+                    Spacer()
+                    Text("\(filled)/\(photoItems.count)")
+                        .foregroundStyle(.secondary)
+                }
+                .font(.subheadline)
+            }
         }
     }
 
@@ -436,6 +447,10 @@ struct ExifSummary {
     var camera: String?
     var lens: String?
     var exposure: String?
+    var shutterSpeed: String?
+    var iso: String?
+    var focalLength: String?
+    var aperture: String?
 }
 
 struct PhotoItem: Identifiable {
@@ -646,22 +661,22 @@ private func makeExifSummary(from data: Data) -> ExifSummary? {
     let lens = (exifAux?["LensModel"] as? String ?? exifDict?[kCGImagePropertyExifLensModel as String] as? String)?.trimmingCharacters(in: .whitespaces)
     summary.lens = lens
 
-    var parts: [String] = []
     if let et = exifDict?[kCGImagePropertyExifExposureTime as String] as? Double {
-        parts.append(et < 1 ? "1/\(Int((1 / et).rounded()))s" : "\(et)s")
+        summary.shutterSpeed = et < 1 ? "1/\(Int((1 / et).rounded()))s" : "\(et)s"
     }
     if let fn = exifDict?[kCGImagePropertyExifFNumber as String] as? Double {
-        parts.append("f/\(fn)")
+        summary.aperture = "f/\(fn)"
     }
     if let isoRaw = exifDict?[kCGImagePropertyExifISOSpeedRatings as String] as? [Any],
        let iso = (isoRaw.first as? NSNumber)?.intValue
     {
-        parts.append("ISO \(iso)")
+        summary.iso = "ISO \(iso)"
     }
     if let focal = exifDict?[kCGImagePropertyExifFocalLenIn35mmFilm as String] {
         let mm = (focal as? Int) ?? Int((focal as? Double) ?? 0)
-        if mm > 0 { parts.append("\(mm)mm") }
+        if mm > 0 { summary.focalLength = "\(mm)mm" }
     }
+    let parts = [summary.shutterSpeed, summary.iso, summary.focalLength, summary.aperture].compactMap(\.self)
     if !parts.isEmpty { summary.exposure = parts.joined(separator: "  ") }
 
     guard summary.camera != nil || summary.lens != nil || summary.exposure != nil else { return nil }
