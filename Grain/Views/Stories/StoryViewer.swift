@@ -84,7 +84,7 @@ struct StoryViewer: View {
     @State private var pendingTransition = PendingAuthorTransition()
     @State private var faceOffsets = FaceOffsets()
     @State private var swipingForward = true
-    @State private var transitionTask: Task<Void, Never>?
+    @State private var transitionGeneration = 0
     @State private var authorHistory: [(authorIndex: Int, storyIndex: Int)] = []
     @State private var imagePrefetcher = ImagePrefetcher()
     @State private var nextStoryFromTrailing = true
@@ -121,14 +121,15 @@ struct StoryViewer: View {
             if let pendingIdx = pendingTransition.authorIndex {
                 pendingFaceView(authorIdx: pendingIdx)
                     .offset(x: faceOffsets.pending)
-                    .scaleEffect(0.95 + swipeAmount * 0.05)
-                    .opacity(0.65 + Double(swipeAmount) * 0.35)
+                    .scaleEffect(0.92 + swipeAmount * 0.08)
+                    .opacity(Double(swipeAmount))
             }
             storyContent
                 .offset(x: faceOffsets.current)
-                .scaleEffect(1 - swipeAmount * 0.05)
-                .opacity(1 - Double(swipeAmount) * 0.35)
+                .scaleEffect(1 - swipeAmount * 0.08)
+                .opacity(1 - Double(swipeAmount))
         }
+        .clipped()
         .background(
             DragToDismissInstaller(
                 handle: fadeDismissHandle,
@@ -193,11 +194,23 @@ struct StoryViewer: View {
         ZStack {
             Color.black.ignoresSafeArea()
             if let story {
-                LazyImage(url: URL(string: story.thumb)) { state in
-                    if let img = state.image {
-                        img.resizable()
-                            .aspectRatio(story.aspectRatio.ratio, contentMode: .fit)
-                            .frame(maxWidth: .infinity)
+                let thumbURL = URL(string: story.thumb)
+                let cached = thumbURL.flatMap {
+                    ImagePipeline.shared.cache.cachedImage(for: ImageRequest(url: $0))?.image
+                }
+                if let img = cached {
+                    Image(uiImage: img)
+                        .resizable()
+                        .aspectRatio(story.aspectRatio.ratio, contentMode: .fit)
+                        .frame(maxWidth: .infinity)
+                } else {
+                    LazyImage(url: thumbURL) { state in
+                        if let img = state.image {
+                            img.resizable()
+                                .aspectRatio(story.aspectRatio.ratio, contentMode: .fit)
+                                .frame(maxWidth: .infinity)
+                                .transition(.identity)
+                        }
                     }
                 }
             } else {
@@ -217,7 +230,7 @@ struct StoryViewer: View {
                 .padding(.horizontal)
                 .padding(.top, 8)
                 HStack(alignment: .center, spacing: 8) {
-                    AvatarView(url: authors[authorIdx].profile.avatar, size: 32)
+                    AvatarView(url: authors[authorIdx].profile.avatar, size: 32, animated: false)
                     VStack(alignment: .leading, spacing: 0) {
                         Text(story?.creator.displayName ?? story?.creator.handle ?? authors[authorIdx].profile.displayName ?? authors[authorIdx].profile.handle)
                             .font(.subheadline.bold())
@@ -229,9 +242,19 @@ struct StoryViewer: View {
                         }
                     }
                     Spacer()
-                    // Placeholder slots to match storyContent's button layout height
-                    Color.clear.frame(width: 36, height: 36)
-                    Color.clear.frame(width: 36, height: 36)
+                    if authors[authorIdx].profile.did == auth.userDID {
+                        Image(systemName: "trash")
+                            .foregroundStyle(.white)
+                            .frame(width: 36, height: 36)
+                    } else {
+                        Image(systemName: "flag")
+                            .foregroundStyle(.white)
+                            .frame(width: 36, height: 36)
+                    }
+                    Image(systemName: "xmark")
+                        .foregroundStyle(.white)
+                        .font(.body.weight(.semibold))
+                        .frame(width: 36, height: 36)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
@@ -354,7 +377,7 @@ struct StoryViewer: View {
                         }
                     } label: {
                         HStack(alignment: .center, spacing: 8) {
-                            AvatarView(url: story?.creator.avatar ?? author.avatar, size: 32)
+                            AvatarView(url: story?.creator.avatar ?? author.avatar, size: 32, animated: false)
                             VStack(alignment: .leading, spacing: 0) {
                                 Text(story?.creator.displayName ?? story?.creator.handle ?? author.displayName ?? author.handle)
                                     .font(.subheadline.bold())
@@ -369,27 +392,27 @@ struct StoryViewer: View {
                     }
                     Spacer()
 
-                    if let story {
-                        if story.creator.did == auth.userDID {
-                            Button {
-                                timer.stop()
-                                showDeleteConfirm = true
-                            } label: {
-                                Image(systemName: "trash")
-                                    .foregroundStyle(.white)
-                                    .frame(width: 36, height: 36)
-                            }
-                        } else {
-                            Button {
-                                timer.stop()
-                                reportStoryUri = story.uri
-                                reportStoryCid = story.cid
-                                showReportSheet = true
-                            } label: {
-                                Image(systemName: "flag")
-                                    .foregroundStyle(.white)
-                                    .frame(width: 36, height: 36)
-                            }
+                    if author.did == auth.userDID {
+                        Button {
+                            guard let story else { return }
+                            timer.stop()
+                            showDeleteConfirm = true
+                        } label: {
+                            Image(systemName: "trash")
+                                .foregroundStyle(.white)
+                                .frame(width: 36, height: 36)
+                        }
+                    } else {
+                        Button {
+                            guard let story else { return }
+                            timer.stop()
+                            reportStoryUri = story.uri
+                            reportStoryCid = story.cid
+                            showReportSheet = true
+                        } label: {
+                            Image(systemName: "flag")
+                                .foregroundStyle(.white)
+                                .frame(width: 36, height: 36)
                         }
                     }
 
@@ -461,13 +484,11 @@ struct StoryViewer: View {
         timer.stop()
         lastNavTime = Date()
         if currentStoryIndex < stories.count - 1 {
-            animateToStory(forward: true) {
-                currentStoryIndex += 1
-                timer.progress = 0
-                imageLoaded = false
-                labelRevealed = false
-                showLocationCopied = false
-            }
+            timer.progress = 0
+            currentStoryIndex += 1
+            imageLoaded = false
+            labelRevealed = false
+            showLocationCopied = false
             prefetchStoryImages()
         } else {
             goToNextAuthor()
@@ -479,23 +500,14 @@ struct StoryViewer: View {
         timer.stop()
         lastNavTime = Date()
         if currentStoryIndex > 0 {
-            animateToStory(forward: false) {
-                currentStoryIndex -= 1
-                timer.progress = 0
-                imageLoaded = false
-                labelRevealed = false
-                showLocationCopied = false
-            }
+            timer.progress = 0
+            currentStoryIndex -= 1
+            imageLoaded = false
+            labelRevealed = false
+            showLocationCopied = false
             prefetchStoryImages()
         } else {
             goToPreviousAuthor()
-        }
-    }
-
-    private func animateToStory(forward: Bool, _ action: () -> Void) {
-        nextStoryFromTrailing = forward
-        withAnimation(.spring(response: 0.28, dampingFraction: 0.88)) {
-            action()
         }
     }
 
@@ -592,23 +604,26 @@ struct StoryViewer: View {
 
     private func cancelSwipe() {
         isDragging = false
-        transitionTask?.cancel()
+        transitionGeneration += 1
+        let gen = transitionGeneration
         let resetOffset: CGFloat = swipingForward ? screenWidth : -screenWidth
-        withAnimation(.spring(response: 0.28, dampingFraction: 0.88)) {
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.88), completionCriteria: .removed) {
             faceOffsets.current = 0
             faceOffsets.pending = resetOffset
-        }
-        transitionTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(400))
-            guard !Task.isCancelled else { return }
-            pendingTransition = PendingAuthorTransition()
-            startTimerIfSafe()
+        } completion: {
+            guard self.transitionGeneration == gen else { return }
+            withTransaction(Transaction(animation: nil)) {
+                self.pendingTransition = PendingAuthorTransition()
+                self.faceOffsets = FaceOffsets()
+            }
+            self.startTimerIfSafe()
         }
     }
 
     private func transitionToAuthor(_ index: Int, forward: Bool, resumeIndex: Int? = nil) {
         timer.stop()
-        transitionTask?.cancel()
+        transitionGeneration += 1
+        let gen = transitionGeneration
 
         // Set up pending face if not already done by beginSwipe
         if pendingTransition.authorIndex != index {
@@ -622,23 +637,23 @@ struct StoryViewer: View {
             faceOffsets.current = 0
         }
         let targetCurrentOffset: CGFloat = forward ? -screenWidth : screenWidth
-        withAnimation(.spring(response: 0.28, dampingFraction: 0.88)) {
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.88), completionCriteria: .removed) {
             faceOffsets.current = targetCurrentOffset
             faceOffsets.pending = 0
-        }
-        transitionTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(400))
-            guard !Task.isCancelled else { return }
-            let storiesToPresent = pendingTransition.stories
-            currentAuthorIndex = index
-            timer.progress = 0 // next story bar starts at zero, never at a stale non-zero value
-            if !storiesToPresent.isEmpty {
-                presentStories(storiesToPresent, resumeIndex: resumeIndex)
-            } else {
-                switchToCurrentAuthor(resumeIndex: resumeIndex)
+        } completion: {
+            guard self.transitionGeneration == gen else { return }
+            withTransaction(Transaction(animation: nil)) {
+                let storiesToPresent = self.pendingTransition.stories
+                self.currentAuthorIndex = index
+                self.timer.progress = 0
+                if !storiesToPresent.isEmpty {
+                    self.presentStories(storiesToPresent, resumeIndex: resumeIndex)
+                } else {
+                    self.switchToCurrentAuthor(resumeIndex: resumeIndex)
+                }
+                self.pendingTransition = PendingAuthorTransition()
+                self.faceOffsets = FaceOffsets()
             }
-            pendingTransition = PendingAuthorTransition()
-            faceOffsets = FaceOffsets()
         }
     }
 
@@ -823,9 +838,10 @@ private struct StoryProgressBars: View {
                         .fill(Color.white.opacity(0.3))
                     Capsule()
                         .fill(Color.white)
-                        .frame(width: barWidth(for: index, totalWidth: geo.size.width))
+                        .frame(width: max(0, barWidth(for: index, totalWidth: geo.size.width)))
                 }
                 .frame(height: 2)
+                .transaction { $0.animation = nil }
             }
         }
     }
