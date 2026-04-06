@@ -131,7 +131,8 @@ enum ImagePrefetchPlanning {
         var low: [ImageRequest] = []
 
         // 1. Next 2 stories of current author — high
-        for i in (currentStoryIndex + 1) ..< min(currentStoryIndex + 3, currentStories.count) {
+        let storyEnd = min(currentStoryIndex + 3, currentStories.count)
+        for i in stride(from: currentStoryIndex + 1, to: storyEnd, by: 1) where i < currentStories.count {
             if let url = URL(string: currentStories[i].fullsize) {
                 high.append(ImageRequest(url: url, priority: .high))
             }

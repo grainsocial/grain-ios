@@ -1,3 +1,4 @@
+import Nuke
 import SwiftUI
 
 struct FeedView: View {
@@ -227,6 +228,7 @@ private struct FeedTabContent: View {
     @State private var cardStoryAuthor: GrainStoryAuthor?
     @State private var suggestedFollows: [SuggestedItem] = []
     @State private var suggestedLoaded = false
+    @State private var feedPrefetcher = ImagePrefetcher()
     let client: XRPCClient
     let storyAuthors: [GrainStoryAuthor]
     var storySortVersion: Int = 0
@@ -285,9 +287,17 @@ private struct FeedTabContent: View {
                         cardStoryAuthor = author
                     })
                     .onAppear {
-                        if gallery.id == viewModel.galleries.last?.id {
+                        // Trigger loadMore when 5 items from the end
+                        let remaining = viewModel.galleries.count - index
+                        if remaining <= 5 {
                             Task { await viewModel.loadMore(auth: auth.authContext()) }
                         }
+                        // Prefetch first image of next 3 galleries
+                        let input = viewModel.galleries.map { g in
+                            (firstThumb: g.items?.first?.thumb, firstFullsize: g.items?.first?.fullsize)
+                        }
+                        let plan = ImagePrefetchPlanning.feedPrefetchRequests(galleries: input, currentIndex: index)
+                        feedPrefetcher.startPrefetching(with: plan.all)
                     }
 
                     if index == 4 {
