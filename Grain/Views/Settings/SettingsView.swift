@@ -6,6 +6,9 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     let client: XRPCClient
     @State private var cacheSizeText = "Calculating..."
+    @AppStorage("privacy.includeLocation") private var includeLocation = true
+    @AppStorage("privacy.includeCameraData") private var includeCameraData = true
+    @AppStorage("privacy.showSuggestedUsers") private var showSuggestedUsers = true
 
     var body: some View {
         List {
@@ -28,6 +31,16 @@ struct SettingsView: View {
                             try? await client.putIncludeExif(includeExif, auth: authContext)
                         }
                     }
+            }
+
+            Section {
+                Toggle("Include location", isOn: $includeLocation)
+                Toggle("Include camera data", isOn: $includeCameraData)
+                Toggle("Show suggested users", isOn: $showSuggestedUsers)
+            } header: {
+                Text("Privacy")
+            } footer: {
+                Text("Camera data includes make, model, and exposure info. Location is auto-detected from photo metadata when available.")
             }
 
             Section("Storage") {

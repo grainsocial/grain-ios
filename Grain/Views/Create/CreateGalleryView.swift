@@ -23,8 +23,10 @@ struct CreateGalleryView: View {
     @State private var photoItems: [PhotoItem] = []
     @State private var mentionState = MentionAutocompleteState()
     @State private var postToBluesky = false
-    @State private var includeExif = true
     @State private var selectedLabels: Set<String> = []
+    @State private var photoLocationResult: NominatimResult?
+    @AppStorage("privacy.includeLocation") private var includeLocation = true
+    @AppStorage("privacy.includeCameraData") private var includeCameraData = true
 
     let client: XRPCClient
     var onCreated: (() -> Void)?
@@ -179,6 +181,23 @@ struct CreateGalleryView: View {
                     }
                 }
             } else {
+                if let photoLoc = photoLocationResult {
+                    Button { selectLocation(photoLoc) } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "location.fill")
+                                .foregroundStyle(.secondary)
+                                .frame(width: 20)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text("Use photo location")
+                                    .font(.subheadline)
+                                Text(photoLoc.name)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .foregroundStyle(.primary)
+                }
                 locationSearchField
                 ForEach(locationSuggestions, id: \.placeId) { result in
                     Button {
@@ -264,16 +283,18 @@ struct CreateGalleryView: View {
     }
 
     private func detectLocation() async {
-        // Don't overwrite a manually-selected location
-        guard resolvedLocation == nil else { return }
-
+        // Always extract GPS from the first photo so "Use photo location" can be offered
+        photoLocationResult = nil
         for item in photoItems {
             guard case let .picker(pickerItem) = item.source,
                   let data = try? await pickerItem.loadTransferable(type: Data.self),
                   let gps = ImageProcessing.extractGPS(from: data) else { continue }
 
             if let result = await LocationServices.reverseGeocode(latitude: gps.latitude, longitude: gps.longitude) {
-                selectLocation(result)
+                photoLocationResult = result
+                if includeLocation, resolvedLocation == nil {
+                    selectLocation(result)
+                }
             }
             break
         }
@@ -301,7 +322,7 @@ struct CreateGalleryView: View {
 
         do {
             let altTexts = photoItems.map(\.alt)
-            let processed = try await processGalleryPhotos(items: photoItems, client: client, authContext: authContext)
+            let processed = try await processGalleryPhotos(items: photoItems, client: client, authContext: authContext, skipExif: !includeCameraData)
             let now = DateFormatting.nowISO()
             let photoUris = try await createGalleryPhotoRecords(
                 processed: processed,
@@ -310,7 +331,7 @@ struct CreateGalleryView: View {
                 repo: repo,
                 client: client,
                 authContext: authContext,
-                includeExif: includeExif
+                includeExif: includeCameraData
             )
 
             // 3. Create gallery record with pre-resolved location
@@ -323,7 +344,7 @@ struct CreateGalleryView: View {
                 let labelValues = selectedLabels.map { ["val": AnyCodable($0)] as [String: AnyCodable] }
                 galleryRecord["labels"] = AnyCodable([
                     "$type": AnyCodable("com.atproto.label.defs#selfLabels"),
-                    "values": AnyCodable(labelValues as [[String: AnyCodable]])
+                    "values": AnyCodable(labelValues as [[String: AnyCodable]]),
                 ] as [String: AnyCodable])
             }
             if let loc = resolvedLocation {
@@ -431,7 +452,8 @@ private struct ProcessedPhoto {
 private func processGalleryPhotos(
     items: [PhotoItem],
     client: XRPCClient,
-    authContext: AuthContext
+    authContext: AuthContext,
+    skipExif: Bool = false
 ) async throws -> [ProcessedPhoto] {
     var processed: [ProcessedPhoto] = []
     for item in items {
@@ -439,7 +461,7 @@ private func processGalleryPhotos(
         case let .picker(pickerItem):
             guard let data = try await pickerItem.loadTransferable(type: Data.self),
                   let original = UIImage(data: data) else { continue }
-            let exif = extractGalleryExif(from: data)
+            let exif = skipExif ? nil : extractGalleryExif(from: data)
             let (resized, size) = ImageProcessing.resizeImage(original, maxDimension: 2000, maxBytes: 900_000)
             logger.info("Uploading \(resized.count) bytes, \(Int(size.width))x\(Int(size.height))")
             let response = try await client.uploadBlob(data: resized, mimeType: "image/jpeg", auth: authContext)
