@@ -234,4 +234,68 @@ final class ImagePrefetchPlanningTests: XCTestCase {
         // Low: third + fourth author firsts
         XCTAssertEqual(urls(from: result.low).count, 2)
     }
+
+    // MARK: - Priority correctness
+
+    func testCarousel_page0_allRequestsAreHighPriority() {
+        let result = ImagePrefetchPlanning.carouselPrefetchRequests(photos: photos(5), currentPage: 0)
+        XCTAssertTrue(result.high.allSatisfy { $0.priority == .high })
+        XCTAssertTrue(result.normal.isEmpty)
+        XCTAssertTrue(result.low.isEmpty)
+    }
+
+    func testCarousel_page1_thumbsAreNormalPriority() {
+        let result = ImagePrefetchPlanning.carouselPrefetchRequests(photos: photos(5), currentPage: 1)
+        XCTAssertTrue(result.high.allSatisfy { $0.priority == .high })
+        XCTAssertTrue(result.normal.allSatisfy { $0.priority == .normal })
+    }
+
+    func testFeed_priorityDescentAcrossOffsets() {
+        let galleries: [(firstThumb: String?, firstFullsize: String?)] = (0 ..< 10).map { i in
+            (firstThumb: "https://cdn.example.com/thumb/\(i).jpg",
+             firstFullsize: "https://cdn.example.com/full/\(i).jpg")
+        }
+        let result = ImagePrefetchPlanning.feedPrefetchRequests(galleries: galleries, currentIndex: 3)
+        XCTAssertTrue(urls(from: result.high).contains("https://cdn.example.com/full/4.jpg"))
+        XCTAssertTrue(urls(from: result.normal).contains("https://cdn.example.com/full/5.jpg"))
+        XCTAssertTrue(urls(from: result.low).contains("https://cdn.example.com/full/6.jpg"))
+    }
+
+    // MARK: - Story boundary: currentStoryIndex at end
+
+    func testStory_atLastIndex_noCurrentPrefetchButNextAuthorStill() {
+        let stories = photos(3)
+        let nextAuthor = photos(2)
+
+        let result = ImagePrefetchPlanning.storyPrefetchRequests(
+            currentStories: stories,
+            currentStoryIndex: 2,
+            nextAuthorStories: nextAuthor,
+            secondNextAuthorStories: nil,
+            thirdNextFirstStory: nil,
+            fourthNextFirstStory: nil
+        )
+
+        let highUrls = urls(from: result.high)
+        XCTAssertFalse(highUrls.contains("https://cdn.example.com/full/3.jpg"))
+        XCTAssertTrue(highUrls.contains("https://cdn.example.com/full/0.jpg"))
+    }
+
+    // MARK: - No duplicate URLs
+
+    func testCarousel_page0_noDuplicateURLs() {
+        let result = ImagePrefetchPlanning.carouselPrefetchRequests(photos: photos(5), currentPage: 0)
+        let allUrls = urls(from: result.all)
+        XCTAssertEqual(allUrls.count, Set(allUrls).count)
+    }
+
+    func testFeed_noDuplicateURLs() {
+        let galleries: [(firstThumb: String?, firstFullsize: String?)] = (0 ..< 10).map { i in
+            (firstThumb: "https://cdn.example.com/thumb/\(i).jpg",
+             firstFullsize: "https://cdn.example.com/full/\(i).jpg")
+        }
+        let result = ImagePrefetchPlanning.feedPrefetchRequests(galleries: galleries, currentIndex: 3)
+        let allUrls = urls(from: result.all)
+        XCTAssertEqual(allUrls.count, Set(allUrls).count)
+    }
 }
