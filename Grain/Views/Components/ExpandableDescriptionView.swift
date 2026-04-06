@@ -59,3 +59,15 @@ struct ExpandableDescriptionView: View {
         }
     }
 }
+
+#Preview {
+    VStack(alignment: .leading, spacing: 20) {
+        ExpandableDescriptionView(text: "Short caption.")
+        ExpandableDescriptionView(
+            text: "A much longer caption that keeps going well past two lines. Photographed at golden hour in the hills above the city. Shot with #35mm film, developed in Rodinal. See @alice.grain.social for the full series.",
+            onMentionTap: { _ in },
+            onHashtagTap: { _ in }
+        )
+    }
+    .padding()
+}

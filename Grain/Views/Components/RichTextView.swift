@@ -185,3 +185,16 @@ private enum Segment {
     case mention(String, did: String)
     case hashtag(String, tag: String)
 }
+
+#Preview {
+    VStack(alignment: .leading, spacing: 12) {
+        RichTextView(text: "Plain text with no links.")
+        RichTextView(
+            text: "Check out @alice.grain.social and the #35mm tag.",
+            onMentionTap: { _ in },
+            onHashtagTap: { _ in }
+        )
+        RichTextView(text: "Visit https://grain.social for more.")
+    }
+    .padding()
+}

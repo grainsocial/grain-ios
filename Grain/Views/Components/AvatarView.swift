@@ -32,3 +32,12 @@ struct AvatarView: View {
         }
     }
 }
+
+#Preview {
+    HStack(spacing: 20) {
+        AvatarView(url: nil)
+        AvatarView(url: nil, size: 48)
+        AvatarView(url: nil, size: 80)
+    }
+    .padding()
+}

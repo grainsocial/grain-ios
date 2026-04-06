@@ -16,7 +16,7 @@ enum GrainShortcutAction: String {
 struct OpenFeedIntent: AppIntent {
     static let title: LocalizedStringResource = "Open Feed"
     static let description = IntentDescription("Browse your photo feed in Grain.")
-    static var openAppWhenRun: Bool = true
+    static let openAppWhenRun = true
 
     @MainActor
     func perform() async throws -> some IntentResult {
@@ -28,7 +28,7 @@ struct OpenFeedIntent: AppIntent {
 struct OpenSearchIntent: AppIntent {
     static let title: LocalizedStringResource = "Search"
     static let description = IntentDescription("Search for photos, profiles, and hashtags in Grain.")
-    static var openAppWhenRun: Bool = true
+    static let openAppWhenRun = true
 
     @MainActor
     func perform() async throws -> some IntentResult {
@@ -40,7 +40,7 @@ struct OpenSearchIntent: AppIntent {
 struct OpenNotificationsIntent: AppIntent {
     static let title: LocalizedStringResource = "Open Notifications"
     static let description = IntentDescription("Check your latest activity in Grain.")
-    static var openAppWhenRun: Bool = true
+    static let openAppWhenRun = true
 
     @MainActor
     func perform() async throws -> some IntentResult {
@@ -52,7 +52,7 @@ struct OpenNotificationsIntent: AppIntent {
 struct OpenProfileIntent: AppIntent {
     static let title: LocalizedStringResource = "Open My Profile"
     static let description = IntentDescription("View your profile and galleries in Grain.")
-    static var openAppWhenRun: Bool = true
+    static let openAppWhenRun = true
 
     @MainActor
     func perform() async throws -> some IntentResult {
@@ -64,7 +64,7 @@ struct OpenProfileIntent: AppIntent {
 struct CreateGalleryIntent: AppIntent {
     static let title: LocalizedStringResource = "Create Gallery"
     static let description = IntentDescription("Start posting a new photo gallery in Grain.")
-    static var openAppWhenRun: Bool = true
+    static let openAppWhenRun = true
 
     @MainActor
     func perform() async throws -> some IntentResult {
