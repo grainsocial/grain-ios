@@ -22,15 +22,12 @@ struct GrainGallery: Codable, Sendable, Identifiable {
     var crossPost: CrossPostInfo?
     var labelRevealed: Bool = false
 
-<<<<<<< HEAD
-    var id: String { uri }
+    var id: String {
+        uri
+    }
 
     private enum CodingKeys: String, CodingKey {
         case uri, cid, title, description, cameras, location, address, facets, creator, record, items, favCount, commentCount, labels, createdAt, indexedAt, viewer, crossPost
-=======
-    var id: String {
-        uri
->>>>>>> c7c34af (feat: add xcbeautify, SwiftFormat, and SwiftLint tooling)
     }
 }
 

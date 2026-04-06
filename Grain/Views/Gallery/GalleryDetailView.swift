@@ -209,12 +209,8 @@ struct GalleryDetailView: View {
                         .font(.body)
                         .focused($commentFocused)
                         .padding()
-<<<<<<< HEAD
-                        .lineLimit(5...10)
-                        .onChange(of: commentText) { mentionState.update(text: commentText) }
-=======
                         .lineLimit(5 ... 10)
->>>>>>> c7c34af (feat: add xcbeautify, SwiftFormat, and SwiftLint tooling)
+                        .onChange(of: commentText) { mentionState.update(text: commentText) }
 
                     Spacer()
                 }

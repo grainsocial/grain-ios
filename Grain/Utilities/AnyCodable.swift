@@ -16,29 +16,18 @@ struct AnyCodable: Codable, Sendable {
 
     init(_ value: some Sendable) {
         switch value {
-<<<<<<< HEAD
-        case let b as Bool: storage = .bool(b)
-        case let i as Int: storage = .int(i)
-        case let d as Double: storage = .double(d)
-        case let s as String: storage = .string(s)
-        case let a as [AnyCodable]: storage = .array(a)
-        case let a as [String]:
-            storage = .array(a.map { AnyCodable($0) })
-        case let a as [[String: AnyCodable]]:
-            storage = .array(a.map { AnyCodable($0) })
-        case let d as [String: AnyCodable]: storage = .dict(d)
-        case let d as [String: String]:
-            storage = .dict(d.mapValues { AnyCodable($0) })
-=======
         case let boolVal as Bool: storage = .bool(boolVal)
         case let intVal as Int: storage = .int(intVal)
         case let doubleVal as Double: storage = .double(doubleVal)
         case let stringVal as String: storage = .string(stringVal)
         case let arrayVal as [AnyCodable]: storage = .array(arrayVal)
+        case let stringArray as [String]:
+            storage = .array(stringArray.map { AnyCodable($0) })
+        case let dictArray as [[String: AnyCodable]]:
+            storage = .array(dictArray.map { AnyCodable($0) })
         case let dictVal as [String: AnyCodable]: storage = .dict(dictVal)
         case let dictVal as [String: String]:
             storage = .dict(dictVal.mapValues { AnyCodable($0) })
->>>>>>> c7c34af (feat: add xcbeautify, SwiftFormat, and SwiftLint tooling)
         default: storage = .null
         }
     }
@@ -70,7 +59,7 @@ struct AnyCodable: Codable, Sendable {
     }
 
     var stringValue: String? {
-        if case .string(let s) = storage { return s }
+        if case let .string(s) = storage { return s }
         return nil
     }
 
