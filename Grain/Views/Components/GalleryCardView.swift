@@ -524,8 +524,8 @@ struct GalleryCardView: View {
     }
 }
 
-#Preview {
-    @Previewable @State var gallery = GrainGallery(
+private func previewGallery() -> GrainGallery {
+    GrainGallery(
         uri: "at://did:plc:preview/social.grain.gallery/r1",
         cid: "cid",
         title: "Golden Hour",
@@ -535,6 +535,10 @@ struct GalleryCardView: View {
         commentCount: 7,
         indexedAt: "2024-06-15T18:00:00Z"
     )
+}
+
+#Preview {
+    @Previewable @State var gallery = previewGallery()
     ScrollView {
         GalleryCardView(
             gallery: $gallery,
