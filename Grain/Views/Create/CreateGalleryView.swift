@@ -107,35 +107,39 @@ struct CreateGalleryView: View {
         if !photoItems.isEmpty {
             Section("Alt Text") {
                 ForEach($photoItems) { $item in
-                    HStack(alignment: .top, spacing: 12) {
-                        VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(alignment: .top, spacing: 12) {
                             Image(uiImage: item.thumbnail)
                                 .resizable()
                                 .scaledToFill()
                                 .frame(width: 60, height: 60)
                                 .clipShape(RoundedRectangle(cornerRadius: 8))
 
-                            if let exif = item.exifSummary {
-                                VStack(alignment: .leading, spacing: 1) {
-                                    if let camera = exif.camera {
-                                        Text(camera).lineLimit(1)
-                                    }
-                                    if let lens = exif.lens {
-                                        Text(lens).lineLimit(1)
-                                    }
-                                    if let exposure = exif.exposure {
-                                        Text(exposure).lineLimit(1)
-                                    }
-                                }
-                                .font(.system(size: 9))
-                                .foregroundStyle(.tertiary)
-                                .frame(width: 60, alignment: .leading)
-                            }
+                            TextField("Describe this photo...", text: $item.alt, axis: .vertical)
+                                .font(.subheadline)
+                                .lineLimit(2 ... 4)
                         }
 
-                        TextField("Describe this photo...", text: $item.alt, axis: .vertical)
-                            .font(.subheadline)
-                            .lineLimit(2 ... 4)
+                        if let exif = item.exifSummary {
+                            VStack(alignment: .leading, spacing: 4) {
+                                if let camera = exif.camera {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "camera").font(.caption2)
+                                        Text(camera).font(.caption)
+                                    }
+                                }
+                                if let lens = exif.lens {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "circle.circle").font(.caption2)
+                                        Text(lens).font(.caption)
+                                    }
+                                }
+                                if let exposure = exif.exposure {
+                                    Text(exposure).font(.caption)
+                                }
+                            }
+                            .foregroundStyle(sendExif ? .secondary : .tertiary)
+                        }
                     }
                     .padding(.vertical, 4)
                 }
