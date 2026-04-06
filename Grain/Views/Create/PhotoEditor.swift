@@ -12,12 +12,16 @@ struct PhotoEditor: View {
 
     var body: some View {
         ReorderablePhotoStrip(items: $items, selectedPhotoID: $selectedPhotoID)
+            .listRowInsets(EdgeInsets())
+            .listRowSeparator(.hidden)
         if let idx = selectedIndex {
             viewer(selectedIndex: idx)
             altTextField(for: idx)
             exifRow(for: items[idx])
         }
         ReorderablePhotoGrid(items: $items, selectedPhotoID: $selectedPhotoID)
+            .listRowInsets(EdgeInsets())
+            .listRowSeparator(.hidden)
     }
 
     // MARK: - Zoomable Viewer
@@ -63,29 +67,11 @@ struct PhotoEditor: View {
     }
 }
 
-private func previewItems() -> [PhotoItem] {
-    let size = CGSize(width: 200, height: 200)
-    let colors: [UIColor] = [
-        .systemBlue, .systemGreen, .systemOrange,
-        .systemPink, .systemPurple, .systemRed,
-        .systemTeal, .systemYellow, .systemIndigo,
-        .systemCyan, .systemMint, .systemBrown,
-        .systemGray, .systemGray2, .systemGray3,
-    ]
-    return colors.map { color in
-        let thumb = UIGraphicsImageRenderer(size: size).image { ctx in
-            color.setFill()
-            ctx.fill(CGRect(origin: .zero, size: size))
-        }
-        return PhotoItem(thumbnail: thumb, source: .camera(thumb))
-    }
-}
-
 #Preview {
-    @Previewable @State var state: [PhotoItem] = previewItems()
+    @Previewable @State var state: [PhotoItem] = PreviewData.photoItems
     @Previewable @State var selected: UUID?
     ScrollView {
-        PhotoEditor(items: $state, selectedPhotoID: $selected, sendExif: false)
+        PhotoEditor(items: $state, selectedPhotoID: $selected, sendExif: true)
             .padding()
     }
     .onAppear { selected = state.first?.id }

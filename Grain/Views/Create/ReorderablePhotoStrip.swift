@@ -71,6 +71,7 @@ struct ReorderablePhotoStrip: View {
                     }
                 }
                 .padding(.vertical, 4)
+                .padding(.horizontal, 16)
             }
             .onChange(of: selectedPhotoID) { _, id in
                 guard let id else { return }
@@ -100,14 +101,10 @@ struct ReorderablePhotoStrip: View {
 }
 
 #Preview {
-    @Previewable @State var state: [PhotoItem] = ([UIColor.systemBlue, .systemGreen, .systemOrange, .systemPink] as [UIColor]).map { color in
-        let thumb = UIGraphicsImageRenderer(size: CGSize(width: 100, height: 100)).image { ctx in
-            color.setFill()
-            ctx.fill(CGRect(origin: .zero, size: CGSize(width: 100, height: 100)))
-        }
-        return PhotoItem(thumbnail: thumb, source: .camera(thumb))
-    }
+    @Previewable @State var state: [PhotoItem] = PreviewData.photoItems
     @Previewable @State var selected: UUID?
     ReorderablePhotoStrip(items: $state, selectedPhotoID: $selected)
         .padding()
+        .onAppear { selected = state.first?.id }
+        .preferredColorScheme(.dark)
 }

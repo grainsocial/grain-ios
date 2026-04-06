@@ -524,24 +524,15 @@ struct GalleryCardView: View {
     }
 }
 
-private func previewGallery() -> GrainGallery {
-    GrainGallery(
-        uri: "at://did:plc:preview/social.grain.gallery/r1",
-        cid: "cid",
-        title: "Golden Hour",
-        description: "Shot on Leica M11 · #analog #35mm",
-        creator: GrainProfile(cid: "cid", did: "did:plc:preview", handle: "alice.grain.social", displayName: "Alice"),
-        favCount: 42,
-        commentCount: 7,
-        indexedAt: "2024-06-15T18:00:00Z"
-    )
-}
-
 #Preview {
-    @Previewable @State var gallery = previewGallery()
+    @Previewable @State var gallery = PreviewData.gallery1
     ScrollView {
         GalleryCardView(
             gallery: $gallery,
+            client: XRPCClient(baseURL: AuthManager.serverURL)
+        )
+        GalleryCardView(
+            gallery: .constant(PreviewData.gallery2),
             client: XRPCClient(baseURL: AuthManager.serverURL)
         )
     }

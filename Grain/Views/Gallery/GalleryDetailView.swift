@@ -246,7 +246,13 @@ struct GalleryDetailView: View {
             }
         }
         .task {
-            guard !isPreview else { return }
+            guard !isPreview else {
+                #if DEBUG
+                    viewModel.gallery = PreviewData.gallery1
+                    viewModel.comments = PreviewData.comments
+                #endif
+                return
+            }
             await viewModel.load(uri: galleryUri, auth: auth.authContext())
         }
     }

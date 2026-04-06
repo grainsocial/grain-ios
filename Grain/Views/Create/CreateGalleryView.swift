@@ -703,7 +703,42 @@ private func extractGalleryExif(from data: Data) -> [String: AnyCodable]? {
 }
 
 #Preview {
-    CreateGalleryView(client: XRPCClient(baseURL: AuthManager.serverURL)) {}
-        .environment(AuthManager())
-        .environment(LabelDefinitionsCache())
+    @Previewable @State var photos = PreviewData.photoItems
+    @Previewable @State var selectedID: UUID?
+    NavigationStack {
+        CreateGalleryViewPreview(photoItems: $photos, selectedPhotoID: $selectedID)
+    }
+    .environment(AuthManager())
+    .environment(LabelDefinitionsCache())
+    .onAppear { selectedID = photos.first?.id }
+}
+
+/// Thin wrapper that exposes photoItems for preview injection
+private struct CreateGalleryViewPreview: View {
+    @Binding var photoItems: [PhotoItem]
+    @Binding var selectedPhotoID: UUID?
+
+    var body: some View {
+        Form {
+            Section("Photos") {
+                Label("5 photos selected", systemImage: "photo.on.rectangle.angled")
+                    .foregroundStyle(.secondary)
+            }
+            Section {
+                TextField("Add a title (required)...", text: .constant("Golden Hour, Kyoto"))
+                TextField("Add a description...", text: .constant("Shot on Leica M6 with Kodak Portra 400. #analog #japan #35mm"), axis: .vertical)
+                    .lineLimit(3 ... 6)
+            } header: {
+                Text("Gallery")
+            }
+            Section {
+                PhotoEditor(items: $photoItems, selectedPhotoID: $selectedPhotoID, sendExif: true)
+            }
+        }
+        .navigationTitle("New Gallery")
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) { Button("Cancel") {} }
+            ToolbarItem(placement: .topBarTrailing) { Button("Post") {}.bold() }
+        }
+    }
 }

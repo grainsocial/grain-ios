@@ -147,14 +147,10 @@ struct ReorderablePhotoGrid: View {
 }
 
 #Preview {
-    @Previewable @State var state: [PhotoItem] = ([UIColor.systemBlue, .systemGreen, .systemOrange, .systemPink, .systemPurple] as [UIColor]).map { color in
-        let thumb = UIGraphicsImageRenderer(size: CGSize(width: 100, height: 100)).image { ctx in
-            color.setFill()
-            ctx.fill(CGRect(origin: .zero, size: CGSize(width: 100, height: 100)))
-        }
-        return PhotoItem(thumbnail: thumb, source: .camera(thumb))
-    }
+    @Previewable @State var state: [PhotoItem] = PreviewData.photoItems
     @Previewable @State var selected: UUID?
     ReorderablePhotoGrid(items: $state, selectedPhotoID: $selected)
         .padding()
+        .onAppear { selected = state.first?.id }
+        .preferredColorScheme(.dark)
 }
