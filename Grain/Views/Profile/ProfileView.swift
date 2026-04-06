@@ -165,7 +165,7 @@ struct ProfileView: View {
                                     .frame(maxWidth: .infinity)
                                 }
                                 .buttonStyle(.bordered)
-                            .tint(.primary)
+                                .tint(.primary)
                             }
                         }
                         .padding(.horizontal)
