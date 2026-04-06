@@ -50,6 +50,7 @@ struct SettingsView: View {
                 }
             }
             .task {
+                guard !isPreview else { return }
                 updateCacheSize()
             }
 

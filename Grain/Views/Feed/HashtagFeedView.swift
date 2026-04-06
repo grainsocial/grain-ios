@@ -69,6 +69,7 @@ struct HashtagFeedView: View {
             }
         }
         .task {
+            guard !isPreview else { return }
             await checkPinned()
         }
         .navigationDestination(item: $selectedUri) { uri in
@@ -96,6 +97,7 @@ struct HashtagFeedView: View {
             .environment(auth)
         }
         .task {
+            guard !isPreview else { return }
             if galleries.isEmpty {
                 await loadInitial()
             }

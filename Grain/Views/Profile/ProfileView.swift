@@ -368,6 +368,7 @@ struct ProfileView: View {
             await viewModel.load(did: actor, viewer: auth.userDID, auth: auth.authContext())
         }
         .task {
+            guard !isPreview else { return }
             await viewModel.load(did: actor, viewer: auth.userDID, auth: auth.authContext())
         }
         .onChange(of: deletedGalleryUri) { _, uri in

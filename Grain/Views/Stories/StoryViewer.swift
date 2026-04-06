@@ -128,6 +128,7 @@ struct StoryViewer: View {
                 }
             }
             .task {
+                guard !isPreview else { return }
                 let startAuthor = authors[currentAuthorIndex]
                 let isOwn = startAuthor.profile.did == auth.userDID
                 let hasUnreads = !viewedStories.hasViewedAll(authorDid: startAuthor.profile.did, latestAt: startAuthor.latestAt)

@@ -136,6 +136,7 @@ struct EditProfileView: View {
             Task { await loadSelectedPhoto() }
         }
         .task {
+            guard !isPreview else { return }
             await loadProfile()
         }
         .overlay {

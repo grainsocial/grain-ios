@@ -60,6 +60,7 @@ struct FeedView: View {
                 .sharedBackgroundVisibility(.hidden)
             }
             .task {
+                guard !isPreview else { return }
                 await prefsViewModel.loadIfNeeded(auth: auth.authContext())
                 await storyViewModel.load(auth: auth.authContext(), storyStatusCache: storyStatusCache)
             }
@@ -351,6 +352,7 @@ private struct FeedTabContent: View {
             .environment(auth)
         }
         .task {
+            guard !isPreview else { return }
             if viewModel.galleries.isEmpty {
                 await viewModel.loadInitial(auth: auth.authContext())
                 lastLoadTime = .now

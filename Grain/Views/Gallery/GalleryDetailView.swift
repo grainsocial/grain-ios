@@ -246,7 +246,8 @@ struct GalleryDetailView: View {
             }
         }
         .task {
-            await viewModel.load(uri: galleryUri, auth: await auth.authContext())
+            guard !isPreview else { return }
+            await viewModel.load(uri: galleryUri, auth: auth.authContext())
         }
     }
 
