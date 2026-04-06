@@ -1,3 +1,4 @@
+import Nuke
 import SwiftUI
 
 struct FeedView: View {
@@ -41,7 +42,7 @@ struct FeedView: View {
                         },
                         onStoryCreateTap: { showStoryCreate = true },
                         onRefresh: { [storyStatusCache] in
-                            await storyViewModel.load(auth: await auth.authContext(), storyStatusCache: storyStatusCache)
+                            await storyViewModel.load(auth: auth.authContext(), storyStatusCache: storyStatusCache)
                         },
                         prefsViewModel: prefsViewModel
                     )
@@ -59,11 +60,11 @@ struct FeedView: View {
                 .sharedBackgroundVisibility(.hidden)
             }
             .task {
-                await prefsViewModel.loadIfNeeded(auth: await auth.authContext())
-                await storyViewModel.load(auth: await auth.authContext(), storyStatusCache: storyStatusCache)
+                await prefsViewModel.loadIfNeeded(auth: auth.authContext())
+                await storyViewModel.load(auth: auth.authContext(), storyStatusCache: storyStatusCache)
             }
             .onAppear {
-                Task { await prefsViewModel.refresh(auth: await auth.authContext()) }
+                Task { await prefsViewModel.refresh(auth: auth.authContext()) }
             }
             .onChange(of: storyViewerDid) {
                 if storyViewerDid == nil {
@@ -93,7 +94,7 @@ struct FeedView: View {
             }
             .sheet(isPresented: $showStoryCreate) {
                 StoryCreateView(client: client) {
-                    Task { await storyViewModel.load(auth: await auth.authContext(), storyStatusCache: storyStatusCache) }
+                    Task { await storyViewModel.load(auth: auth.authContext(), storyStatusCache: storyStatusCache) }
                 }
             }
             .navigationDestination(item: $deepLinkProfileDid) { did in
@@ -144,7 +145,7 @@ struct FeedView: View {
                 Divider()
                 Button(role: .destructive) {
                     Task {
-                        await prefsViewModel.unpinFeed(prefsViewModel.selectedFeedId, auth: await auth.authContext())
+                        await prefsViewModel.unpinFeed(prefsViewModel.selectedFeedId, auth: auth.authContext())
                     }
                 } label: {
                     Label("Unpin", systemImage: "pin.slash")
@@ -196,7 +197,7 @@ struct FeedView: View {
 
     private func openStoryDeepLink(did: String) async {
         do {
-            let response = try await client.getStories(actor: did, auth: await auth.authContext())
+            let response = try await client.getStories(actor: did, auth: auth.authContext())
             let count = response.stories.count
             if count > 0, let creator = response.stories.first?.creator {
                 deepLinkStoryAuthor = GrainStoryAuthor(
@@ -229,6 +230,7 @@ private struct FeedTabContent: View {
     @State private var suggestedFollows: [SuggestedItem] = []
     @State private var suggestedLoaded = false
     @State private var lastLoadTime: Date = .now
+    @State private var feedPrefetcher = ImagePrefetcher()
     let client: XRPCClient
     let storyAuthors: [GrainStoryAuthor]
     var storySortVersion: Int = 0
@@ -287,9 +289,17 @@ private struct FeedTabContent: View {
                         cardStoryAuthor = author
                     })
                     .onAppear {
-                        if gallery.id == viewModel.galleries.last?.id {
-                            Task { await viewModel.loadMore(auth: await auth.authContext()) }
+                        // Trigger loadMore when 5 items from the end
+                        let remaining = viewModel.galleries.count - index
+                        if remaining <= 5 {
+                            Task { await viewModel.loadMore(auth: auth.authContext()) }
                         }
+                        // Prefetch first image of next 3 galleries
+                        let input = viewModel.galleries.map { g in
+                            (firstThumb: g.items?.first?.thumb, firstFullsize: g.items?.first?.fullsize)
+                        }
+                        let plan = ImagePrefetchPlanning.feedPrefetchRequests(galleries: input, currentIndex: index)
+                        feedPrefetcher.startPrefetching(with: plan.all)
                     }
 
                     if index == 4 {
@@ -341,12 +351,12 @@ private struct FeedTabContent: View {
         }
         .task {
             if viewModel.galleries.isEmpty {
-                await viewModel.loadInitial(auth: await auth.authContext())
+                await viewModel.loadInitial(auth: auth.authContext())
                 lastLoadTime = .now
             }
             if !suggestedLoaded, let did = auth.userDID {
                 do {
-                    let response = try await client.getSuggestedFollows(actor: did, auth: await auth.authContext())
+                    let response = try await client.getSuggestedFollows(actor: did, auth: auth.authContext())
                     suggestedFollows = response.items ?? []
                 } catch {}
                 suggestedLoaded = true
@@ -355,7 +365,7 @@ private struct FeedTabContent: View {
         .onChange(of: scenePhase) {
             if scenePhase == .active, Date.now.timeIntervalSince(lastLoadTime) > 300 {
                 Task {
-                    await viewModel.loadInitial(auth: await auth.authContext())
+                    await viewModel.loadInitial(auth: auth.authContext())
                     lastLoadTime = .now
                 }
             }
