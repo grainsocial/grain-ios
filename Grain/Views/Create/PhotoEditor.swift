@@ -64,18 +64,29 @@ struct PhotoEditor: View {
 }
 
 private func previewItems() -> [PhotoItem] {
+    let size = CGSize(width: 200, height: 200)
     let colors: [UIColor] = [
         .systemBlue, .systemGreen, .systemOrange,
         .systemPink, .systemPurple, .systemRed,
         .systemTeal, .systemYellow, .systemIndigo,
+        .systemCyan, .systemMint, .systemBrown,
+        .systemGray, .systemGray2, .systemGray3,
     ]
-    return colors.map { color in
-        let thumb = UIGraphicsImageRenderer(size: CGSize(width: 200, height: 200)).image { ctx in
+    var items = colors.map { color -> PhotoItem in
+        let thumb = UIGraphicsImageRenderer(size: size).image { ctx in
             color.setFill()
-            ctx.fill(CGRect(origin: .zero, size: CGSize(width: 200, height: 200)))
+            ctx.fill(CGRect(origin: .zero, size: size))
         }
         return PhotoItem(thumbnail: thumb, source: .camera(thumb))
     }
+    // Replace the first item with the app icon if available
+    if let icon = UIImage(named: "germ-logo") {
+        let thumb = UIGraphicsImageRenderer(size: size).image { _ in
+            icon.draw(in: CGRect(origin: .zero, size: size))
+        }
+        items[0] = PhotoItem(thumbnail: thumb, source: .camera(thumb))
+    }
+    return items
 }
 
 #Preview {
@@ -86,4 +97,5 @@ private func previewItems() -> [PhotoItem] {
             .padding()
     }
     .onAppear { selected = state.first?.id }
+    .preferredColorScheme(.dark)
 }
