@@ -158,9 +158,9 @@ struct NotificationRow: View {
 
 #Preview {
     let client = XRPCClient(baseURL: AuthManager.serverURL)
-    NotificationsView(
-        client: client,
-        viewModel: NotificationsViewModel(client: client)
-    )
-    .environment(AuthManager())
+    let vm = NotificationsViewModel(client: client)
+    vm.notifications = PreviewData.notifications
+    vm.unseenCount = 3
+    return NotificationsView(client: client, viewModel: vm)
+        .environment(AuthManager())
 }

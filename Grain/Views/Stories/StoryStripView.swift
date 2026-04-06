@@ -121,11 +121,9 @@ struct StoryStripView: View {
 }
 
 #Preview {
-    let profile = GrainProfile(cid: "cid", did: "did:plc:a", handle: "alice.grain.social", displayName: "Alice")
-    let author = GrainStoryAuthor(profile: profile, storyCount: 3, latestAt: "2024-06-15T18:00:00Z")
     StoryStripView(
-        authors: [author],
-        userDid: nil,
+        authors: PreviewData.storyAuthors,
+        userDid: "did:plc:prevuser1",
         userAvatar: nil,
         onAuthorTap: { _, _ in },
         onCreateTap: {}

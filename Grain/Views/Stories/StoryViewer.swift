@@ -607,9 +607,7 @@ private struct StoryProgressBars: View {
 }
 
 #Preview {
-    let profile = GrainProfile(cid: "cid", did: "did:plc:preview", handle: "alice.grain.social", displayName: "Alice")
-    let author = GrainStoryAuthor(profile: profile, storyCount: 0, latestAt: "2024-01-01T00:00:00Z")
-    StoryViewer(authors: [author], client: XRPCClient(baseURL: AuthManager.serverURL))
+    StoryViewer(authors: PreviewData.storyAuthors, client: XRPCClient(baseURL: AuthManager.serverURL))
         .environment(AuthManager())
         .environment(LabelDefinitionsCache())
         .environment(ViewedStoryStorage())

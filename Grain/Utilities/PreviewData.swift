@@ -164,6 +164,65 @@
             }
         }
 
+        // MARK: - Story authors
+
+        static let storyAuthors: [GrainStoryAuthor] = [
+            GrainStoryAuthor(profile: GrainProfile(cid: "c1", did: "did:plc:prevuser1", handle: "yuki.grain.social", displayName: "Yuki"), storyCount: 3, latestAt: "2025-01-10T18:00:00Z"),
+            GrainStoryAuthor(profile: GrainProfile(cid: "c2", did: "did:plc:prevuser2", handle: "marcus.grain.social", displayName: "Marcus"), storyCount: 1, latestAt: "2025-01-10T15:00:00Z"),
+            GrainStoryAuthor(profile: GrainProfile(cid: "c3", did: "did:plc:prevuser3", handle: "sofia.grain.social", displayName: "Sofia"), storyCount: 2, latestAt: "2025-01-10T12:00:00Z"),
+            GrainStoryAuthor(profile: GrainProfile(cid: "c4", did: "did:plc:prevuser4", handle: "kai.grain.social", displayName: "Kai"), storyCount: 1, latestAt: "2025-01-10T10:00:00Z"),
+            GrainStoryAuthor(profile: GrainProfile(cid: "c5", did: "did:plc:prevuser5", handle: "leo.grain.social", displayName: "Leo"), storyCount: 4, latestAt: "2025-01-10T08:00:00Z"),
+        ]
+
+        // MARK: - Notifications
+
+        static let notifications: [GrainNotification] = [
+            GrainNotification(
+                uri: "at://did:plc:prevuser2/social.grain.notification/n1",
+                reason: "gallery-favorite",
+                createdAt: "2025-01-10T19:30:00Z",
+                author: profile2,
+                galleryUri: gallery1.uri,
+                galleryTitle: gallery1.title,
+                galleryThumb: ""
+            ),
+            GrainNotification(
+                uri: "at://did:plc:prevuser3/social.grain.notification/n2",
+                reason: "gallery-comment",
+                createdAt: "2025-01-10T19:00:00Z",
+                author: profile3,
+                galleryUri: gallery1.uri,
+                galleryTitle: gallery1.title,
+                galleryThumb: "",
+                commentText: "The light in the third frame is unreal. What film stock?"
+            ),
+            GrainNotification(
+                uri: "at://did:plc:prevuser4/social.grain.notification/n3",
+                reason: "follow",
+                createdAt: "2025-01-10T18:00:00Z",
+                author: GrainProfile(cid: "c4", did: "did:plc:prevuser4", handle: "kai.grain.social", displayName: "Kai Müller")
+            ),
+            GrainNotification(
+                uri: "at://did:plc:prevuser2/social.grain.notification/n4",
+                reason: "gallery-favorite",
+                createdAt: "2025-01-09T12:00:00Z",
+                author: profile2,
+                galleryUri: gallery2.uri,
+                galleryTitle: gallery2.title,
+                galleryThumb: ""
+            ),
+            GrainNotification(
+                uri: "at://did:plc:prevuser5/social.grain.notification/n5",
+                reason: "gallery-comment-mention",
+                createdAt: "2025-01-09T10:00:00Z",
+                author: GrainProfile(cid: "c5", did: "did:plc:prevuser5", handle: "leo.grain.social", displayName: "Leo Park"),
+                galleryUri: gallery1.uri,
+                galleryTitle: gallery1.title,
+                galleryThumb: "",
+                commentText: "Tagged you in a comment: @yuki.grain.social beautiful work!"
+            ),
+        ]
+
         // MARK: - Image generation
 
         static func gradientThumb(
