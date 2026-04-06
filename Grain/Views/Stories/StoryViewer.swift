@@ -178,6 +178,7 @@ struct StoryViewer: View {
                             }
                         }
                     }
+                    .id(story.uri)
                     .blur(radius: (labelResult.action == .warnMedia || labelResult.action == .warnContent) && !labelRevealed ? 24 : 0)
 
                     StoryLabelWarningOverlay(labelResult: labelResult, labelRevealed: $labelRevealed) {
@@ -204,32 +205,43 @@ struct StoryViewer: View {
                     }
                 }
                 .allowsHitTesting(!showReportSheet && !showDeleteConfirm && (labelRevealed || storyLabelResult.action == .none || storyLabelResult.action == .badge))
+            } else {
+                ProgressView()
+                    .tint(.white)
+            }
 
-                // Header overlay
-                VStack(spacing: 0) {
-                    StoryProgressBars(timer: timer, stories: stories, currentStoryIndex: currentStoryIndex)
-                        .padding(.horizontal)
-                        .padding(.top, 8)
+            // Header overlay — always visible regardless of loading state
+            let author = authors[currentAuthorIndex].profile
+            let story = currentStory
+            VStack(spacing: 0) {
+                StoryProgressBars(timer: timer, stories: stories, currentStoryIndex: currentStoryIndex, placeholderCount: authors[currentAuthorIndex].storyCount)
+                    .padding(.horizontal)
+                    .padding(.top, 8)
 
-                    HStack(alignment: .center) {
-                        Button {
+                HStack(alignment: .center) {
+                    Button {
+                        if let story {
                             close()
                             onProfileTap?(story.creator.did)
-                        } label: {
-                            HStack(alignment: .center, spacing: 8) {
-                                AvatarView(url: story.creator.avatar, size: 32)
-                                VStack(alignment: .leading, spacing: 0) {
-                                    Text(story.creator.displayName ?? story.creator.handle)
-                                        .font(.subheadline.bold())
-                                        .foregroundStyle(.white)
+                        }
+                    } label: {
+                        HStack(alignment: .center, spacing: 8) {
+                            AvatarView(url: story?.creator.avatar ?? author.avatar, size: 32)
+                            VStack(alignment: .leading, spacing: 0) {
+                                Text(story?.creator.displayName ?? story?.creator.handle ?? author.displayName ?? author.handle)
+                                    .font(.subheadline.bold())
+                                    .foregroundStyle(.white)
+                                if let story {
                                     Text(relativeTime(story.createdAt))
                                         .font(.caption2)
                                         .foregroundStyle(.white.opacity(0.7))
                                 }
                             }
                         }
-                        Spacer()
+                    }
+                    Spacer()
 
+                    if let story {
                         if story.creator.did == auth.userDID {
                             Button {
                                 timer.stop()
@@ -251,49 +263,46 @@ struct StoryViewer: View {
                                     .frame(width: 36, height: 36)
                             }
                         }
-
-                        Button { close() } label: {
-                            Image(systemName: "xmark")
-                                .foregroundStyle(.white)
-                                .font(.body.weight(.semibold))
-                                .frame(width: 36, height: 36)
-                        }
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
 
-                    Spacer()
-                        .allowsHitTesting(false)
-
-                    if let locationText = storyLocationText(story) {
-                        HStack {
-                            HStack(spacing: 4) {
-                                Image(systemName: showLocationCopied ? "checkmark" : "location.fill")
-                                Text(showLocationCopied ? "Copied" : locationText)
-                            }
-                            .font(.caption)
+                    Button { close() } label: {
+                        Image(systemName: "xmark")
                             .foregroundStyle(.white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(.ultraThinMaterial, in: Capsule())
-                            .contentTransition(.symbolEffect(.replace))
-                            .id(story.uri)
-                            .onTapGesture {
-                                UIPasteboard.general.string = locationText
-                                withAnimation(.easeInOut(duration: 0.15)) { showLocationCopied = true }
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                                    withAnimation(.easeInOut(duration: 0.15)) { showLocationCopied = false }
-                                }
-                            }
-                            Spacer()
-                        }
-                        .padding(.horizontal)
-                        .padding(.bottom, 32)
+                            .font(.body.weight(.semibold))
+                            .frame(width: 36, height: 36)
                     }
                 }
-            } else if isLoadingStories {
-                ProgressView()
-                    .tint(.white)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+
+                Spacer()
+                    .allowsHitTesting(false)
+
+                if let story, let locationText = storyLocationText(story) {
+                    HStack {
+                        HStack(spacing: 4) {
+                            Image(systemName: showLocationCopied ? "checkmark" : "location.fill")
+                            Text(showLocationCopied ? "Copied" : locationText)
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(.ultraThinMaterial, in: Capsule())
+                        .contentTransition(.symbolEffect(.replace))
+                        .id(story.uri)
+                        .onTapGesture {
+                            UIPasteboard.general.string = locationText
+                            withAnimation(.easeInOut(duration: 0.15)) { showLocationCopied = true }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                                withAnimation(.easeInOut(duration: 0.15)) { showLocationCopied = false }
+                            }
+                        }
+                        Spacer()
+                    }
+                    .padding(.horizontal)
+                    .padding(.bottom, 32)
+                }
             }
         }
     }
@@ -580,10 +589,15 @@ private struct StoryProgressBars: View {
     let timer: StoryTimer
     let stories: [GrainStory]
     let currentStoryIndex: Int
+    var placeholderCount: Int = 0
+
+    private var barCount: Int {
+        stories.isEmpty ? placeholderCount : stories.count
+    }
 
     var body: some View {
         HStack(spacing: 4) {
-            ForEach(0 ..< stories.count, id: \.self) { index in
+            ForEach(0 ..< barCount, id: \.self) { index in
                 GeometryReader { geo in
                     Capsule()
                         .fill(Color.white.opacity(0.3))
@@ -597,12 +611,13 @@ private struct StoryProgressBars: View {
     }
 
     private func barWidth(for index: Int, totalWidth: CGFloat) -> CGFloat {
+        guard !stories.isEmpty else { return 0 }
         if index < currentStoryIndex {
-            totalWidth
+            return totalWidth
         } else if index == currentStoryIndex {
-            totalWidth * timer.progress
+            return totalWidth * timer.progress
         } else {
-            0
+            return 0
         }
     }
 }
