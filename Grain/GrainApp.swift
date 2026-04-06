@@ -1,7 +1,16 @@
+import Nuke
 import SwiftUI
 
 @main
 struct GrainApp: App {
+    init() {
+        var config = ImagePipeline.Configuration.withDataCache
+        if let dataCache = try? DataCache(name: "social.grain.images") {
+            config.dataCache = dataCache
+        }
+        ImagePipeline.shared = ImagePipeline(configuration: config)
+    }
+
     @UIApplicationDelegateAdaptor private var appDelegate: AppDelegate
     @State private var authManager = AuthManager()
     @State private var pushManager = PushManager()

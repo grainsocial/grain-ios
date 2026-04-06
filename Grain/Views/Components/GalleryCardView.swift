@@ -1,3 +1,4 @@
+import Nuke
 import os
 import SwiftUI
 
@@ -110,6 +111,7 @@ struct GalleryCardView: View {
     @State private var showCopiedToast = false
     @State private var shareWiggle = false
     @State private var didLongPressShare = false
+    @State private var prefetcher = ImagePrefetcher()
 
     private var isFavorited: Bool {
         gallery.viewer?.fav != nil
@@ -256,8 +258,18 @@ struct GalleryCardView: View {
             .frame(height: height)
         }
         .aspectRatio(carouselRatio, contentMode: .fit)
+        .onAppear {
+            let urls = photos.prefix(2).compactMap { URL(string: $0.fullsize) }
+            prefetcher.startPrefetching(with: urls)
+        }
         .onChange(of: currentPage) {
             showingAlt = false
+            let next = photos.dropFirst(currentPage + 1).prefix(2)
+            let urls = next.compactMap { URL(string: $0.fullsize) }
+            if !urls.isEmpty { prefetcher.startPrefetching(with: urls) }
+        }
+        .onDisappear {
+            prefetcher.stopPrefetching()
         }
     }
 
