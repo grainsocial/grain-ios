@@ -705,4 +705,5 @@ private func extractGalleryExif(from data: Data) -> [String: AnyCodable]? {
 #Preview {
     CreateGalleryView(client: XRPCClient(baseURL: AuthManager.serverURL)) {}
         .environment(AuthManager())
+        .environment(LabelDefinitionsCache())
 }
