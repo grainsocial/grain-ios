@@ -86,11 +86,15 @@ struct StoryStripView: View {
             // Find where old and new order diverge — that's the gap
             let oldIds = sorted.map(\.profile.did)
             let newIds = newSorted.map(\.profile.did)
-            let gapIndex = zip(oldIds, newIds).enumerated().first(where: { $1.0 != $1.1 })?.offset ?? 0
 
             withAnimation(.smooth(duration: 0.5)) {
                 sorted = newSorted
             }
+
+            // Skip wave if order didn't change
+            guard oldIds != newIds,
+                  let gapIndex = zip(oldIds, newIds).enumerated().first(where: { $1.0 != $1.1 })?.offset
+            else { return }
 
             // Wave follows the read card as it slides right past unreads
             let unreadCount = newSorted.count(where: { !viewedStories.hasViewedAll(authorDid: $0.profile.did, latestAt: $0.latestAt) })
