@@ -78,10 +78,11 @@ struct ReorderablePhotoGrid: View {
             .scaledToFill()
             .frame(width: cellSize, height: cellSize)
             .clipped()
-            .overlay(alignment: .bottomLeading) {
+            .overlay(alignment: .bottomTrailing) {
                 let hasAlt = !item.alt.trimmingCharacters(in: .whitespaces).isEmpty
                 Image(systemName: hasAlt ? "text.bubble.fill" : "text.bubble")
                     .font(.system(size: 20))
+                    .scaleEffect(x: -1)
                     .foregroundStyle(hasAlt ? .white : .white.opacity(0.5))
                     .shadow(color: .black.opacity(0.5), radius: 2, y: 1)
                     .padding(4)
