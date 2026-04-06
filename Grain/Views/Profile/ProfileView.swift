@@ -60,15 +60,10 @@ struct ProfileView: View {
                         }
                         .overlay(alignment: .bottomTrailing) {
                             if did == auth.userDID {
-                                ZStack {
-                                    Circle()
-                                        .fill(.white)
-                                        .frame(width: 22, height: 22)
-                                    Image(systemName: "plus")
-                                        .font(.system(size: 11, weight: .bold))
-                                        .foregroundStyle(.black)
-                                }
-                                .offset(x: 4, y: 4)
+                                Image(systemName: "plus.circle.fill")
+                                    .font(.system(size: 22))
+                                    .foregroundStyle(.white, Color("AccentColor"))
+                                    .offset(x: 4, y: 4)
                             }
                         }
                         .scaleEffect(avatarPressed ? 1.08 : 1.0)
@@ -170,7 +165,7 @@ struct ProfileView: View {
                                     .frame(maxWidth: .infinity)
                                 }
                                 .buttonStyle(.bordered)
-                                .tint(Color(red: 0.52, green: 0.63, blue: 1.0))
+                            .tint(.primary)
                             }
                         }
                         .padding(.horizontal)
@@ -186,6 +181,7 @@ struct ProfileView: View {
                                     .frame(maxWidth: .infinity)
                             }
                             .buttonStyle(.bordered)
+                            .tint(.primary)
 
                             if let germUrl = germDMUrl(profile: profile) {
                                 Link(destination: germUrl) {
@@ -199,7 +195,7 @@ struct ProfileView: View {
                                     .frame(maxWidth: .infinity)
                                 }
                                 .buttonStyle(.bordered)
-                                .tint(Color(red: 0.52, green: 0.63, blue: 1.0))
+                                .tint(.primary)
                             }
                         }
                         .padding(.horizontal)

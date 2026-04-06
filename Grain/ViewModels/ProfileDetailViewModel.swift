@@ -86,7 +86,7 @@ final class ProfileDetailViewModel {
             }
         } else {
             // Optimistic follow
-            profile?.viewer = ActorViewerState(following: "pending")
+            profile?.viewer = ActorViewerState(following: "pending", followedBy: prevViewer?.followedBy)
             profile?.followersCount = (prevCount ?? 0) + 1
 
             let record = AnyCodable([
