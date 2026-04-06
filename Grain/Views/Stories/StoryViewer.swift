@@ -215,16 +215,41 @@ struct StoryViewer: View {
                 }
                 .padding(.horizontal)
                 .padding(.top, 8)
-                HStack(spacing: 8) {
+                HStack(alignment: .center, spacing: 8) {
                     AvatarView(url: authors[authorIdx].profile.avatar, size: 32)
-                    Text(authors[authorIdx].profile.displayName ?? authors[authorIdx].profile.handle)
-                        .font(.subheadline.bold())
-                        .foregroundStyle(.white)
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(story?.creator.displayName ?? story?.creator.handle ?? authors[authorIdx].profile.displayName ?? authors[authorIdx].profile.handle)
+                            .font(.subheadline.bold())
+                            .foregroundStyle(.white)
+                        if let story {
+                            Text(relativeTime(story.createdAt))
+                                .font(.caption2)
+                                .foregroundStyle(.white.opacity(0.7))
+                        }
+                    }
                     Spacer()
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
-                Spacer()
+
+                Spacer().allowsHitTesting(false)
+
+                if let story, let locationText = storyLocationText(story) {
+                    HStack {
+                        HStack(spacing: 4) {
+                            Image(systemName: "location.fill")
+                            Text(locationText)
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(.ultraThinMaterial, in: Capsule())
+                        Spacer()
+                    }
+                    .padding(.horizontal)
+                    .padding(.bottom, 32)
+                }
             }
         }
     }
