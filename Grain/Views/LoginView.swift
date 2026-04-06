@@ -2,9 +2,15 @@ import NukeUI
 import SwiftUI
 
 struct LoginView: View {
+    static let legalMarkdown =
+        "By signing in you agree to our [Terms](https://grain.social/support/terms), " +
+        "[Privacy Policy](https://grain.social/support/privacy), " +
+        "and [Community Guidelines](https://grain.social/support/community-guidelines)."
+
     @Environment(AuthManager.self) private var auth
     @State private var handle = ""
     @State private var isLoading = false
+    @State private var isSearching = false
     @State private var errorMessage: String?
     @State private var suggestions: [ActorSuggestion] = []
     @State private var searchTask: Task<Void, Never>?
@@ -83,12 +89,20 @@ struct LoginView: View {
                                     .onChange(of: handle) {
                                         searchTask?.cancel()
                                         let query = handle
+                                        let trimmed = query.trimmingCharacters(in: .whitespaces)
+                                        isSearching = trimmed.count >= 2
                                         searchTask = Task {
                                             try? await Task.sleep(for: .milliseconds(200))
                                             guard !Task.isCancelled else { return }
                                             await searchActors(query: query)
                                         }
                                     }
+
+                                if isSearching {
+                                    ProgressView()
+                                        .tint(.white.opacity(0.7))
+                                        .scaleEffect(0.8)
+                                }
                             }
                             .padding(.horizontal, 16)
                             .padding(.vertical, 14)
@@ -199,17 +213,11 @@ struct LoginView: View {
                             .foregroundStyle(.white)
                             .disabled(isLoading)
                             // Legal links
-                            Text(
-                                "By signing in you agree to our " +
-                                    "[Terms](https://grain.social/support/terms), " +
-                                    "[Privacy Policy](https://grain.social/support/privacy), " +
-                                    "and [Community Guidelines]" +
-                                    "(https://grain.social/support/community-guidelines)."
-                            )
-                            .font(.caption2)
-                            .foregroundStyle(.white.opacity(0.5))
-                            .tint(.white.opacity(0.7))
-                            .multilineTextAlignment(.center)
+                            Text(LocalizedStringKey(Self.legalMarkdown))
+                                .font(.caption2)
+                                .foregroundStyle(.white.opacity(0.5))
+                                .tint(.white.opacity(0.7))
+                                .multilineTextAlignment(.center)
                         }
                         .padding(24)
 
@@ -266,6 +274,7 @@ struct LoginView: View {
     }
 
     private func searchActors(query: String) async {
+        defer { isSearching = false }
         let trimmed = query.trimmingCharacters(in: .whitespaces)
         guard trimmed.count >= 2 else {
             suggestions = []
