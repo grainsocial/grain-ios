@@ -13,7 +13,7 @@ private final class StoryTimer {
         stop()
         progress = 0
         isRunning = true
-        halfwayFired = false
+        quarterFired = false
         task = Task {
             let tickInterval: TimeInterval = 0.05
             let totalTicks = Int(duration / tickInterval)
@@ -23,9 +23,9 @@ private final class StoryTimer {
                 } catch { return }
                 guard !Task.isCancelled else { return }
                 progress = CGFloat(tick) / CGFloat(totalTicks)
-                if !halfwayFired, progress >= 0.5 {
-                    halfwayFired = true
-                    onHalfway?()
+                if !quarterFired, progress >= 0.25 {
+                    quarterFired = true
+                    onQuarter?()
                 }
             }
             guard !Task.isCancelled else { return }
@@ -41,8 +41,8 @@ private final class StoryTimer {
     }
 
     var onComplete: (() -> Void)?
-    var onHalfway: (() -> Void)?
-    private var halfwayFired = false
+    var onQuarter: (() -> Void)?
+    private var quarterFired = false
 }
 
 struct StoryViewer: View {
@@ -66,17 +66,16 @@ struct StoryViewer: View {
     @State private var labelRevealed = false
     @State private var fadeDismissHandle = FadeDismissHandle()
     @State private var prefetchedStories: [String: [GrainStory]] = [:]
+    @State private var unreadOnly = false
+    @State private var authorTransition: CGFloat = 1.0
+    @State private var slideOffset: CGFloat = 0
 
-    init(authors: [GrainStoryAuthor], startIndex: Int = 0, startAuthorDid: String? = nil, client: XRPCClient, onProfileTap: ((String) -> Void)? = nil, onDismiss: (() -> Void)? = nil) {
+    init(authors: [GrainStoryAuthor], startAuthorDid: String? = nil, client: XRPCClient, onProfileTap: ((String) -> Void)? = nil, onDismiss: (() -> Void)? = nil) {
         self.authors = authors
         self.client = client
         self.onProfileTap = onProfileTap
         self.onDismiss = onDismiss
-        let resolvedIndex: Int = if let did = startAuthorDid {
-            authors.firstIndex(where: { $0.profile.did == did }) ?? 0
-        } else {
-            startIndex
-        }
+        let resolvedIndex = startAuthorDid.flatMap { did in authors.firstIndex { $0.profile.did == did } } ?? 0
         _currentAuthorIndex = State(initialValue: resolvedIndex)
     }
 
@@ -91,12 +90,15 @@ struct StoryViewer: View {
 
     var body: some View {
         storyContent
+            .offset(x: slideOffset)
+            .scaleEffect(0.85 + 0.15 * authorTransition)
+            .opacity(0.3 + 0.7 * Double(authorTransition))
             .background(
                 DragToDismissInstaller(
                     handle: fadeDismissHandle,
                     onDismiss: { onDismiss?() },
                     onDragStart: { timer.stop() },
-                    onDragCancel: { timer.start() },
+                    onDragCancel: { startTimerIfSafe() },
                     onSwipeLeft: { goToNextAuthor() },
                     onSwipeRight: { goToPreviousAuthor() }
                 )
@@ -122,8 +124,12 @@ struct StoryViewer: View {
                 }
             }
             .task {
+                let startAuthor = authors[currentAuthorIndex]
+                let isOwn = startAuthor.profile.did == auth.userDID
+                let hasUnreads = !viewedStories.hasViewedAll(authorDid: startAuthor.profile.did, latestAt: startAuthor.latestAt)
+                unreadOnly = isOwn || hasUnreads
                 timer.onComplete = { [self] in goToNext() }
-                timer.onHalfway = { [self] in markCurrentStoryViewed() }
+                timer.onQuarter = { [self] in markCurrentStoryViewed() }
                 await loadStoriesForCurrentAuthor()
             }
     }
@@ -273,63 +279,100 @@ struct StoryViewer: View {
         fadeDismissHandle.fadeDismiss()
     }
 
+    private func canNavigate() -> Bool {
+        !isLoadingStories && !stories.isEmpty
+            && !showReportSheet && !showDeleteConfirm
+            && Date().timeIntervalSince(lastNavTime) > 0.3
+    }
+
+    private func startTimerIfSafe() {
+        let action = storyLabelResult.action
+        if action == .none || action == .badge { timer.start() }
+    }
+
     private func goToNext() {
-        guard !isLoadingStories, !stories.isEmpty else { return }
-        guard !showReportSheet, !showDeleteConfirm else { return }
-        guard Date().timeIntervalSince(lastNavTime) > 0.3 else { return }
+        guard canNavigate() else { return }
         markCurrentStoryViewed()
         timer.stop()
         lastNavTime = Date()
         if currentStoryIndex < stories.count - 1 {
             currentStoryIndex += 1
             labelRevealed = false
-            timer.start()
+            startTimerIfSafe()
         } else {
             goToNextAuthor()
         }
     }
 
     private func goToPrevious() {
-        guard !isLoadingStories, !stories.isEmpty else { return }
-        guard !showReportSheet, !showDeleteConfirm else { return }
-        guard Date().timeIntervalSince(lastNavTime) > 0.3 else { return }
+        guard canNavigate() else { return }
         timer.stop()
         lastNavTime = Date()
         if currentStoryIndex > 0 {
             currentStoryIndex -= 1
             labelRevealed = false
-            timer.start()
+            startTimerIfSafe()
         } else {
             goToPreviousAuthor()
         }
     }
 
+    /// Swipe left → next author (direction: 1)
     private func goToNextAuthor() {
-        if currentAuthorIndex < authors.count - 1 {
-            currentAuthorIndex += 1
-            switchToCurrentAuthor()
+        if let next = findAuthorIndex(from: currentAuthorIndex, forward: true) {
+            transitionToAuthor(next, direction: 1)
         } else {
             close()
         }
     }
 
+    /// Swipe right → previous author (direction: -1)
     private func goToPreviousAuthor() {
-        if currentAuthorIndex > 0 {
-            currentAuthorIndex -= 1
-            switchToCurrentAuthor()
+        if let prev = findAuthorIndex(from: currentAuthorIndex, forward: false) {
+            transitionToAuthor(prev, direction: -1)
         }
     }
+
+    private func transitionToAuthor(_ index: Int, direction: CGFloat) {
+        timer.stop()
+        withAnimation(.easeIn(duration: 0.15)) {
+            authorTransition = 0
+            slideOffset = -80 * direction
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            currentAuthorIndex = index
+            switchToCurrentAuthor()
+            slideOffset = 80 * direction
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                authorTransition = 1
+                slideOffset = 0
+            }
+        }
+    }
+
+    private func findAuthorIndex(from index: Int, forward: Bool) -> Int? {
+        let step = forward ? 1 : -1
+        var i = index + step
+        while i >= 0, i < authors.count {
+            let author = authors[i]
+            if author.profile.did == auth.userDID { i += step; continue }
+            if !unreadOnly || authorHasUnreads(author) { return i }
+            i += step
+        }
+        return nil
+    }
+
+    private func authorHasUnreads(_ author: GrainStoryAuthor) -> Bool {
+        !viewedStories.hasViewedAll(authorDid: author.profile.did, latestAt: author.latestAt)
+    }
+
+    // MARK: - Data
 
     private func switchToCurrentAuthor() {
         timer.stop()
         let did = authors[currentAuthorIndex].profile.did
         if let cached = prefetchedStories.removeValue(forKey: did) {
-            stories = cached
-            currentStoryIndex = viewedStories.firstUnviewedIndex(in: cached)
-            labelRevealed = false
-            isLoadingStories = false
-            timer.start()
-            prefetchAdjacentAuthors()
+            presentStories(cached)
         } else {
             currentStoryIndex = 0
             stories = []
@@ -337,8 +380,6 @@ struct StoryViewer: View {
             Task { await loadStoriesForCurrentAuthor() }
         }
     }
-
-    // MARK: - Data
 
     private func loadStoriesForCurrentAuthor() async {
         guard currentAuthorIndex < authors.count else { return }
@@ -352,22 +393,25 @@ struct StoryViewer: View {
             } else {
                 try await client.getStories(actor: did, auth: auth.authContext()).stories
             }
-            stories = fetched
-            currentStoryIndex = viewedStories.firstUnviewedIndex(in: fetched)
-            labelRevealed = false
-            timer.start()
+            presentStories(fetched)
         } catch {
             stories = []
+            isLoadingStories = false
         }
-        isLoadingStories = false
+    }
 
-        // Prefetch next author's stories
+    private func presentStories(_ fetched: [GrainStory]) {
+        stories = fetched
+        let isOwn = fetched.first?.creator.did == auth.userDID
+        currentStoryIndex = (unreadOnly && isOwn) ? 0 : viewedStories.firstUnviewedIndex(in: fetched)
+        labelRevealed = false
+        isLoadingStories = false
+        startTimerIfSafe()
         prefetchAdjacentAuthors()
     }
 
     private func prefetchAdjacentAuthors() {
-        let nextIndex = currentAuthorIndex + 1
-        guard nextIndex < authors.count else { return }
+        guard let nextIndex = findAuthorIndex(from: currentAuthorIndex, forward: true) else { return }
         let did = authors[nextIndex].profile.did
         guard prefetchedStories[did] == nil else { return }
         Task {
