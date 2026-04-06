@@ -17,6 +17,8 @@ struct StoryCreateView: View {
     @State private var locationSuggestions: [NominatimResult] = []
     @State private var isSearchingLocation = false
     @State private var locationSearchTask: Task<Void, Never>?
+    @State private var photoLocationResult: NominatimResult?
+    @AppStorage("privacy.includeLocation") private var includeLocation = true
     @State private var isUploading = false
     @State private var errorMessage: String?
 
@@ -59,6 +61,24 @@ struct StoryCreateView: View {
                             }
                         }
                     } else {
+                        if let photoLoc = photoLocationResult {
+                            Button { selectLocation(photoLoc) } label: {
+                                HStack(spacing: 10) {
+                                    Image(systemName: "location.fill")
+                                        .foregroundStyle(.secondary)
+                                        .frame(width: 20)
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text("Use photo location")
+                                            .font(.subheadline)
+                                        Text(photoLoc.name)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                            .foregroundStyle(.primary)
+                        }
+
                         HStack {
                             Image(systemName: "magnifyingglass")
                                 .foregroundStyle(.secondary)
@@ -148,6 +168,7 @@ struct StoryCreateView: View {
         resolvedLocation = nil
         locationQuery = ""
         locationSuggestions = []
+        photoLocationResult = nil
     }
 
     // MARK: - Photo Loading
@@ -167,8 +188,12 @@ struct StoryCreateView: View {
         resolvedLocation = nil
         locationQuery = ""
         locationSuggestions = []
-        if let gps = ImageProcessing.extractGPS(from: data) {
-            if let result = await LocationServices.reverseGeocode(latitude: gps.latitude, longitude: gps.longitude) {
+        photoLocationResult = nil
+        if let gps = ImageProcessing.extractGPS(from: data),
+           let result = await LocationServices.reverseGeocode(latitude: gps.latitude, longitude: gps.longitude)
+        {
+            photoLocationResult = result
+            if includeLocation {
                 selectLocation(result)
             }
         }
