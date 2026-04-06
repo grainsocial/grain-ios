@@ -63,6 +63,7 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
         NSCameraUsageDescription: Grain needs camera access to take photos for your stories and galleries.
+        NSPhotoLibraryUsageDescription: Grain needs photo library access to select photos for your galleries and stories.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
         UIAppFonts:
