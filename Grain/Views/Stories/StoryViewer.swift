@@ -149,9 +149,19 @@ struct StoryViewer: View {
                                 .resizable()
                                 .aspectRatio(story.aspectRatio.ratio, contentMode: .fit)
                                 .frame(maxWidth: .infinity)
-                        } else if state.isLoading {
-                            ProgressView()
-                                .tint(.white)
+                        } else {
+                            LazyImage(url: URL(string: story.thumb)) { thumbState in
+                                if let thumb = thumbState.image {
+                                    thumb
+                                        .resizable()
+                                        .aspectRatio(story.aspectRatio.ratio, contentMode: .fit)
+                                        .blur(radius: 20)
+                                        .clipped()
+                                } else if state.isLoading {
+                                    ProgressView()
+                                        .tint(.white)
+                                }
+                            }
                         }
                     }
                     .overlay {
