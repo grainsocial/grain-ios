@@ -1,3 +1,4 @@
+import Nuke
 import NukeUI
 import SwiftUI
 
@@ -158,7 +159,7 @@ struct ZoomableImage: View {
     @State private var snapBackTask: Task<Void, Never>?
 
     var body: some View {
-        LazyImage(url: URL(string: url)) { state in
+        LazyImage(request: ImageRequest(url: URL(string: url), priority: .veryHigh)) { state in
             if let image = state.image {
                 image
                     .resizable()
