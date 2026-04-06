@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ReorderablePhotoStrip: View {
     @Binding var items: [PhotoItem]
+    @Binding var selectedPhotoID: UUID?
     @State private var draggingID: UUID?
     @State private var dragOffset: CGFloat = 0
     private let thumbSize: CGFloat = 72
@@ -16,11 +17,13 @@ struct ReorderablePhotoStrip: View {
                             .resizable()
                             .scaledToFill()
                             .frame(width: thumbSize, height: thumbSize)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
 
                         Button {
                             withAnimation {
                                 items.removeAll { $0.id == item.id }
+                                if selectedPhotoID == item.id {
+                                    selectedPhotoID = items.first?.id
+                                }
                             }
                         } label: {
                             Image(systemName: "xmark.circle.fill")
@@ -29,10 +32,15 @@ struct ReorderablePhotoStrip: View {
                         }
                         .offset(x: 4, y: -4)
                     }
+                    .reorderableThumbnail(
+                        isDragging: draggingID == item.id,
+                        isSelected: item.id == selectedPhotoID
+                    )
                     .offset(x: draggingID == item.id ? dragOffset : 0)
-                    .opacity(draggingID == item.id ? 0.8 : 1)
-                    .scaleEffect(draggingID == item.id ? 1.08 : 1)
-                    .zIndex(draggingID == item.id ? 1 : 0)
+                    .onTapGesture {
+                        guard draggingID == nil else { return }
+                        selectedPhotoID = item.id
+                    }
                     .gesture(
                         LongPressGesture(minimumDuration: 0.2)
                             .sequenced(before: DragGesture())
@@ -51,7 +59,7 @@ struct ReorderablePhotoStrip: View {
                                 }
                             }
                             .onEnded { _ in
-                                withAnimation(.easeInOut(duration: 0.2)) {
+                                withAnimation(.spring(response: 0.22, dampingFraction: 0.75)) {
                                     draggingID = nil
                                     dragOffset = 0
                                 }
@@ -73,7 +81,7 @@ struct ReorderablePhotoStrip: View {
 
         let targetIndex = max(0, min(items.count - 1, currentIndex + steps))
         if targetIndex != currentIndex {
-            withAnimation(.easeInOut(duration: 0.15)) {
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.65, blendDuration: 0)) {
                 items.move(fromOffsets: IndexSet(integer: currentIndex), toOffset: targetIndex > currentIndex ? targetIndex + 1 : targetIndex)
             }
             dragOffset -= CGFloat(targetIndex - currentIndex) * step
