@@ -34,7 +34,7 @@ sim:
 
 # Run tests
 test:
-    set -o pipefail && xcodebuild test -scheme Grain -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max' 2>&1 | xcbeautify
+    set -o pipefail && xcodebuild test -scheme Grain -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max' SWIFT_ACTIVE_COMPILATION_CONDITIONS='$(inherited) PRODUCTION_API' 2>&1 | xcbeautify
 
 # Check formatting (list unformatted files)
 format:
