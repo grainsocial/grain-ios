@@ -106,6 +106,20 @@ struct MainTabView: View {
                 feedRefreshID = UUID()
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .grainShortcutAction)) { notification in
+            guard let rawValue = notification.object as? String,
+                  let action = GrainShortcutAction(rawValue: rawValue)
+            else { return }
+            switch action {
+            case .feed: selectedTab = .feed
+            case .search: selectedTab = .search
+            case .notifications: selectedTab = .notifications
+            case .profile: selectedTab = .profile
+            case .createGallery:
+                selectedTab = .feed
+                showCreate = true
+            }
+        }
     }
 
     private func circularAvatar(_ image: UIImage, size: CGFloat) -> UIImage {
