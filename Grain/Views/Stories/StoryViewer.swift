@@ -1,3 +1,4 @@
+import Nuke
 import NukeUI
 import SwiftUI
 
@@ -69,6 +70,8 @@ struct StoryViewer: View {
     @State private var unreadOnly = false
     @State private var authorTransition: CGFloat = 1.0
     @State private var slideOffset: CGFloat = 0
+    @State private var authorHistory: [(authorIndex: Int, storyIndex: Int)] = []
+    @State private var imagePrefetcher = ImagePrefetcher()
 
     init(authors: [GrainStoryAuthor], startAuthorDid: String? = nil, client: XRPCClient, onProfileTap: ((String) -> Void)? = nil, onDismiss: (() -> Void)? = nil) {
         self.authors = authors
@@ -301,6 +304,7 @@ struct StoryViewer: View {
             currentStoryIndex += 1
             labelRevealed = false
             startTimerIfSafe()
+            prefetchStoryImages()
         } else {
             goToNextAuthor()
         }
@@ -314,28 +318,27 @@ struct StoryViewer: View {
             currentStoryIndex -= 1
             labelRevealed = false
             startTimerIfSafe()
+            prefetchStoryImages()
         } else {
             goToPreviousAuthor()
         }
     }
 
-    /// Swipe left → next author (direction: 1)
     private func goToNextAuthor() {
         if let next = findAuthorIndex(from: currentAuthorIndex, forward: true) {
+            authorHistory.append((authorIndex: currentAuthorIndex, storyIndex: currentStoryIndex))
             transitionToAuthor(next, direction: 1)
         } else {
             close()
         }
     }
 
-    /// Swipe right → previous author (direction: -1)
     private func goToPreviousAuthor() {
-        if let prev = findAuthorIndex(from: currentAuthorIndex, forward: false) {
-            transitionToAuthor(prev, direction: -1)
-        }
+        guard let prev = authorHistory.popLast() else { return }
+        transitionToAuthor(prev.authorIndex, direction: -1, resumeIndex: prev.storyIndex)
     }
 
-    private func transitionToAuthor(_ index: Int, direction: CGFloat) {
+    private func transitionToAuthor(_ index: Int, direction: CGFloat, resumeIndex: Int? = nil) {
         timer.stop()
         withAnimation(.easeIn(duration: 0.15)) {
             authorTransition = 0
@@ -343,7 +346,7 @@ struct StoryViewer: View {
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
             currentAuthorIndex = index
-            switchToCurrentAuthor()
+            switchToCurrentAuthor(resumeIndex: resumeIndex)
             slideOffset = 80 * direction
             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                 authorTransition = 1
@@ -370,11 +373,11 @@ struct StoryViewer: View {
 
     // MARK: - Data
 
-    private func switchToCurrentAuthor() {
+    private func switchToCurrentAuthor(resumeIndex: Int? = nil) {
         timer.stop()
         let did = authors[currentAuthorIndex].profile.did
         if let cached = prefetchedStories.removeValue(forKey: did) {
-            presentStories(cached)
+            presentStories(cached, resumeIndex: resumeIndex)
         } else {
             currentStoryIndex = 0
             stories = []
@@ -402,14 +405,19 @@ struct StoryViewer: View {
         }
     }
 
-    private func presentStories(_ fetched: [GrainStory]) {
+    private func presentStories(_ fetched: [GrainStory], resumeIndex: Int? = nil) {
         stories = fetched
-        let isOwn = fetched.first?.creator.did == auth.userDID
-        currentStoryIndex = (unreadOnly && isOwn) ? 0 : viewedStories.firstUnviewedIndex(in: fetched)
+        if let resume = resumeIndex {
+            currentStoryIndex = min(resume, max(fetched.count - 1, 0))
+        } else {
+            let isOwn = fetched.first?.creator.did == auth.userDID
+            currentStoryIndex = (unreadOnly && isOwn) ? 0 : viewedStories.firstUnviewedIndex(in: fetched)
+        }
         labelRevealed = false
         isLoadingStories = false
         startTimerIfSafe()
         prefetchAdjacentAuthors()
+        prefetchStoryImages()
     }
 
     private func prefetchAdjacentAuthors() {
@@ -421,6 +429,39 @@ struct StoryViewer: View {
                 prefetchedStories[did] = response.stories
             }
         }
+    }
+
+    private func prefetchStoryImages() {
+        let current = stories.map { (thumb: $0.thumb, fullsize: $0.fullsize) }
+
+        // Resolve next authors' stories from prefetched data
+        let nextDid = findAuthorIndex(from: currentAuthorIndex, forward: true).map { authors[$0].profile.did }
+        let nextStories = nextDid.flatMap { prefetchedStories[$0] }?.map { (thumb: $0.thumb, fullsize: $0.fullsize) }
+
+        let secondNextIdx = findAuthorIndex(from: currentAuthorIndex, forward: true)
+            .flatMap { findAuthorIndex(from: $0, forward: true) }
+        let secondNextDid = secondNextIdx.map { authors[$0].profile.did }
+        let secondNextStories = secondNextDid.flatMap { prefetchedStories[$0] }?.map { (thumb: $0.thumb, fullsize: $0.fullsize) }
+
+        let thirdNextIdx = secondNextIdx.flatMap { findAuthorIndex(from: $0, forward: true) }
+        let thirdFirst = thirdNextIdx
+            .flatMap { prefetchedStories[authors[$0].profile.did]?.first }
+            .map { (thumb: $0.thumb, fullsize: $0.fullsize) }
+
+        let fourthNextIdx = thirdNextIdx.flatMap { findAuthorIndex(from: $0, forward: true) }
+        let fourthFirst = fourthNextIdx
+            .flatMap { prefetchedStories[authors[$0].profile.did]?.first }
+            .map { (thumb: $0.thumb, fullsize: $0.fullsize) }
+
+        let plan = ImagePrefetchPlanning.storyPrefetchRequests(
+            currentStories: current,
+            currentStoryIndex: currentStoryIndex,
+            nextAuthorStories: nextStories,
+            secondNextAuthorStories: secondNextStories,
+            thirdNextFirstStory: thirdFirst,
+            fourthNextFirstStory: fourthFirst
+        )
+        imagePrefetcher.startPrefetching(with: plan.all)
     }
 
     private func markCurrentStoryViewed() {
