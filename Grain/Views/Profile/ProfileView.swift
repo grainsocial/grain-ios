@@ -11,6 +11,7 @@ struct ProfileView: View {
     @Environment(ViewedStoryStorage.self) private var viewedStories
     @Environment(LabelDefinitionsCache.self) private var labelDefsCache
     @State private var showStoryViewer = false
+    @State private var showStoryCreate = false
     @State private var showAvatarOverlay = false
     @State private var viewModel: ProfileDetailViewModel
     @State private var selectedGalleryUri: String?
@@ -57,14 +58,40 @@ struct ProfileView: View {
                             AvatarView(url: profile.avatar, size: 80)
                                 .liquidGlassCircle()
                         }
+                        .overlay(alignment: .bottomTrailing) {
+                            if did == auth.userDID {
+                                ZStack {
+                                    Circle()
+                                        .fill(.white)
+                                        .frame(width: 22, height: 22)
+                                    Image(systemName: "plus")
+                                        .font(.system(size: 11, weight: .bold))
+                                        .foregroundStyle(.black)
+                                }
+                                .offset(x: 4, y: 4)
+                            }
+                        }
                         .scaleEffect(avatarPressed ? 1.08 : 1.0)
                         .animation(.spring(response: 0.2, dampingFraction: 0.6), value: avatarPressed)
                         .contentShape(Circle())
                         .onTapGesture {
-                            if !viewModel.stories.isEmpty {
-                                showStoryViewer = true
-                            } else if profile.avatar != nil {
-                                showAvatarOverlay = true
+                            if did == auth.userDID {
+                                if !viewModel.stories.isEmpty {
+                                    showStoryViewer = true
+                                } else {
+                                    showStoryCreate = true
+                                }
+                            } else {
+                                if !viewModel.stories.isEmpty {
+                                    showStoryViewer = true
+                                } else if profile.avatar != nil {
+                                    showAvatarOverlay = true
+                                }
+                            }
+                        }
+                        .onLongPressGesture(minimumDuration: 0.5) {
+                            if did == auth.userDID {
+                                showStoryCreate = true
                             }
                         }
                         .simultaneousGesture(
@@ -321,6 +348,12 @@ struct ProfileView: View {
                 },
                 onDismiss: { cardStoryAuthor = nil }
             )
+            .environment(auth)
+        }
+        .fullScreenCover(isPresented: $showStoryCreate) {
+            StoryCreateView(client: client, onCreated: {
+                Task { await viewModel.load(did: did) }
+            })
             .environment(auth)
         }
         .fullScreenCover(isPresented: $showAvatarOverlay) {
