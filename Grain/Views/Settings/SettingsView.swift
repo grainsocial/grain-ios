@@ -5,9 +5,6 @@ struct SettingsView: View {
     @Environment(AuthManager.self) private var auth
     @Environment(\.dismiss) private var dismiss
     let client: XRPCClient
-    var onProfileEdited: (() -> Void)?
-    @State private var includeExif = true
-    @State private var hasLoadedExifPref = false
     @State private var cacheSizeText = "Calculating..."
 
     var body: some View {
@@ -19,12 +16,6 @@ struct SettingsView: View {
                 if let did = auth.userDID {
                     LabeledContent("DID", value: did)
                         .font(.caption)
-                }
-            }
-
-            Section {
-                NavigationLink("Edit Profile") {
-                    EditProfileView(client: client, onSaved: onProfileEdited)
                 }
             }
 
@@ -70,7 +61,8 @@ struct SettingsView: View {
         .task {
             if let authContext = await auth.authContext(),
                let prefs = try? await client.getPreferences(auth: authContext).preferences,
-               let exif = prefs.includeExif {
+               let exif = prefs.includeExif
+            {
                 includeExif = exif
             }
             hasLoadedExifPref = true
