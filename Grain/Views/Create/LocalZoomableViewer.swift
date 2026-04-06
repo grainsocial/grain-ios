@@ -14,8 +14,25 @@ struct LocalZoomableViewer: View {
             .scaledToFit()
             .scaleEffect(scale, anchor: .center)
             .offset(offset)
-            .gesture(magnification)
-            .gesture(drag)
+            .simultaneousGesture(magnification)
+            .simultaneousGesture(
+                DragGesture(minimumDistance: scale > 1 ? 0 : .infinity)
+                    .onChanged { value in
+                        offset = CGSize(
+                            width: lastOffset.width + value.translation.width,
+                            height: lastOffset.height + value.translation.height
+                        )
+                    }
+                    .onEnded { _ in
+                        lastOffset = offset
+                        if scale <= 1.05 {
+                            withAnimation(.spring(response: 0.22, dampingFraction: 0.75)) {
+                                offset = .zero
+                                lastOffset = .zero
+                            }
+                        }
+                    }
+            )
             .onChange(of: image) {
                 withAnimation(.spring(response: 0.22, dampingFraction: 0.75)) {
                     scale = 1
@@ -41,26 +58,6 @@ struct LocalZoomableViewer: View {
                     }
                 }
                 lastScale = scale
-            }
-    }
-
-    private var drag: some Gesture {
-        DragGesture()
-            .onChanged { value in
-                guard scale > 1 else { return }
-                offset = CGSize(
-                    width: lastOffset.width + value.translation.width,
-                    height: lastOffset.height + value.translation.height
-                )
-            }
-            .onEnded { _ in
-                lastOffset = offset
-                if scale <= 1.05 {
-                    withAnimation(.spring(response: 0.22, dampingFraction: 0.75)) {
-                        offset = .zero
-                        lastOffset = .zero
-                    }
-                }
             }
     }
 }

@@ -37,10 +37,10 @@ struct ReorderablePhotoStrip: View {
                         isSelected: item.id == selectedPhotoID
                     )
                     .offset(x: draggingID == item.id ? dragOffset : 0)
-                    .onTapGesture {
+                    .simultaneousGesture(TapGesture().onEnded {
                         guard draggingID == nil else { return }
                         selectedPhotoID = item.id
-                    }
+                    })
                     .gesture(
                         LongPressGesture(minimumDuration: 0.2)
                             .sequenced(before: DragGesture())
