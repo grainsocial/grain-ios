@@ -33,3 +33,4 @@ Pods/
 # Icon/logo working files
 icons/
 logo-options/
+.env
