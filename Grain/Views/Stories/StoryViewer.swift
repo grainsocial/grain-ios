@@ -63,8 +63,10 @@ struct StoryViewer: View {
     @State private var showReportSheet = false
     @State private var reportStoryUri = ""
     @State private var reportStoryCid = ""
+    @State private var showLocationCopied = false
     @State private var lastNavTime: Date = .distantPast
     @State private var labelRevealed = false
+    @State private var imageLoaded = false
     @State private var fadeDismissHandle = FadeDismissHandle()
     @State private var prefetchedStories: [String: [GrainStory]] = [:]
     @State private var unreadOnly = false
@@ -155,25 +157,32 @@ struct StoryViewer: View {
                             image
                                 .resizable()
                                 .aspectRatio(story.aspectRatio.ratio, contentMode: .fit)
-                        } else {
-                            LazyImage(url: URL(string: story.thumb)) { thumbState in
-                                if let thumb = thumbState.image {
-                                    thumb
-                                        .resizable()
-                                        .aspectRatio(story.aspectRatio.ratio, contentMode: .fit)
-                                        .blur(radius: 20)
-                                        .clipped()
-                                } else if state.isLoading {
-                                    ProgressView()
-                                        .tint(.white)
+                                .onAppear {
+                                    if !imageLoaded {
+                                        imageLoaded = true
+                                        startTimerIfSafe()
+                                    }
                                 }
+                        } else {
+                            ZStack {
+                                LazyImage(url: URL(string: story.thumb)) { thumbState in
+                                    if let thumb = thumbState.image {
+                                        thumb
+                                            .resizable()
+                                            .aspectRatio(story.aspectRatio.ratio, contentMode: .fit)
+                                            .blur(radius: 20)
+                                            .clipped()
+                                    }
+                                }
+                                ProgressView()
+                                    .tint(.white)
                             }
                         }
                     }
                     .blur(radius: (labelResult.action == .warnMedia || labelResult.action == .warnContent) && !labelRevealed ? 24 : 0)
 
                     StoryLabelWarningOverlay(labelResult: labelResult, labelRevealed: $labelRevealed) {
-                        timer.start()
+                        startTimerIfSafe()
                     }
                 }
 
@@ -260,14 +269,23 @@ struct StoryViewer: View {
                     if let locationText = storyLocationText(story) {
                         HStack {
                             HStack(spacing: 4) {
-                                Image(systemName: "location.fill")
-                                Text(locationText)
+                                Image(systemName: showLocationCopied ? "checkmark" : "location.fill")
+                                Text(showLocationCopied ? "Copied" : locationText)
                             }
                             .font(.caption)
                             .foregroundStyle(.white)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
                             .background(.ultraThinMaterial, in: Capsule())
+                            .contentTransition(.symbolEffect(.replace))
+                            .id(story.uri)
+                            .onTapGesture {
+                                UIPasteboard.general.string = locationText
+                                withAnimation(.easeInOut(duration: 0.15)) { showLocationCopied = true }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                                    withAnimation(.easeInOut(duration: 0.15)) { showLocationCopied = false }
+                                }
+                            }
                             Spacer()
                         }
                         .padding(.horizontal)
@@ -295,6 +313,7 @@ struct StoryViewer: View {
     }
 
     private func startTimerIfSafe() {
+        guard imageLoaded else { return }
         let action = storyLabelResult.action
         if action == .none || action == .badge { timer.start() }
     }
@@ -306,7 +325,9 @@ struct StoryViewer: View {
         lastNavTime = Date()
         if currentStoryIndex < stories.count - 1 {
             currentStoryIndex += 1
+            imageLoaded = false
             labelRevealed = false
+            showLocationCopied = false
             startTimerIfSafe()
             prefetchStoryImages()
         } else {
@@ -320,7 +341,9 @@ struct StoryViewer: View {
         lastNavTime = Date()
         if currentStoryIndex > 0 {
             currentStoryIndex -= 1
+            imageLoaded = false
             labelRevealed = false
+            showLocationCopied = false
             startTimerIfSafe()
             prefetchStoryImages()
         } else {
@@ -410,6 +433,8 @@ struct StoryViewer: View {
     }
 
     private func presentStories(_ fetched: [GrainStory], resumeIndex: Int? = nil) {
+        imageLoaded = false
+        showLocationCopied = false
         stories = fetched
         if let resume = resumeIndex {
             currentStoryIndex = min(resume, max(fetched.count - 1, 0))
