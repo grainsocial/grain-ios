@@ -125,7 +125,12 @@ struct LocationFeedView: View {
             .environment(auth)
         }
         .task {
-            guard !isPreview else { return }
+            guard !isPreview else {
+                #if DEBUG
+                    galleries = PreviewData.galleries
+                #endif
+                return
+            }
             if galleries.isEmpty {
                 await loadInitial()
             }

@@ -352,7 +352,12 @@ private struct FeedTabContent: View {
             .environment(auth)
         }
         .task {
-            guard !isPreview else { return }
+            guard !isPreview else {
+                #if DEBUG
+                    viewModel.galleries = PreviewData.galleries
+                #endif
+                return
+            }
             if viewModel.galleries.isEmpty {
                 await viewModel.loadInitial(auth: auth.authContext())
                 lastLoadTime = .now
