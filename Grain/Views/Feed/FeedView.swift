@@ -25,8 +25,7 @@ struct FeedView: View {
     }
 
     var body: some View {
-        // Read version so Observation tracks it and re-renders on invalidate()
-        let _ = storyViewModel.version
+        let storySortVersion = storyViewModel.version
         NavigationStack {
             ForEach(prefsViewModel.pinnedFeeds) { feed in
                 if feed.id == prefsViewModel.selectedFeedId {
@@ -35,6 +34,7 @@ struct FeedView: View {
                         pinnedFeed: feed,
                         userDID: auth.userDID,
                         storyAuthors: storyViewModel.authors,
+                        storySortVersion: storySortVersion,
                         userAvatar: auth.userAvatar,
                         onStoryAuthorTap: { author, _ in
                             storyViewerDid = author.profile.did
@@ -110,7 +110,10 @@ struct FeedView: View {
                         deepLinkStoryAuthor = nil
                         deepLinkProfileDid = did
                     },
-                    onDismiss: { deepLinkStoryAuthor = nil }
+                    onDismiss: {
+                        deepLinkStoryAuthor = nil
+                        storyViewModel.invalidate()
+                    }
                 )
                 .environment(auth)
             }
@@ -226,6 +229,7 @@ private struct FeedTabContent: View {
     @State private var suggestedLoaded = false
     let client: XRPCClient
     let storyAuthors: [GrainStoryAuthor]
+    var storySortVersion: Int = 0
     let userAvatar: String?
     let onStoryAuthorTap: (GrainStoryAuthor, Int) -> Void
     let onStoryCreateTap: () -> Void
@@ -237,6 +241,7 @@ private struct FeedTabContent: View {
         pinnedFeed: PinnedFeed,
         userDID: String? = nil,
         storyAuthors: [GrainStoryAuthor] = [],
+        storySortVersion: Int = 0,
         userAvatar: String? = nil,
         onStoryAuthorTap: @escaping (GrainStoryAuthor, Int) -> Void = { _, _ in },
         onStoryCreateTap: @escaping () -> Void = {},
@@ -245,6 +250,7 @@ private struct FeedTabContent: View {
     ) {
         self.client = client
         self.storyAuthors = storyAuthors
+        self.storySortVersion = storySortVersion
         self.userAvatar = userAvatar
         self.onStoryAuthorTap = onStoryAuthorTap
         self.onStoryCreateTap = onStoryCreateTap
@@ -258,7 +264,9 @@ private struct FeedTabContent: View {
             LazyVStack(spacing: 12) {
                 StoryStripView(
                     authors: storyAuthors,
+                    userDid: auth.userDID,
                     userAvatar: userAvatar,
+                    sortVersion: storySortVersion,
                     onAuthorTap: onStoryAuthorTap,
                     onAuthorLongPress: { did in selectedProfileDid = did },
                     onCreateTap: onStoryCreateTap

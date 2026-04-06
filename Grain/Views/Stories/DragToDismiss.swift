@@ -165,7 +165,30 @@ struct DragToDismissInstaller: UIViewRepresentable {
 
                     let dismissThreshold = view.bounds.height * 0.35
                     if ty > dismissThreshold || velocity.y > 1200 {
-                        handle.fadeDismiss()
+                        // Throw downward off screen
+                        let screenHeight = view.bounds.height
+                        let speed = max(velocity.y, 800)
+                        let remaining = screenHeight - ty + 100
+                        let duration = min(max(Double(remaining / speed), 0.15), 0.3)
+                        UIView.animate(withDuration: duration, delay: 0, options: .curveEaseIn) {
+                            view.transform = CGAffineTransform(translationX: 0, y: screenHeight + 100)
+                                .scaledBy(x: 0.9, y: 0.9)
+                        } completion: { _ in
+                            if let vc = view.findViewController(),
+                               let presented = vc.presentedViewController ?? (vc.isBeingPresented ? vc : nil)
+                            {
+                                presented.dismiss(animated: false) {
+                                    view.alpha = 1
+                                    view.transform = .identity
+                                    view.layer.cornerRadius = 0
+                                    view.clipsToBounds = false
+                                    self.onDismiss()
+                                }
+                            } else {
+                                view.isHidden = true
+                                self.onDismiss()
+                            }
+                        }
                     } else {
                         // Spring back
                         UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 0.85, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
