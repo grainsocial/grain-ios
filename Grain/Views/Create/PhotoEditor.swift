@@ -63,17 +63,27 @@ struct PhotoEditor: View {
     }
 }
 
-#Preview {
-    @Previewable @State var state: [PhotoItem] = ([UIColor.systemBlue, .systemGreen, .systemOrange] as [UIColor]).map { color in
-        let thumb = UIGraphicsImageRenderer(size: CGSize(width: 100, height: 100)).image { ctx in
+private func previewItems() -> [PhotoItem] {
+    let colors: [UIColor] = [
+        .systemBlue, .systemGreen, .systemOrange,
+        .systemPink, .systemPurple, .systemRed,
+        .systemTeal, .systemYellow, .systemIndigo,
+    ]
+    return colors.map { color in
+        let thumb = UIGraphicsImageRenderer(size: CGSize(width: 200, height: 200)).image { ctx in
             color.setFill()
-            ctx.fill(CGRect(origin: .zero, size: CGSize(width: 100, height: 100)))
+            ctx.fill(CGRect(origin: .zero, size: CGSize(width: 200, height: 200)))
         }
         return PhotoItem(thumbnail: thumb, source: .camera(thumb))
     }
+}
+
+#Preview {
+    @Previewable @State var state: [PhotoItem] = previewItems()
     @Previewable @State var selected: UUID?
     ScrollView {
         PhotoEditor(items: $state, selectedPhotoID: $selected, sendExif: false)
             .padding()
     }
+    .onAppear { selected = state.first?.id }
 }

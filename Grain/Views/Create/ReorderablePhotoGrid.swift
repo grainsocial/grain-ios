@@ -13,28 +13,12 @@ struct ReorderablePhotoGrid: View {
     var body: some View {
         GeometryReader { geo in
             let cellSize = (geo.size.width - spacing * 2) / 3
+            let step = cellSize + spacing
             LazyVGrid(columns: columns, spacing: spacing) {
                 ForEach(items) { item in
-                    Image(uiImage: item.thumbnail)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: cellSize, height: cellSize)
-                        .clipped()
-                        .overlay(alignment: .bottomLeading) {
-                            let hasAlt = !item.alt.trimmingCharacters(in: .whitespaces).isEmpty
-                            Image(systemName: hasAlt ? "text.bubble.fill" : "text.bubble")
-                                .font(.system(size: 20))
-                                .foregroundStyle(hasAlt ? .white : .white.opacity(0.5))
-                                .shadow(color: .black.opacity(0.5), radius: 2, y: 1)
-                                .padding(4)
-                        }
-                        .reorderableThumbnail(
-                            isDragging: draggingID == item.id,
-                            isSelected: item.id == selectedPhotoID,
-                            cornerRadius: 6
-                        )
-                        .zIndex(draggingID == item.id ? 1 : 0)
-                        .offset(draggingID == item.id ? dragOffset : .zero)
+                    cellView(item: item, cellSize: cellSize, isDragging: false)
+                        // Hide the in-grid copy while dragging; it still holds layout space
+                        .opacity(draggingID == item.id ? 0 : 1)
                         .simultaneousGesture(TapGesture().onEnded {
                             guard draggingID == nil else { return }
                             selectedPhotoID = item.id
@@ -65,8 +49,45 @@ struct ReorderablePhotoGrid: View {
                         )
                 }
             }
+            // Dragged item rendered above the grid so it's unconditionally on top
+            .overlay(alignment: .topLeading) {
+                if let draggingID,
+                   let item = items.first(where: { $0.id == draggingID }),
+                   let idx = items.firstIndex(where: { $0.id == draggingID })
+                {
+                    let col = CGFloat(idx % 3)
+                    let row = CGFloat(idx / 3)
+                    cellView(item: item, cellSize: cellSize, isDragging: true)
+                        .offset(
+                            x: col * step + dragOffset.width,
+                            y: row * step + dragOffset.height
+                        )
+                        .allowsHitTesting(false)
+                }
+            }
         }
         .aspectRatio(aspectRatio, contentMode: .fit)
+    }
+
+    private func cellView(item: PhotoItem, cellSize: CGFloat, isDragging: Bool) -> some View {
+        Image(uiImage: item.thumbnail)
+            .resizable()
+            .scaledToFill()
+            .frame(width: cellSize, height: cellSize)
+            .clipped()
+            .overlay(alignment: .bottomLeading) {
+                let hasAlt = !item.alt.trimmingCharacters(in: .whitespaces).isEmpty
+                Image(systemName: hasAlt ? "text.bubble.fill" : "text.bubble")
+                    .font(.system(size: 20))
+                    .foregroundStyle(hasAlt ? .white : .white.opacity(0.5))
+                    .shadow(color: .black.opacity(0.5), radius: 2, y: 1)
+                    .padding(4)
+            }
+            .reorderableThumbnail(
+                isDragging: isDragging,
+                isSelected: item.id == selectedPhotoID,
+                cornerRadius: 6
+            )
     }
 
     /// Aspect ratio so GeometryReader doesn't collapse: cols / rows.
