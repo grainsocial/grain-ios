@@ -244,7 +244,7 @@ struct GalleryDetailView: View {
             }
         }
         .task {
-            await viewModel.load(uri: galleryUri, auth: auth.authContext())
+            await viewModel.load(uri: galleryUri, auth: await auth.authContext())
         }
     }
 
@@ -262,7 +262,7 @@ struct GalleryDetailView: View {
 
     private func postComment() async {
         let text = commentText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, let authContext = auth.authContext() else { return }
+        guard !text.isEmpty, let authContext = await auth.authContext() else { return }
 
         isPostingComment = true
         var recordDict: [String: String] = [
@@ -288,7 +288,7 @@ struct GalleryDetailView: View {
     }
 
     private func deleteGallery() async {
-        guard let authContext = auth.authContext() else { return }
+        guard let authContext = await auth.authContext() else { return }
         let rkey = galleryUri.split(separator: "/").last.map(String.init) ?? ""
         do {
             try await client.deleteGallery(rkey: rkey, auth: authContext)
@@ -300,7 +300,7 @@ struct GalleryDetailView: View {
     }
 
     private func deleteComment(_ comment: GrainComment) async {
-        guard let authContext = auth.authContext() else { return }
+        guard let authContext = await auth.authContext() else { return }
         let rkey = comment.uri.split(separator: "/").last.map(String.init) ?? ""
         do {
             try await client.deleteRecord(collection: "social.grain.comment", rkey: rkey, auth: authContext)

@@ -440,7 +440,7 @@ struct GalleryCardView: View {
     }
 
     private func toggleFavorite() async {
-        guard let authContext = auth.authContext() else {
+        guard let authContext = await auth.authContext() else {
             logger.error("No auth context")
             return
         }

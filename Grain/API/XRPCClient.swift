@@ -52,6 +52,7 @@ final class XRPCClient: Sendable {
 
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
+        request.cachePolicy = .reloadIgnoringLocalCacheData
 
         return try await executeWithRetry(request, auth: auth, as: type)
     }

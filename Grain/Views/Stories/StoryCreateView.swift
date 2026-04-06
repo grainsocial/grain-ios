@@ -184,7 +184,7 @@ struct StoryCreateView: View {
     // MARK: - Create
 
     private func createStory() async {
-        guard let authContext = auth.authContext(),
+        guard let authContext = await auth.authContext(),
               let repo = auth.userDID,
               let previewImage else { return }
 

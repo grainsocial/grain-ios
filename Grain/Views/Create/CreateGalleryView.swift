@@ -182,7 +182,7 @@ struct CreateGalleryView: View {
                 .ignoresSafeArea()
             }
             .task {
-                if let authContext = auth.authContext() {
+                if let authContext = await auth.authContext() {
                     if let prefs = try? await client.getPreferences(auth: authContext).preferences {
                         if let exif = prefs.includeExif {
                             includeExif = exif
@@ -273,7 +273,7 @@ struct CreateGalleryView: View {
     // MARK: - Create Gallery
 
     private func createGallery() async {
-        guard let authContext = auth.authContext(), let repo = auth.userDID else { return }
+        guard let authContext = await auth.authContext(), let repo = auth.userDID else { return }
         isUploading = true
         errorMessage = nil
 

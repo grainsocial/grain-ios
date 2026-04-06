@@ -90,14 +90,14 @@ struct SearchView: View {
             }
             .onSubmit(of: .search) {
                 recentSearches.addTextSearch(searchText)
-                Task { await viewModel.search(auth: auth.authContext()) }
+                Task { await viewModel.search(auth: await auth.authContext()) }
             }
             .onChange(of: searchText) {
                 viewModel.searchText = searchText
             }
             .onChange(of: viewModel.selectedTab) {
                 if !viewModel.searchText.isEmpty {
-                    Task { await viewModel.search(auth: auth.authContext()) }
+                    Task { await viewModel.search(auth: await auth.authContext()) }
                 }
             }
             .navigationDestination(item: $searchNavigationUri) { uri in
@@ -189,7 +189,7 @@ struct SearchView: View {
                             searchText = recent.query
                             viewModel.searchText = recent.query
                             searchIsPresented = true
-                            Task { await viewModel.search(auth: auth.authContext()) }
+                            Task { await viewModel.search(auth: await auth.authContext()) }
                         }
                     }
                 }

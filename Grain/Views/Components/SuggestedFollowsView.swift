@@ -80,9 +80,9 @@ struct SuggestedFollowsView: View {
     }
 
     private func followUser(_ item: SuggestedItem) {
-        guard let authContext = auth.authContext() else { return }
         followingInProgress.insert(item.did)
         Task {
+            guard let authContext = await auth.authContext() else { return }
             let record = AnyCodable([
                 "subject": item.did,
                 "createdAt": DateFormatting.nowISO()

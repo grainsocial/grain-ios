@@ -147,18 +147,18 @@ struct FollowListView: View {
         do {
             switch mode {
             case .followers:
-                let response = try await client.getFollowers(actor: did, viewer: auth.userDID, cursor: nil, auth: auth.authContext())
+                let response = try await client.getFollowers(actor: did, viewer: auth.userDID, cursor: nil, auth: await auth.authContext())
                 items = (response.items ?? []).map { FollowListItem(from: $0) }
                 cursor = response.cursor
                 totalCount = response.totalCount
             case .following:
-                let response = try await client.getFollowing(actor: did, viewer: auth.userDID, cursor: nil, auth: auth.authContext())
+                let response = try await client.getFollowing(actor: did, viewer: auth.userDID, cursor: nil, auth: await auth.authContext())
                 items = (response.items ?? []).map { FollowListItem(from: $0) }
                 cursor = response.cursor
                 totalCount = response.totalCount
             case .knownFollowers:
                 if let viewer = auth.userDID {
-                    let response = try await client.getKnownFollowers(actor: did, viewer: viewer, auth: auth.authContext())
+                    let response = try await client.getKnownFollowers(actor: did, viewer: viewer, auth: await auth.authContext())
                     items = (response.items ?? []).map { FollowListItem(from: $0) }
                     totalCount = items.count
                 }
@@ -179,14 +179,14 @@ struct FollowListView: View {
             let existingIDs = Set(items.map(\.id))
             switch mode {
             case .followers:
-                let response = try await client.getFollowers(actor: did, viewer: auth.userDID, cursor: cursor, auth: auth.authContext())
+                let response = try await client.getFollowers(actor: did, viewer: auth.userDID, cursor: cursor, auth: await auth.authContext())
                 if let newItems = response.items {
                     let filtered = newItems.filter { !existingIDs.contains($0.did) }
                     items.append(contentsOf: filtered.map { FollowListItem(from: $0) })
                 }
                 cursor = response.cursor
             case .following:
-                let response = try await client.getFollowing(actor: did, viewer: auth.userDID, cursor: cursor, auth: auth.authContext())
+                let response = try await client.getFollowing(actor: did, viewer: auth.userDID, cursor: cursor, auth: await auth.authContext())
                 if let newItems = response.items {
                     let filtered = newItems.filter { !existingIDs.contains($0.did) }
                     items.append(contentsOf: filtered.map { FollowListItem(from: $0) })
@@ -201,7 +201,7 @@ struct FollowListView: View {
     }
 
     private func toggleFollow(for targetDid: String) async {
-        guard let authContext = auth.authContext(), let repo = auth.userDID else { return }
+        guard let authContext = await auth.authContext(), let repo = auth.userDID else { return }
         guard let index = items.firstIndex(where: { $0.did == targetDid }) else { return }
         let item = items[index]
 

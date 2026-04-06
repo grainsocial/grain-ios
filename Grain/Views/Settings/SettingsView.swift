@@ -31,7 +31,7 @@ struct SettingsView: View {
                     .onChange(of: includeExif) {
                         guard hasLoadedExifPref else { return }
                         Task {
-                            guard let authContext = auth.authContext() else { return }
+                            guard let authContext = await auth.authContext() else { return }
                             try? await client.putIncludeExif(includeExif, auth: authContext)
                         }
                     }
@@ -56,7 +56,7 @@ struct SettingsView: View {
         }
         .navigationTitle("Settings")
         .task {
-            if let authContext = auth.authContext(),
+            if let authContext = await auth.authContext(),
                let prefs = try? await client.getPreferences(auth: authContext).preferences,
                let exif = prefs.includeExif {
                 includeExif = exif

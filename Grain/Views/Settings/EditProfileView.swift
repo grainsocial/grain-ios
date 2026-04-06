@@ -146,7 +146,7 @@ struct EditProfileView: View {
     }
 
     private func loadProfile() async {
-        guard let did = auth.userDID, let authContext = auth.authContext() else { return }
+        guard let did = auth.userDID, let authContext = await auth.authContext() else { return }
         do {
             let profile = try await client.getActorProfile(actor: did, auth: authContext)
             displayName = profile.displayName ?? ""
@@ -181,7 +181,7 @@ struct EditProfileView: View {
     }
 
     private func save() async {
-        guard let authContext = auth.authContext() else { return }
+        guard let authContext = await auth.authContext() else { return }
         isSaving = true
         errorMessage = nil
 

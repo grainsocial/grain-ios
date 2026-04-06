@@ -217,11 +217,12 @@ final class AuthManager {
 
     /// Build an AuthContext for making authenticated requests.
     /// Proactively refreshes if the token expires within 60 seconds.
-    func authContext() -> AuthContext? {
-        guard let dpop, let token = TokenStorage.accessToken else { return nil }
+    func authContext() async -> AuthContext? {
+        guard let dpop else { return nil }
         if let expiresAt = TokenStorage.tokenExpiresAt, expiresAt.timeIntervalSinceNow < 60 {
-            Task { try? await refresh() }
+            try? await refresh()
         }
+        guard let token = TokenStorage.accessToken else { return nil }
         return AuthContext(accessToken: token, dpop: dpop)
     }
 

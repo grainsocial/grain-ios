@@ -221,7 +221,7 @@ struct ProfileView: View {
                                     .buttonStyle(.plain)
                                     .onAppear {
                                         if gallery.id == viewModel.galleries.last?.id {
-                                            Task { await viewModel.loadMoreGalleries(did: did, auth: auth.authContext()) }
+                                            Task { await viewModel.loadMoreGalleries(did: did, auth: await auth.authContext()) }
                                         }
                                     }
                                 }
@@ -260,7 +260,7 @@ struct ProfileView: View {
                     ToolbarItem(placement: .topBarTrailing) {
                         NavigationLink {
                             SettingsView(client: client, onProfileEdited: {
-                                Task { await viewModel.load(did: actor, viewer: auth.userDID, auth: auth.authContext()) }
+                                Task { await viewModel.load(did: actor, viewer: auth.userDID, auth: await auth.authContext()) }
                             })
                         } label: {
                             Image(systemName: "gearshape")
@@ -318,10 +318,10 @@ struct ProfileView: View {
             }
             .background(Color(.systemBackground))
             .refreshable {
-                await viewModel.load(did: actor, viewer: auth.userDID, auth: auth.authContext())
+                await viewModel.load(did: actor, viewer: auth.userDID, auth: await auth.authContext())
             }
             .task {
-                await viewModel.load(did: actor, viewer: auth.userDID, auth: auth.authContext())
+                await viewModel.load(did: actor, viewer: auth.userDID, auth: await auth.authContext())
             }
             .onChange(of: deletedGalleryUri) { _, uri in
                 if let uri {
@@ -379,7 +379,7 @@ struct ProfileView: View {
     private func followButton(profile: GrainProfileDetailed) -> some View {
         if profile.viewer?.following != nil {
             Button {
-                Task { await viewModel.toggleFollow(auth: auth.authContext()) }
+                Task { await viewModel.toggleFollow(auth: await auth.authContext()) }
             } label: {
                 Text("Following")
                     .font(.subheadline.weight(.semibold))
@@ -389,7 +389,7 @@ struct ProfileView: View {
             .tint(.primary)
         } else {
             Button {
-                Task { await viewModel.toggleFollow(auth: auth.authContext()) }
+                Task { await viewModel.toggleFollow(auth: await auth.authContext()) }
             } label: {
                 Text("Follow")
                     .font(.subheadline.weight(.semibold))

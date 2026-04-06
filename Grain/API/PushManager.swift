@@ -59,11 +59,11 @@ final class PushManager: NSObject {
     /// Must be called while auth context is still valid (before token storage is cleared).
     func unregisterToken() {
         guard let token = currentToken,
-              let authManager,
-              let auth = authManager.authContext() else { return }
+              let authManager else { return }
         let client = authManager.makeClient()
         currentToken = nil
         Task {
+            guard let auth = await authManager.authContext() else { return }
             do {
                 try await client.procedure(
                     "dev.hatk.push.unregisterToken",
@@ -87,7 +87,7 @@ final class PushManager: NSObject {
     private func sendTokenToServer(token: String) async {
         currentToken = token
 
-        guard let authManager, let auth = authManager.authContext() else {
+        guard let authManager, let auth = await authManager.authContext() else {
             logger.warning("No auth context, skipping token registration")
             return
         }

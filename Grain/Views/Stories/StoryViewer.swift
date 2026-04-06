@@ -353,7 +353,7 @@ struct StoryViewer: View {
             if let cached = prefetchedStories.removeValue(forKey: did) {
                 fetched = cached
             } else {
-                fetched = try await client.getStories(actor: did, auth: auth.authContext()).stories
+                fetched = try await client.getStories(actor: did, auth: await auth.authContext()).stories
             }
             stories = fetched
             currentStoryIndex = viewedStories.firstUnviewedIndex(in: fetched)
@@ -374,7 +374,7 @@ struct StoryViewer: View {
         let did = authors[nextIndex].profile.did
         guard prefetchedStories[did] == nil else { return }
         Task {
-            if let response = try? await client.getStories(actor: did, auth: auth.authContext()) {
+            if let response = try? await client.getStories(actor: did, auth: await auth.authContext()) {
                 prefetchedStories[did] = response.stories
             }
         }
@@ -386,7 +386,7 @@ struct StoryViewer: View {
     }
 
     private func deleteStory(_ story: GrainStory) async {
-        guard let authContext = auth.authContext() else { return }
+        guard let authContext = await auth.authContext() else { return }
         let rkey = story.uri.split(separator: "/").last.map(String.init) ?? ""
         do {
             try await client.deleteRecord(collection: "social.grain.story", rkey: rkey, auth: authContext)

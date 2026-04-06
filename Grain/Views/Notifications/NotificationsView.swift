@@ -40,7 +40,7 @@ struct NotificationsView: View {
                         }
                         .onAppear {
                             if notification.id == viewModel.notifications.last?.id {
-                                Task { await viewModel.loadMore(auth: auth.authContext()) }
+                                Task { await viewModel.loadMore(auth: await auth.authContext()) }
                             }
                         }
                 }
@@ -55,7 +55,7 @@ struct NotificationsView: View {
             }
             .listStyle(.plain)
             .refreshable {
-                await viewModel.loadInitial(auth: auth.authContext())
+                await viewModel.loadInitial(auth: await auth.authContext())
             }
             .navigationTitle("Notifications")
             .navigationDestination(item: $selectedGalleryUri) { uri in
@@ -78,9 +78,9 @@ struct NotificationsView: View {
             }
             .task(id: viewModel.unseenCount) {
                 if viewModel.notifications.isEmpty || viewModel.unseenCount > 0 {
-                    await viewModel.loadInitial(auth: auth.authContext())
+                    await viewModel.loadInitial(auth: await auth.authContext())
                 }
-                await viewModel.markAsSeen(auth: auth.authContext())
+                await viewModel.markAsSeen(auth: await auth.authContext())
             }
         }
     }
