@@ -88,6 +88,7 @@ struct StoryViewer: View {
     @State private var authorHistory: [(authorIndex: Int, storyIndex: Int)] = []
     @State private var imagePrefetcher = ImagePrefetcher()
     @State private var nextStoryFromTrailing = true
+    @State private var headerButtonsVisible = true
 
     init(authors: [GrainStoryAuthor], startAuthorDid: String? = nil, client: XRPCClient, onProfileTap: ((String) -> Void)? = nil, onDismiss: (() -> Void)? = nil) {
         self.authors = authors
@@ -170,6 +171,12 @@ struct StoryViewer: View {
             timer.onQuarter = { [self] in markCurrentStoryViewed() }
             await loadStoriesForCurrentAuthor()
         }
+        .onChange(of: currentAuthorIndex) {
+            headerButtonsVisible = false
+            withAnimation(.easeIn(duration: 0.2).delay(0.05)) {
+                headerButtonsVisible = true
+            }
+        }
     }
 
     /// Mirrors the logic in presentStories so pendingTransition.storyIndex matches what will be committed.
@@ -228,6 +235,9 @@ struct StoryViewer: View {
                         }
                     }
                     Spacer()
+                    // Placeholder slots to match storyContent's button layout height
+                    Color.clear.frame(width: 36, height: 36)
+                    Color.clear.frame(width: 36, height: 36)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
@@ -365,36 +375,39 @@ struct StoryViewer: View {
                     }
                     Spacer()
 
-                    if let story {
-                        if story.creator.did == auth.userDID {
-                            Button {
-                                timer.stop()
-                                showDeleteConfirm = true
-                            } label: {
-                                Image(systemName: "trash")
-                                    .foregroundStyle(.white)
-                                    .frame(width: 36, height: 36)
-                            }
-                        } else {
-                            Button {
-                                timer.stop()
-                                reportStoryUri = story.uri
-                                reportStoryCid = story.cid
-                                showReportSheet = true
-                            } label: {
-                                Image(systemName: "flag")
-                                    .foregroundStyle(.white)
-                                    .frame(width: 36, height: 36)
+                    Group {
+                        if let story {
+                            if story.creator.did == auth.userDID {
+                                Button {
+                                    timer.stop()
+                                    showDeleteConfirm = true
+                                } label: {
+                                    Image(systemName: "trash")
+                                        .foregroundStyle(.white)
+                                        .frame(width: 36, height: 36)
+                                }
+                            } else {
+                                Button {
+                                    timer.stop()
+                                    reportStoryUri = story.uri
+                                    reportStoryCid = story.cid
+                                    showReportSheet = true
+                                } label: {
+                                    Image(systemName: "flag")
+                                        .foregroundStyle(.white)
+                                        .frame(width: 36, height: 36)
+                                }
                             }
                         }
+                        Button { close() } label: {
+                            Image(systemName: "xmark")
+                                .foregroundStyle(.white)
+                                .font(.body.weight(.semibold))
+                                .frame(width: 36, height: 36)
+                        }
                     }
-
-                    Button { close() } label: {
-                        Image(systemName: "xmark")
-                            .foregroundStyle(.white)
-                            .font(.body.weight(.semibold))
-                            .frame(width: 36, height: 36)
-                    }
+                    .opacity(headerButtonsVisible ? 1 : 0)
+                    .animation(.easeIn(duration: 0.2), value: headerButtonsVisible)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
@@ -504,7 +517,11 @@ struct StoryViewer: View {
             close(); return
         }
         authorHistory.append((authorIndex: currentAuthorIndex, storyIndex: currentStoryIndex))
-        transitionToAuthor(next, forward: true)
+        nextStoryFromTrailing = true
+        currentAuthorIndex = next
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.88)) {
+            switchToCurrentAuthor()
+        }
     }
 
     private func goToPreviousAuthor() {
@@ -518,14 +535,22 @@ struct StoryViewer: View {
             return
         }
         if let prev = authorHistory.popLast() {
-            transitionToAuthor(prev.authorIndex, forward: false, resumeIndex: prev.storyIndex)
+            nextStoryFromTrailing = false
+            currentAuthorIndex = prev.authorIndex
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.88)) {
+                switchToCurrentAuthor(resumeIndex: prev.storyIndex)
+            }
             return
         }
         // No history — walk backward ignoring the reads filter
         var i = currentAuthorIndex - 1
         while i >= 0 {
             if authors[i].profile.did != auth.userDID {
-                transitionToAuthor(i, forward: false)
+                nextStoryFromTrailing = false
+                currentAuthorIndex = i
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.88)) {
+                    switchToCurrentAuthor()
+                }
                 return
             }
             i -= 1
