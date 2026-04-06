@@ -42,6 +42,7 @@ targets:
         MARKETING_VERSION: "1.0.0"
         CURRENT_PROJECT_VERSION: "38"
         CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_ASSET_PATHS: "\"$(SRCROOT)/Grain/Preview Content\""
     dependencies:
       - package: Nuke
         product: Nuke
