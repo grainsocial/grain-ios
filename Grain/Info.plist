@@ -36,6 +36,8 @@
 	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>Grain needs camera access to take photos for your stories and galleries.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Grain needs photo library access to select photos for your galleries and stories.</string>
 	<key>UIAppFonts</key>
 	<array>
 		<string>Syne-Variable.ttf</string>
