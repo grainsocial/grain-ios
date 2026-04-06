@@ -159,33 +159,37 @@ struct ZoomableImage: View {
     @State private var snapBackTask: Task<Void, Never>?
 
     var body: some View {
-        LazyImage(request: ImageRequest(url: URL(string: url), priority: .veryHigh)) { state in
-            if let image = state.image {
-                image
-                    .resizable()
-                    .aspectRatio(aspectRatio, contentMode: .fit)
-            } else if let thumbURL {
-                LazyImage(url: URL(string: thumbURL)) { thumbState in
-                    if let thumb = thumbState.image {
-                        thumb
-                            .resizable()
-                            .aspectRatio(aspectRatio, contentMode: .fit)
-                            .blur(radius: 20)
-                            .clipped()
-                    } else {
-                        Rectangle()
-                            .fill(.quaternary)
-                            .aspectRatio(aspectRatio, contentMode: .fit)
+        // PinchZoomOverlay is a ZStack sibling (not an overlay on LazyImage) so the
+        // UIView fills the full carousel slot — black-bar areas are tappable and
+        // UIKit coordinates already map to the carousel ZStack space with no correction.
+        ZStack {
+            LazyImage(request: ImageRequest(url: URL(string: url), priority: .veryHigh)) { state in
+                if let image = state.image {
+                    image
+                        .resizable()
+                        .aspectRatio(aspectRatio, contentMode: .fit)
+                } else if let thumbURL {
+                    LazyImage(url: URL(string: thumbURL)) { thumbState in
+                        if let thumb = thumbState.image {
+                            thumb
+                                .resizable()
+                                .aspectRatio(aspectRatio, contentMode: .fit)
+                                .blur(radius: 20)
+                                .clipped()
+                        } else {
+                            Rectangle()
+                                .fill(.quaternary)
+                                .aspectRatio(aspectRatio, contentMode: .fit)
+                        }
                     }
+                } else {
+                    Rectangle()
+                        .fill(.quaternary)
+                        .aspectRatio(aspectRatio, contentMode: .fit)
                 }
-            } else {
-                Rectangle()
-                    .fill(.quaternary)
-                    .aspectRatio(aspectRatio, contentMode: .fit)
             }
-        }
-        .opacity(zoomState?.showOverlay == true && zoomState?.imageURL == url ? 0 : 1)
-        .overlay {
+            .opacity(zoomState?.showOverlay == true && zoomState?.imageURL == url ? 0 : 1)
+
             if let zoomState {
                 PinchZoomOverlay(
                     zoomState: zoomState,
