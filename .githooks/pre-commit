@@ -5,6 +5,5 @@ FILES=$(git diff --cached --name-only --diff-filter=ACM -- '*.swift')
 [ -z "$FILES" ] && exit 0
 
 echo "$FILES" | xargs swiftformat 2>/dev/null
-git add -u
 echo "$FILES" | xargs swiftlint lint --fix 2>/dev/null | grep -v "^Linting\|^Done linting"
-git add -u
+echo "$FILES" | xargs git add
