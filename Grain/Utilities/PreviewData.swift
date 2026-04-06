@@ -30,30 +30,78 @@
             handle: "sofia.grain.social", displayName: "Sofia Reyes"
         )
 
-        // MARK: - Photos (thumb URLs empty → gray placeholder in preview)
+        // MARK: - Bundle image URL helper
+
+        static func bundleImageURL(_ name: String, ext: String = "jpg") -> String {
+            Bundle.main.url(forResource: name, withExtension: ext)?.absoluteString ?? ""
+        }
+
+        // MARK: - Photos (file:// URLs → real images in preview via Nuke LazyImage)
 
         static let photos: [GrainPhoto] = [
             GrainPhoto(
                 uri: "at://did:plc:prevuser1/social.grain.photo/p1",
-                cid: "cid", thumb: "", fullsize: "",
-                alt: "Rain-slicked street in Shinjuku at dusk, neon signs reflected in puddles",
+                cid: "cid",
+                thumb: bundleImageURL("Portland_Japanese_Garden_maple"),
+                fullsize: bundleImageURL("Portland_Japanese_Garden_maple"),
+                alt: "Japanese Garden, Portland",
                 aspectRatio: AspectRatio(width: 4, height: 3)
             ),
             GrainPhoto(
                 uri: "at://did:plc:prevuser1/social.grain.photo/p2",
-                cid: "cid", thumb: "", fullsize: "",
-                alt: "Cyclist passing a red torii gate",
+                cid: "cid",
+                thumb: bundleImageURL("Mount_Hood_reflected_in_Mirror_Lake,_Oregon"),
+                fullsize: bundleImageURL("Mount_Hood_reflected_in_Mirror_Lake,_Oregon"),
+                alt: "Mirror Lake, Oregon",
                 aspectRatio: AspectRatio(width: 3, height: 2)
             ),
             GrainPhoto(
                 uri: "at://did:plc:prevuser1/social.grain.photo/p3",
-                cid: "cid", thumb: "", fullsize: "",
-                aspectRatio: AspectRatio(width: 1, height: 1)
+                cid: "cid",
+                thumb: bundleImageURL("Mt_Herschel,_Antarctica,_Jan_2006"),
+                fullsize: bundleImageURL("Mt_Herschel,_Antarctica,_Jan_2006"),
+                alt: "Mt. Herschel, Antarctica",
+                aspectRatio: AspectRatio(width: 4, height: 3)
             ),
             GrainPhoto(
                 uri: "at://did:plc:prevuser1/social.grain.photo/p4",
-                cid: "cid", thumb: "", fullsize: "",
+                cid: "cid",
+                thumb: bundleImageURL("Penguin_in_Antarctica_jumping_out_of_the_water"),
+                fullsize: bundleImageURL("Penguin_in_Antarctica_jumping_out_of_the_water"),
+                alt: "Penguin launching from ice shelf",
+                aspectRatio: AspectRatio(width: 1, height: 1)
+            ),
+            GrainPhoto(
+                uri: "at://did:plc:prevuser1/social.grain.photo/p5",
+                cid: "cid",
+                thumb: bundleImageURL("Union_Bank_Tower,_Portland_(2024)-L1006272"),
+                fullsize: bundleImageURL("Union_Bank_Tower,_Portland_(2024)-L1006272"),
+                alt: "Union Bank Tower, Portland",
+                aspectRatio: AspectRatio(width: 2, height: 3)
+            ),
+            GrainPhoto(
+                uri: "at://did:plc:prevuser1/social.grain.photo/p6",
+                cid: "cid",
+                thumb: bundleImageURL("ACE_EMD_F40PH_Fremont_-_San_Jose"),
+                fullsize: bundleImageURL("ACE_EMD_F40PH_Fremont_-_San_Jose"),
+                alt: "ACE train, Fremont–San Jose",
                 aspectRatio: AspectRatio(width: 16, height: 9)
+            ),
+            GrainPhoto(
+                uri: "at://did:plc:prevuser1/social.grain.photo/p7",
+                cid: "cid",
+                thumb: bundleImageURL("C-141_Starlifter_contrail"),
+                fullsize: bundleImageURL("C-141_Starlifter_contrail"),
+                alt: "C-141 Starlifter contrail",
+                aspectRatio: AspectRatio(width: 16, height: 9)
+            ),
+            GrainPhoto(
+                uri: "at://did:plc:prevuser1/social.grain.photo/p8",
+                cid: "cid",
+                thumb: bundleImageURL("Endeavour_after_STS-126_on_SCA_over_Mojave_from_above"),
+                fullsize: bundleImageURL("Endeavour_after_STS-126_on_SCA_over_Mojave_from_above"),
+                alt: "Space Shuttle Endeavour over Mojave",
+                aspectRatio: AspectRatio(width: 4, height: 3)
             ),
         ]
 
@@ -139,15 +187,17 @@
         // MARK: - PhotoItems (UIImage-based, for editor/grid/strip previews)
 
         static var photoItems: [PhotoItem] {
-            let specs: [(colors: [CGColor], label: String)] = [
-                ([UIColor.systemOrange.cgColor, UIColor.systemPink.cgColor], ""),
-                ([UIColor.systemBlue.cgColor, UIColor.systemIndigo.cgColor], ""),
-                ([UIColor.systemGreen.cgColor, UIColor.systemTeal.cgColor], "Rain on Orchard St."),
-                ([UIColor.systemPurple.cgColor, UIColor.systemPink.cgColor], ""),
-                ([UIColor.systemRed.cgColor, UIColor.systemOrange.cgColor], ""),
-                ([UIColor.systemTeal.cgColor, UIColor.systemBlue.cgColor], ""),
-                ([UIColor.systemYellow.cgColor, UIColor.systemGreen.cgColor], "Torii gate at dusk"),
-                ([UIColor.systemIndigo.cgColor, UIColor.systemPurple.cgColor], ""),
+            let stockImages: [(name: String, alt: String)] = [
+                ("Portland_Japanese_Garden_maple", "Japanese Garden, Portland"),
+                ("Mount_Hood_reflected_in_Mirror_Lake,_Oregon", "Mirror Lake, Oregon"),
+                ("Mt_Herschel,_Antarctica,_Jan_2006", "Mt. Herschel, Antarctica"),
+                ("Penguin_in_Antarctica_jumping_out_of_the_water", "Penguin launching from ice shelf"),
+                ("Union_Bank_Tower,_Portland_(2024)-L1006272", "Union Bank Tower, Portland"),
+                ("ACE_EMD_F40PH_Fremont_-_San_Jose", "ACE train, Fremont–San Jose"),
+                ("C-141_Starlifter_contrail", "C-141 Starlifter contrail"),
+                ("Endeavour_after_STS-126_on_SCA_over_Mojave_from_above", "Space Shuttle Endeavour over Mojave"),
+            ]
+            let fallbackColors: [([CGColor], String)] = [
                 ([UIColor.systemBrown.cgColor, UIColor.systemOrange.cgColor], ""),
                 ([UIColor.systemMint.cgColor, UIColor.systemTeal.cgColor], ""),
                 ([UIColor.systemCyan.cgColor, UIColor.systemBlue.cgColor], ""),
@@ -156,12 +206,22 @@
                 ([UIColor.systemGreen.cgColor, UIColor.systemMint.cgColor], ""),
                 ([UIColor.systemOrange.cgColor, UIColor.systemYellow.cgColor], ""),
             ]
-            return specs.map { spec in
-                let thumb = gradientThumb(colors: spec.colors)
-                var item = PhotoItem(thumbnail: thumb, source: .camera(thumb))
-                item.alt = spec.label
+            var items: [PhotoItem] = stockImages.compactMap { entry in
+                guard let path = Bundle.main.url(forResource: entry.name, withExtension: "jpg")?.path,
+                      let fullImage = UIImage(contentsOfFile: path) else { return nil }
+                let thumb = PhotoItem.makeThumbnail(from: fullImage)
+                var item = PhotoItem(thumbnail: thumb, source: .camera(fullImage))
+                item.alt = entry.alt
                 return item
             }
+            // Pad with gradient fallbacks if fewer than 15 items total
+            for (colors, label) in fallbackColors {
+                let thumb = gradientThumb(colors: colors)
+                var item = PhotoItem(thumbnail: thumb, source: .camera(thumb))
+                item.alt = label
+                items.append(item)
+            }
+            return items
         }
 
         // MARK: - Story authors
