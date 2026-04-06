@@ -146,7 +146,11 @@ struct StoryViewer: View {
 
                 // Story image
                 ZStack {
-                    LazyImage(url: URL(string: story.fullsize)) { state in
+                    LazyImage(request: {
+                        guard lr.action != .hide || labelRevealed,
+                              let url = URL(string: story.fullsize) else { return ImageRequest(url: nil) }
+                        return ImageRequest(url: url, priority: .veryHigh)
+                    }()) { state in
                         if let image = state.image {
                             image
                                 .resizable()
