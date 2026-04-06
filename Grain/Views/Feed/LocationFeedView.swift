@@ -140,7 +140,7 @@ struct LocationFeedView: View {
     private func loadInitial() async {
         isLoading = true
         do {
-            let response = try await client.getFeed(feed: "location", location: h3Index, auth: await auth.authContext())
+            let response = try await client.getFeed(feed: "location", location: h3Index, auth: auth.authContext())
             galleries = response.items ?? []
             cursor = response.cursor
         } catch {}
@@ -151,7 +151,7 @@ struct LocationFeedView: View {
         guard !isLoading, let cursor else { return }
         isLoading = true
         do {
-            let response = try await client.getFeed(feed: "location", cursor: cursor, location: h3Index, auth: await auth.authContext())
+            let response = try await client.getFeed(feed: "location", cursor: cursor, location: h3Index, auth: auth.authContext())
             galleries.append(contentsOf: response.items ?? [])
             self.cursor = response.cursor
         } catch {}
@@ -160,21 +160,21 @@ struct LocationFeedView: View {
 
     private func checkPinned() async {
         do {
-            let response = try await client.getPreferences(auth: await auth.authContext())
+            let response = try await client.getPreferences(auth: auth.authContext())
             isPinned = response.preferences.pinnedFeeds?.contains(where: { $0.id == feedId }) ?? false
         } catch {}
     }
 
     private func togglePin() async {
         do {
-            let response = try await client.getPreferences(auth: await auth.authContext())
+            let response = try await client.getPreferences(auth: auth.authContext())
             var feeds = response.preferences.pinnedFeeds ?? PinnedFeed.defaults
             if isPinned {
                 feeds.removeAll { $0.id == feedId }
             } else {
                 feeds.append(PinnedFeed(id: feedId, label: locationName, type: "location", path: "/location/\(h3Index)"))
             }
-            try await client.putPinnedFeeds(feeds, auth: await auth.authContext())
+            try await client.putPinnedFeeds(feeds, auth: auth.authContext())
             isPinned.toggle()
         } catch {}
     }
