@@ -42,6 +42,9 @@ struct DragToDismissInstaller: UIViewRepresentable {
     let onDragCancel: () -> Void
     let onSwipeLeft: () -> Void
     let onSwipeRight: () -> Void
+    var onHorizontalDragStart: ((Bool) -> Void)? // true = swiping left (forward)
+    var onSwipeDragging: ((CGFloat) -> Void)? // raw translation.x during drag
+    var onHorizontalDragCancel: (() -> Void)?
 
     func makeUIView(context: Context) -> UIView {
         let view = UIView(frame: .zero)
@@ -60,6 +63,9 @@ struct DragToDismissInstaller: UIViewRepresentable {
         context.coordinator.onDragCancel = onDragCancel
         context.coordinator.onSwipeLeft = onSwipeLeft
         context.coordinator.onSwipeRight = onSwipeRight
+        context.coordinator.onHorizontalDragStart = onHorizontalDragStart
+        context.coordinator.onSwipeDragging = onSwipeDragging
+        context.coordinator.onHorizontalDragCancel = onHorizontalDragCancel
         handle.performDismiss = onDismiss
     }
 
@@ -70,7 +76,10 @@ struct DragToDismissInstaller: UIViewRepresentable {
             onDragStart: onDragStart,
             onDragCancel: onDragCancel,
             onSwipeLeft: onSwipeLeft,
-            onSwipeRight: onSwipeRight
+            onSwipeRight: onSwipeRight,
+            onHorizontalDragStart: onHorizontalDragStart,
+            onSwipeDragging: onSwipeDragging,
+            onHorizontalDragCancel: onHorizontalDragCancel
         )
     }
 
@@ -85,6 +94,9 @@ struct DragToDismissInstaller: UIViewRepresentable {
         var onDragCancel: () -> Void
         var onSwipeLeft: () -> Void
         var onSwipeRight: () -> Void
+        var onHorizontalDragStart: ((Bool) -> Void)?
+        var onSwipeDragging: ((CGFloat) -> Void)?
+        var onHorizontalDragCancel: (() -> Void)?
 
         weak var anchorView: UIView?
         private weak var targetView: UIView?
@@ -97,7 +109,10 @@ struct DragToDismissInstaller: UIViewRepresentable {
             onDragStart: @escaping () -> Void,
             onDragCancel: @escaping () -> Void,
             onSwipeLeft: @escaping () -> Void,
-            onSwipeRight: @escaping () -> Void
+            onSwipeRight: @escaping () -> Void,
+            onHorizontalDragStart: ((Bool) -> Void)? = nil,
+            onSwipeDragging: ((CGFloat) -> Void)? = nil,
+            onHorizontalDragCancel: (() -> Void)? = nil
         ) {
             self.handle = handle
             self.onDismiss = onDismiss
@@ -105,6 +120,9 @@ struct DragToDismissInstaller: UIViewRepresentable {
             self.onDragCancel = onDragCancel
             self.onSwipeLeft = onSwipeLeft
             self.onSwipeRight = onSwipeRight
+            self.onHorizontalDragStart = onHorizontalDragStart
+            self.onSwipeDragging = onSwipeDragging
+            self.onHorizontalDragCancel = onHorizontalDragCancel
         }
 
         func installGestureIfNeeded() {
@@ -145,6 +163,7 @@ struct DragToDismissInstaller: UIViewRepresentable {
                             onDragStart()
                         } else if absX > absY {
                             direction = .horizontal
+                            onHorizontalDragStart?(translation.x < 0)
                         }
                     }
                 }
@@ -157,6 +176,8 @@ struct DragToDismissInstaller: UIViewRepresentable {
                         .scaledBy(x: scale, y: scale)
                     view.layer.cornerRadius = progress * 24
                     view.clipsToBounds = true
+                } else if direction == .horizontal {
+                    onSwipeDragging?(translation.x)
                 }
 
             case .ended, .cancelled:
@@ -203,6 +224,8 @@ struct DragToDismissInstaller: UIViewRepresentable {
                         onSwipeLeft()
                     } else if translation.x > 80 || velocity.x > 500 {
                         onSwipeRight()
+                    } else {
+                        onHorizontalDragCancel?()
                     }
                 }
 

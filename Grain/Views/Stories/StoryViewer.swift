@@ -46,6 +46,17 @@ private final class StoryTimer {
     private var quarterFired = false
 }
 
+private struct PendingAuthorTransition {
+    var authorIndex: Int?
+    var stories: [GrainStory] = []
+    var storyIndex: Int = 0
+}
+
+private struct FaceOffsets {
+    var current: CGFloat = 0
+    var pending: CGFloat = 0
+}
+
 struct StoryViewer: View {
     @Environment(AuthManager.self) private var auth
     @Environment(LabelDefinitionsCache.self) private var labelDefsCache
@@ -70,8 +81,10 @@ struct StoryViewer: View {
     @State private var fadeDismissHandle = FadeDismissHandle()
     @State private var prefetchedStories: [String: [GrainStory]] = [:]
     @State private var unreadOnly = false
-    @State private var authorTransition: CGFloat = 1.0
-    @State private var slideOffset: CGFloat = 0
+    @State private var pendingTransition = PendingAuthorTransition()
+    @State private var faceOffsets = FaceOffsets()
+    @State private var swipingForward = true
+    @State private var transitionTask: Task<Void, Never>?
     @State private var authorHistory: [(authorIndex: Int, storyIndex: Int)] = []
     @State private var imagePrefetcher = ImagePrefetcher()
     @State private var nextStoryFromTrailing = true
@@ -94,50 +107,126 @@ struct StoryViewer: View {
         resolveLabels(currentStory?.labels, definitions: labelDefsCache.definitions)
     }
 
+    private var screenWidth: CGFloat {
+        (UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first?.screen.bounds.width) ?? 390
+    }
+
+    private var swipeAmount: CGFloat {
+        min(abs(faceOffsets.current) / screenWidth, 1)
+    }
+
     var body: some View {
-        storyContent
-            .offset(x: slideOffset)
-            .scaleEffect(0.85 + 0.15 * authorTransition)
-            .opacity(0.3 + 0.7 * Double(authorTransition))
-            .background(
-                DragToDismissInstaller(
-                    handle: fadeDismissHandle,
-                    onDismiss: { onDismiss?() },
-                    onDragStart: { timer.stop() },
-                    onDragCancel: { startTimerIfSafe() },
-                    onSwipeLeft: { goToNextAuthor() },
-                    onSwipeRight: { goToPreviousAuthor() }
-                )
+        ZStack {
+            if let pendingIdx = pendingTransition.authorIndex {
+                pendingFaceView(authorIdx: pendingIdx)
+                    .offset(x: faceOffsets.pending)
+                    .scaleEffect(0.95 + swipeAmount * 0.05)
+                    .opacity(0.65 + Double(swipeAmount) * 0.35)
+            }
+            storyContent
+                .offset(x: faceOffsets.current)
+                .scaleEffect(1 - swipeAmount * 0.05)
+                .opacity(1 - Double(swipeAmount) * 0.35)
+        }
+        .background(
+            DragToDismissInstaller(
+                handle: fadeDismissHandle,
+                onDismiss: { onDismiss?() },
+                onDragStart: { timer.stop() },
+                onDragCancel: { startTimerIfSafe() },
+                onSwipeLeft: { goToNextAuthor() },
+                onSwipeRight: { goToPreviousAuthor() },
+                onHorizontalDragStart: { forward in beginSwipe(forward: forward) },
+                onSwipeDragging: { tx in updateSwipeDrag(tx) },
+                onHorizontalDragCancel: { cancelSwipe() }
             )
-            .confirmationDialog("Delete this story?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
-                Button("Delete", role: .destructive) {
-                    if let story = currentStory {
-                        Task { await deleteStory(story) }
+        )
+        .confirmationDialog("Delete this story?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+            Button("Delete", role: .destructive) {
+                if let story = currentStory {
+                    Task { await deleteStory(story) }
+                }
+            }
+            Button("Cancel", role: .cancel) {
+                timer.start()
+            }
+        }
+        .fullScreenCover(isPresented: $showReportSheet) {
+            ReportView(client: client, subjectUri: reportStoryUri, subjectCid: reportStoryCid)
+                .environment(auth)
+        }
+        .onChange(of: showReportSheet) {
+            if !showReportSheet {
+                timer.start()
+            }
+        }
+        .task {
+            guard !isPreview else { return }
+            let startAuthor = authors[currentAuthorIndex]
+            let isOwn = startAuthor.profile.did == auth.userDID
+            let hasUnreads = !viewedStories.hasViewedAll(authorDid: startAuthor.profile.did, latestAt: startAuthor.latestAt)
+            unreadOnly = isOwn || hasUnreads
+            timer.onComplete = { [self] in goToNext() }
+            timer.onQuarter = { [self] in markCurrentStoryViewed() }
+            await loadStoriesForCurrentAuthor()
+        }
+    }
+
+    /// Mirrors the logic in presentStories so pendingTransition.storyIndex matches what will be committed.
+    private func resolvedStoryIndex(for stories: [GrainStory], resumeIndex: Int? = nil) -> Int {
+        if let resume = resumeIndex {
+            return min(resume, max(stories.count - 1, 0))
+        }
+        let isOwn = stories.first?.creator.did == auth.userDID
+        return (unreadOnly && isOwn) ? 0 : viewedStories.firstUnviewedIndex(in: stories)
+    }
+
+    @ViewBuilder
+    private func pendingFaceView(authorIdx: Int) -> some View {
+        let story = pendingTransition.stories.indices.contains(pendingTransition.storyIndex)
+            ? pendingTransition.stories[pendingTransition.storyIndex]
+            : pendingTransition.stories.first
+        let barCount = pendingTransition.stories.isEmpty
+            ? max(authors[authorIdx].storyCount, 1)
+            : pendingTransition.stories.count
+        ZStack {
+            Color.black.ignoresSafeArea()
+            if let story {
+                LazyImage(url: URL(string: story.thumb)) { state in
+                    if let img = state.image {
+                        img.resizable()
+                            .aspectRatio(story.aspectRatio.ratio, contentMode: .fit)
+                            .frame(maxWidth: .infinity)
                     }
                 }
-                Button("Cancel", role: .cancel) {
-                    timer.start()
+            } else {
+                ProgressView().tint(.white)
+            }
+            VStack(spacing: 0) {
+                HStack(spacing: 4) {
+                    ForEach(0 ..< barCount, id: \.self) { i in
+                        GeometryReader { geo in
+                            Capsule().fill(Color.white.opacity(0.3))
+                            Capsule().fill(Color.white)
+                                .frame(width: i < pendingTransition.storyIndex ? geo.size.width : 0)
+                        }
+                        .frame(height: 2)
+                    }
                 }
-            }
-            .fullScreenCover(isPresented: $showReportSheet) {
-                ReportView(client: client, subjectUri: reportStoryUri, subjectCid: reportStoryCid)
-                    .environment(auth)
-            }
-            .onChange(of: showReportSheet) {
-                if !showReportSheet {
-                    timer.start()
+                .padding(.horizontal)
+                .padding(.top, 8)
+                HStack(spacing: 8) {
+                    AvatarView(url: authors[authorIdx].profile.avatar, size: 32)
+                    Text(authors[authorIdx].profile.displayName ?? authors[authorIdx].profile.handle)
+                        .font(.subheadline.bold())
+                        .foregroundStyle(.white)
+                    Spacer()
                 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                Spacer()
             }
-            .task {
-                guard !isPreview else { return }
-                let startAuthor = authors[currentAuthorIndex]
-                let isOwn = startAuthor.profile.did == auth.userDID
-                let hasUnreads = !viewedStories.hasViewedAll(authorDid: startAuthor.profile.did, latestAt: startAuthor.latestAt)
-                unreadOnly = isOwn || hasUnreads
-                timer.onComplete = { [self] in goToNext() }
-                timer.onQuarter = { [self] in markCurrentStoryViewed() }
-                await loadStoriesForCurrentAuthor()
-            }
+        }
     }
 
     private var storyContent: some View {
@@ -327,6 +416,7 @@ struct StoryViewer: View {
     private func canNavigate() -> Bool {
         !isLoadingStories && !stories.isEmpty
             && !showReportSheet && !showDeleteConfirm
+            && pendingTransition.authorIndex == nil
             && Date().timeIntervalSince(lastNavTime) > 0.3
     }
 
@@ -379,44 +469,141 @@ struct StoryViewer: View {
     }
 
     private func goToNextAuthor() {
-        if let next = findAuthorIndex(from: currentAuthorIndex, forward: true) {
+        if let pending = pendingTransition.authorIndex {
+            guard swipingForward else { cancelSwipe(); return }
             authorHistory.append((authorIndex: currentAuthorIndex, storyIndex: currentStoryIndex))
-            transitionToAuthor(next, direction: 1)
-        } else {
-            close()
+            transitionToAuthor(pending, forward: true)
+            return
         }
+        guard let next = findAuthorIndex(from: currentAuthorIndex, forward: true) else {
+            close(); return
+        }
+        authorHistory.append((authorIndex: currentAuthorIndex, storyIndex: currentStoryIndex))
+        transitionToAuthor(next, forward: true)
     }
 
     private func goToPreviousAuthor() {
-        if let prev = authorHistory.popLast() {
-            transitionToAuthor(prev.authorIndex, direction: -1, resumeIndex: prev.storyIndex)
+        if let pending = pendingTransition.authorIndex {
+            guard !swipingForward else { cancelSwipe(); return }
+            if let prev = authorHistory.popLast() {
+                transitionToAuthor(pending, forward: false, resumeIndex: prev.storyIndex)
+            } else {
+                transitionToAuthor(pending, forward: false)
+            }
             return
         }
-        // No history (entered mid-strip in reads mode) — walk backward ignoring the reads filter
+        if let prev = authorHistory.popLast() {
+            transitionToAuthor(prev.authorIndex, forward: false, resumeIndex: prev.storyIndex)
+            return
+        }
+        // No history — walk backward ignoring the reads filter
         var i = currentAuthorIndex - 1
         while i >= 0 {
             if authors[i].profile.did != auth.userDID {
-                transitionToAuthor(i, direction: -1)
+                transitionToAuthor(i, forward: false)
                 return
             }
             i -= 1
         }
     }
 
-    private func transitionToAuthor(_ index: Int, direction: CGFloat, resumeIndex: Int? = nil) {
+    private func beginSwipe(forward: Bool) {
+        guard pendingTransition.authorIndex == nil else { return }
         timer.stop()
-        withAnimation(.easeIn(duration: 0.15)) {
-            authorTransition = 0
-            slideOffset = -80 * direction
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            currentAuthorIndex = index
-            switchToCurrentAuthor(resumeIndex: resumeIndex)
-            slideOffset = 80 * direction
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                authorTransition = 1
-                slideOffset = 0
+        swipingForward = forward
+
+        let resumeForBackward: Int? = forward ? nil : authorHistory.last?.storyIndex
+
+        let targetIdx: Int?
+        if forward {
+            targetIdx = findAuthorIndex(from: currentAuthorIndex, forward: true)
+        } else {
+            if let prev = authorHistory.last {
+                targetIdx = prev.authorIndex
+            } else {
+                var i = currentAuthorIndex - 1
+                var found: Int?
+                while i >= 0 {
+                    if authors[i].profile.did != auth.userDID { found = i; break }
+                    i -= 1
+                }
+                targetIdx = found
             }
+        }
+        guard let idx = targetIdx else { return }
+        pendingTransition.authorIndex = idx
+        let did = authors[idx].profile.did
+        if let cached = prefetchedStories[did] {
+            pendingTransition.stories = cached
+            pendingTransition.storyIndex = resolvedStoryIndex(for: cached, resumeIndex: resumeForBackward)
+        } else {
+            pendingTransition.storyIndex = resumeForBackward ?? 0
+            Task {
+                if let response = try? await client.getStories(actor: did, auth: auth.authContext()) {
+                    pendingTransition.stories = response.stories
+                    pendingTransition.storyIndex = resolvedStoryIndex(for: response.stories, resumeIndex: resumeForBackward)
+                }
+            }
+        }
+        faceOffsets.pending = forward ? screenWidth : -screenWidth
+    }
+
+    private func updateSwipeDrag(_ tx: CGFloat) {
+        guard pendingTransition.authorIndex != nil else { return }
+        let clamped = max(-screenWidth, min(screenWidth, tx))
+        faceOffsets.current = clamped
+        let origin: CGFloat = swipingForward ? screenWidth : -screenWidth
+        faceOffsets.pending = origin + clamped * 0.65
+    }
+
+    private func cancelSwipe() {
+        transitionTask?.cancel()
+        let resetOffset: CGFloat = swipingForward ? screenWidth : -screenWidth
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.88)) {
+            faceOffsets.current = 0
+            faceOffsets.pending = resetOffset
+        }
+        transitionTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled else { return }
+            pendingTransition = PendingAuthorTransition()
+            startTimerIfSafe()
+        }
+    }
+
+    private func transitionToAuthor(_ index: Int, forward: Bool, resumeIndex: Int? = nil) {
+        timer.stop()
+        transitionTask?.cancel()
+
+        // Set up pending face if not already done by beginSwipe
+        if pendingTransition.authorIndex != index {
+            swipingForward = forward
+            pendingTransition.authorIndex = index
+            let did = authors[index].profile.did
+            let cached = prefetchedStories[did] ?? []
+            pendingTransition.stories = cached
+            pendingTransition.storyIndex = resolvedStoryIndex(for: cached, resumeIndex: resumeIndex)
+            faceOffsets.pending = forward ? screenWidth : -screenWidth
+            faceOffsets.current = 0
+        }
+        let targetCurrentOffset: CGFloat = forward ? -screenWidth : screenWidth
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.88)) {
+            faceOffsets.current = targetCurrentOffset
+            faceOffsets.pending = 0
+        }
+        transitionTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled else { return }
+            let storiesToPresent = pendingTransition.stories
+            currentAuthorIndex = index
+            timer.progress = 0 // next story bar starts at zero, never at a stale non-zero value
+            if !storiesToPresent.isEmpty {
+                presentStories(storiesToPresent, resumeIndex: resumeIndex)
+            } else {
+                switchToCurrentAuthor(resumeIndex: resumeIndex)
+            }
+            pendingTransition = PendingAuthorTransition()
+            faceOffsets = FaceOffsets()
         }
     }
 
