@@ -150,6 +150,7 @@ struct PinchZoomOverlay: UIViewRepresentable {
 
 struct ZoomableImage: View {
     let url: String
+    var thumbURL: String?
     let aspectRatio: CGFloat
     var onDoubleTap: ((CGPoint) -> Void)?
     @Environment(ImageZoomState.self) private var zoomState: ImageZoomState?
@@ -162,6 +163,20 @@ struct ZoomableImage: View {
                 image
                     .resizable()
                     .aspectRatio(aspectRatio, contentMode: .fit)
+            } else if let thumbURL {
+                LazyImage(url: URL(string: thumbURL)) { thumbState in
+                    if let thumb = thumbState.image {
+                        thumb
+                            .resizable()
+                            .aspectRatio(aspectRatio, contentMode: .fit)
+                            .blur(radius: 20)
+                            .clipped()
+                    } else {
+                        Rectangle()
+                            .fill(.quaternary)
+                            .aspectRatio(aspectRatio, contentMode: .fit)
+                    }
+                }
             } else {
                 Rectangle()
                     .fill(.quaternary)

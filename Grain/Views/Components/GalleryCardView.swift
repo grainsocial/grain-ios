@@ -223,6 +223,7 @@ struct GalleryCardView: View {
                     ForEach(Array(photos.enumerated()), id: \.element.id) { index, photo in
                         ZoomableImage(
                             url: photo.fullsize,
+                            thumbURL: photo.thumb,
                             aspectRatio: photo.aspectRatio.ratio,
                             onDoubleTap: { point in doubleTapLike(at: point) }
                         )
@@ -256,14 +257,11 @@ struct GalleryCardView: View {
         }
         .aspectRatio(carouselRatio, contentMode: .fit)
         .onAppear {
-            let urls = photos.prefix(2).compactMap { URL(string: $0.fullsize) }
-            prefetcher.startPrefetching(with: urls)
+            prefetchCarousel(photos: photos, page: 0)
         }
         .onChange(of: currentPage) {
             showingAlt = false
-            let next = photos.dropFirst(currentPage + 1).prefix(2)
-            let urls = next.compactMap { URL(string: $0.fullsize) }
-            if !urls.isEmpty { prefetcher.startPrefetching(with: urls) }
+            prefetchCarousel(photos: photos, page: currentPage)
         }
         .onDisappear {
             prefetcher.stopPrefetching()
@@ -464,6 +462,12 @@ struct GalleryCardView: View {
             .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
             .transition(.scale.combined(with: .opacity))
         }
+    }
+
+    private func prefetchCarousel(photos: [GrainPhoto], page: Int) {
+        let input = photos.map { (thumb: $0.thumb, fullsize: $0.fullsize) }
+        let plan = ImagePrefetchPlanning.carouselPrefetchRequests(photos: input, currentPage: page)
+        prefetcher.startPrefetching(with: plan.all)
     }
 
     private func doubleTapLike(at point: CGPoint) {
