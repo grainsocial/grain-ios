@@ -24,6 +24,7 @@ struct CreateGalleryView: View {
     @State private var mentionState = MentionAutocompleteState()
     @State private var postToBluesky = false
     @State private var includeExif = true
+    @State private var selectedLabels: Set<String> = []
 
     let client: XRPCClient
     var onCreated: (() -> Void)?
@@ -147,6 +148,8 @@ struct CreateGalleryView: View {
                         }
                     }
                 }
+
+                ContentLabelPicker(selectedLabels: $selectedLabels)
 
                 Section {
                     Toggle("Post to Bluesky", isOn: $postToBluesky)
@@ -358,6 +361,13 @@ struct CreateGalleryView: View {
                 "createdAt": AnyCodable(now)
             ]
             if !description.isEmpty { galleryRecord["description"] = AnyCodable(description) }
+            if !selectedLabels.isEmpty {
+                let labelValues = selectedLabels.map { ["val": AnyCodable($0)] as [String: AnyCodable] }
+                galleryRecord["labels"] = AnyCodable([
+                    "$type": AnyCodable("com.atproto.label.defs#selfLabels"),
+                    "values": AnyCodable(labelValues as [[String: AnyCodable]])
+                ] as [String: AnyCodable])
+            }
             if let loc = resolvedLocation {
                 galleryRecord["location"] = AnyCodable([
                     "value": AnyCodable(loc.h3),

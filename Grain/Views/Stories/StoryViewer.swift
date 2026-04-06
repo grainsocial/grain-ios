@@ -97,10 +97,7 @@ struct StoryViewer: View {
                 handle: fadeDismissHandle,
                 onDismiss: { onDismiss?() },
                 onDragStart: { timer.stop() },
-                onDragCancel: {
-                    let lr = storyLabelResult
-                    if lr.action == .none || lr.action == .badge { timer.start() }
-                },
+                onDragCancel: { timer.start() },
                 onSwipeLeft: { goToNextAuthor() },
                 onSwipeRight: { goToPreviousAuthor() }
             )
@@ -142,7 +139,7 @@ struct StoryViewer: View {
 
                 // Story image
                 ZStack {
-                    LazyImage(url: lr.action == .hide && !labelRevealed ? nil : URL(string: story.fullsize)) { state in
+                    LazyImage(url: URL(string: story.fullsize)) { state in
                         if let image = state.image {
                             image
                                 .resizable()
@@ -153,28 +150,13 @@ struct StoryViewer: View {
                                 .tint(.white)
                         }
                     }
-                    .blur(radius: (lr.action == .warnMedia || lr.action == .warnContent) && !labelRevealed ? 24 : 0)
-
-                    if (lr.action == .warnContent || lr.action == .hide) && !labelRevealed {
-                        VStack(spacing: 12) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .font(.title)
-                                .foregroundStyle(.white.opacity(0.7))
-                            Text(lr.name)
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.white)
-                            Text("This content has been flagged.")
-                                .font(.caption)
-                                .foregroundStyle(.white.opacity(0.6))
-                            Button("Show content") {
-                                withAnimation { labelRevealed = true }
-                                timer.start()
-                            }
-                            .font(.caption.weight(.medium))
-                            .buttonStyle(.bordered)
-                            .tint(.white)
+                    .overlay {
+                        if (lr.action == .warnMedia || lr.action == .warnContent || lr.action == .hide) && !labelRevealed {
+                            Rectangle().fill(Color(.secondarySystemBackground))
                         }
-                    } else if lr.action == .warnMedia && !labelRevealed {
+                    }
+
+                    if (lr.action == .warnContent || lr.action == .warnMedia || lr.action == .hide) && !labelRevealed {
                         MediaWarningOverlay(name: lr.name) {
                             withAnimation { labelRevealed = true }
                             timer.start()
@@ -200,7 +182,7 @@ struct StoryViewer: View {
                         }
                     }
                 }
-                .allowsHitTesting(!showReportSheet && !showDeleteConfirm && (labelRevealed || storyLabelResult.action == .none || storyLabelResult.action == .badge))
+                .allowsHitTesting(!showReportSheet && !showDeleteConfirm)
 
                 // Header overlay
                 VStack(spacing: 0) {
@@ -303,8 +285,7 @@ struct StoryViewer: View {
         if currentStoryIndex < stories.count - 1 {
             currentStoryIndex += 1
             labelRevealed = false
-            let lr = storyLabelResult
-            if lr.action == .none || lr.action == .badge { timer.start() }
+            timer.start()
         } else {
             goToNextAuthor()
         }
@@ -319,8 +300,7 @@ struct StoryViewer: View {
         if currentStoryIndex > 0 {
             currentStoryIndex -= 1
             labelRevealed = false
-            let lr = storyLabelResult
-            if lr.action == .none || lr.action == .badge { timer.start() }
+            timer.start()
         } else {
             goToPreviousAuthor()
         }
@@ -350,8 +330,7 @@ struct StoryViewer: View {
             currentStoryIndex = viewedStories.firstUnviewedIndex(in: cached)
             labelRevealed = false
             isLoadingStories = false
-            let lr = storyLabelResult
-            if lr.action == .none || lr.action == .badge { timer.start() }
+            timer.start()
             prefetchAdjacentAuthors()
         } else {
             currentStoryIndex = 0
@@ -379,10 +358,7 @@ struct StoryViewer: View {
             stories = fetched
             currentStoryIndex = viewedStories.firstUnviewedIndex(in: fetched)
             labelRevealed = false
-            let lr = storyLabelResult
-            if lr.action == .none || lr.action == .badge {
-                timer.start()
-            }
+            timer.start()
         } catch {
             stories = []
         }

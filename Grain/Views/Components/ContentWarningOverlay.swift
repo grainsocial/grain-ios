@@ -29,26 +29,31 @@ struct ContentWarningOverlay: View {
     }
 }
 
-/// Media blur overlay — blurs the media with a reveal button on top.
+/// Media warning overlay — centered bar with label name and Show button (Bluesky-style).
 struct MediaWarningOverlay: View {
     let name: String
     let onReveal: () -> Void
 
     var body: some View {
-        Button {
-            onReveal()
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.caption)
+        VStack {
+            Spacer()
+            HStack {
+                Image(systemName: "info.circle.fill")
+                    .foregroundStyle(.secondary)
                 Text(name)
-                    .font(.caption.weight(.medium))
+                    .font(.subheadline.weight(.medium))
+                Spacer()
+                Button("Show") {
+                    onReveal()
+                }
+                .font(.subheadline.weight(.medium))
             }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10))
             .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(.ultraThinMaterial, in: .capsule)
+            Spacer()
         }
-        .buttonStyle(.plain)
     }
 }
 

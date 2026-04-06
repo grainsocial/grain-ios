@@ -20,6 +20,7 @@ struct StoryCreateView: View {
     @State private var isUploading = false
     @State private var errorMessage: String?
     @State private var postToBluesky = false
+    @State private var selectedLabels: Set<String> = []
 
     var body: some View {
         NavigationStack {
@@ -98,6 +99,8 @@ struct StoryCreateView: View {
                         }
                     }
                 }
+
+                ContentLabelPicker(selectedLabels: $selectedLabels)
 
                 Section {
                     Toggle("Post to Bluesky", isOn: $postToBluesky)
@@ -216,6 +219,13 @@ struct StoryCreateView: View {
                 if let addr = loc.address {
                     record["address"] = AnyCodable(addr)
                 }
+            }
+            if !selectedLabels.isEmpty {
+                let labelValues = selectedLabels.map { ["val": AnyCodable($0)] as [String: AnyCodable] }
+                record["labels"] = AnyCodable([
+                    "$type": AnyCodable("com.atproto.label.defs#selfLabels"),
+                    "values": AnyCodable(labelValues as [[String: AnyCodable]])
+                ] as [String: AnyCodable])
             }
 
             let storyResult = try await client.createRecord(

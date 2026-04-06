@@ -9,6 +9,7 @@ struct ProfileView: View {
     @Namespace private var viewModeNS
     @Environment(AuthManager.self) private var auth
     @Environment(ViewedStoryStorage.self) private var viewedStories
+    @Environment(LabelDefinitionsCache.self) private var labelDefsCache
     @State private var showStoryViewer = false
     @State private var showAvatarOverlay = false
     @State private var viewModel: ProfileDetailViewModel
@@ -193,6 +194,19 @@ struct ProfileView: View {
                                                 }
                                             }
                                             .clipped()
+                                            .overlay {
+                                                let lr = resolveLabels(gallery.labels, definitions: labelDefsCache.definitions)
+                                                if lr.action >= .warnMedia {
+                                                    Rectangle().fill(Color(.secondarySystemBackground))
+                                                    HStack(spacing: 4) {
+                                                        Image(systemName: "info.circle.fill")
+                                                            .font(.caption2)
+                                                        Text(lr.name)
+                                                            .font(.system(size: 9))
+                                                    }
+                                                    .foregroundStyle(.secondary)
+                                                }
+                                            }
                                             .overlay(alignment: .topTrailing) {
                                                 if (gallery.items?.count ?? 0) > 1 {
                                                     Image(systemName: "square.on.square.fill")

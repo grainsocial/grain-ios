@@ -20,8 +20,13 @@ struct GrainGallery: Codable, Sendable, Identifiable {
     let indexedAt: String
     var viewer: GalleryViewerState?
     var crossPost: CrossPostInfo?
+    var labelRevealed: Bool = false
 
     var id: String { uri }
+
+    private enum CodingKeys: String, CodingKey {
+        case uri, cid, title, description, cameras, location, address, facets, creator, record, items, favCount, commentCount, labels, createdAt, indexedAt, viewer, crossPost
+    }
 }
 
 /// social.grain.gallery.defs#viewerState

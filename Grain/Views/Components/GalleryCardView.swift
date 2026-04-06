@@ -110,7 +110,6 @@ struct GalleryCardView: View {
     @State private var showCopiedToast = false
     @State private var shareWiggle = false
     @State private var didLongPressShare = false
-    @State private var labelRevealed = false
 
     private var isFavorited: Bool {
         gallery.viewer?.fav != nil
@@ -127,10 +126,10 @@ struct GalleryCardView: View {
 
     var body: some View {
         let lr = labelResult
-        if (lr.action == .hide || lr.action == .warnContent) && !labelRevealed {
+        if (lr.action == .hide || lr.action == .warnContent) && !gallery.labelRevealed {
             VStack(spacing: 0) {
                 ContentWarningOverlay(name: lr.name, action: lr.action) {
-                    labelRevealed = true
+                    gallery.labelRevealed = true
                 }
                 .frame(height: 200)
             }
@@ -213,8 +212,12 @@ struct GalleryCardView: View {
                             }
                         }
                         .tabViewStyle(.page(indexDisplayMode: .never))
-                        .blur(radius: lr.action == .warnMedia && !labelRevealed ? 40 : 0)
-                        .allowsHitTesting(lr.action != .warnMedia || labelRevealed)
+                        .overlay {
+                            if lr.action == .warnMedia && !gallery.labelRevealed {
+                                Rectangle().fill(Color(.secondarySystemBackground))
+                            }
+                        }
+                        .allowsHitTesting(lr.action != .warnMedia || gallery.labelRevealed)
 
                     // Page indicator (abbreviated like web — max 5 visible dots)
                     if photos.count > 1 {
@@ -290,9 +293,9 @@ struct GalleryCardView: View {
                     }
 
                     // Media warning overlay
-                    if lr.action == .warnMedia && !labelRevealed {
+                    if lr.action == .warnMedia && !gallery.labelRevealed {
                         MediaWarningOverlay(name: lr.name) {
-                            withAnimation { labelRevealed = true }
+                            withAnimation { gallery.labelRevealed = true }
                         }
                     }
                     }
