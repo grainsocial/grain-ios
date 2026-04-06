@@ -117,7 +117,7 @@ struct GalleryDetailView: View {
                         }
                     }
                 }
-            } else if viewModel.isLoading {
+            } else {
                 ProgressView()
                     .padding(.top, 100)
             }

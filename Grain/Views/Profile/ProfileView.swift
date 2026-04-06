@@ -272,9 +272,6 @@ struct ProfileView: View {
                         }
                     }
                 }
-            } else if viewModel.isLoading {
-                ProgressView()
-                    .padding(.top, 100)
             } else if viewModel.error != nil {
                 VStack(spacing: 16) {
                     ContentUnavailableView(
@@ -293,6 +290,9 @@ struct ProfileView: View {
                     }
                 }
                 .padding(.top, 40)
+            } else {
+                ProgressView()
+                    .padding(.top, 100)
             }
         }
         .environment(zoomState)
