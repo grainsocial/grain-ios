@@ -6,6 +6,7 @@ struct ReorderablePhotoGrid: View {
 
     @State private var draggingID: UUID?
     @State private var dragOffset: CGSize = .zero
+    @Namespace private var gridNamespace
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 3)
     private let spacing: CGFloat = 4
@@ -17,7 +18,9 @@ struct ReorderablePhotoGrid: View {
             LazyVGrid(columns: columns, spacing: spacing) {
                 ForEach(items) { item in
                     cellView(item: item, cellSize: cellSize, isDragging: false)
-                        // Hide the in-grid copy while dragging; it still holds layout space
+                        // matchedGeometryEffect tracks each cell's frame so moves
+                        // animate as smooth positional transitions
+                        .matchedGeometryEffect(id: item.id, in: gridNamespace)
                         .opacity(draggingID == item.id ? 0 : 1)
                         .simultaneousGesture(TapGesture().onEnded {
                             guard draggingID == nil else { return }
@@ -49,7 +52,7 @@ struct ReorderablePhotoGrid: View {
                         )
                 }
             }
-            // Dragged item rendered above the grid so it's unconditionally on top
+            // Dragged item rendered above the grid — unconditionally on top
             .overlay(alignment: .topLeading) {
                 if let draggingID,
                    let item = items.first(where: { $0.id == draggingID }),
@@ -90,7 +93,6 @@ struct ReorderablePhotoGrid: View {
             )
     }
 
-    /// Aspect ratio so GeometryReader doesn't collapse: cols / rows.
     private var aspectRatio: CGFloat {
         let rows = max(1, ceil(CGFloat(items.count) / 3))
         return 3 / rows
@@ -133,7 +135,7 @@ struct ReorderablePhotoGrid: View {
             let rowDelta = (target / 3) - (currentIndex / 3)
             let step = cellSize + spacing
 
-            withAnimation(.spring(response: 0.45, dampingFraction: 0.7, blendDuration: 0)) {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.88)) {
                 items.move(fromOffsets: IndexSet(integer: currentIndex), toOffset: target > currentIndex ? target + 1 : target)
             }
 
