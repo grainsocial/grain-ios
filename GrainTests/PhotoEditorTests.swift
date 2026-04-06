@@ -63,7 +63,7 @@ final class PhotoEditorTests: XCTestCase {
 
     func testSelectionStableThroughReorder() throws {
         let img = UIImage()
-        var items = (0 ..< 5).map { _ in PhotoItem(thumbnail: img, source: .camera(img)) }
+        var items = (0 ..< 5).map { _ in PhotoItem(thumbnail: img, source: .camera(img, metadata: nil)) }
         let selectedID = items[2].id
 
         // Move item at index 0 to index 3
@@ -77,7 +77,7 @@ final class PhotoEditorTests: XCTestCase {
 
     func testSelectionFallsBackOnDeletion() {
         let img = UIImage()
-        var items = (0 ..< 3).map { _ in PhotoItem(thumbnail: img, source: .camera(img)) }
+        var items = (0 ..< 3).map { _ in PhotoItem(thumbnail: img, source: .camera(img, metadata: nil)) }
         var selectedID: UUID? = items[2].id
 
         // Remove the selected item
@@ -93,7 +93,7 @@ final class PhotoEditorTests: XCTestCase {
 
     func testAltTextPreservedAcrossSelection() {
         let img = UIImage()
-        var items = (0 ..< 3).map { _ in PhotoItem(thumbnail: img, source: .camera(img)) }
+        var items = (0 ..< 3).map { _ in PhotoItem(thumbnail: img, source: .camera(img, metadata: nil)) }
         items[0].alt = "First photo"
         items[1].alt = "Second photo"
 

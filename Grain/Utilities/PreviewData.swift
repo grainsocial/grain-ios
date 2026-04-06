@@ -210,14 +210,14 @@
                 guard let path = Bundle.main.url(forResource: entry.name, withExtension: "jpg")?.path,
                       let fullImage = UIImage(contentsOfFile: path) else { return nil }
                 let thumb = PhotoItem.makeThumbnail(from: fullImage)
-                var item = PhotoItem(thumbnail: thumb, source: .camera(fullImage))
+                var item = PhotoItem(thumbnail: thumb, source: .camera(fullImage, metadata: nil))
                 item.alt = entry.alt
                 return item
             }
             // Pad with gradient fallbacks if fewer than 15 items total
             for (colors, label) in fallbackColors {
                 let thumb = gradientThumb(colors: colors)
-                var item = PhotoItem(thumbnail: thumb, source: .camera(thumb))
+                var item = PhotoItem(thumbnail: thumb, source: .camera(thumb, metadata: nil))
                 item.alt = label
                 items.append(item)
             }

@@ -18,7 +18,7 @@ struct StoryCreateView: View {
     @State private var isSearchingLocation = false
     @State private var locationSearchTask: Task<Void, Never>?
     @State private var photoLocationResult: NominatimResult?
-    @AppStorage("privacy.includeLocation") private var includeLocation = true
+    @State private var includeLocation = true
     @State private var isUploading = false
     @State private var errorMessage: String?
     @State private var postToBluesky = false
@@ -134,11 +134,19 @@ struct StoryCreateView: View {
                     }
                 }
             }
+            .task {
+                if let authContext = await auth.authContext(),
+                   let prefs = try? await client.getPreferences(auth: authContext).preferences,
+                   let location = prefs.includeLocation
+                {
+                    includeLocation = location
+                }
+            }
             .onChange(of: selectedPhoto) {
                 Task { await loadPhoto() }
             }
             .fullScreenCover(isPresented: $showCamera) {
-                CameraPicker { image in
+                CameraPicker { image, _ in
                     handleCameraImage(image)
                 }
                 .ignoresSafeArea()

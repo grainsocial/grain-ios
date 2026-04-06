@@ -27,9 +27,7 @@ struct CreateGalleryView: View {
     @State private var selectedPhotoID: UUID?
     @State private var photoLocationResult: NominatimResult?
     @State private var sendExif = true
-    @State private var includeExif = true
-    @AppStorage("privacy.includeLocation") private var includeLocation = true
-    @AppStorage("privacy.includeCameraData") private var includeCameraData = true
+    @State private var includeLocation = true
 
     let client: XRPCClient
     var onCreated: (() -> Void)?
@@ -50,7 +48,6 @@ struct CreateGalleryView: View {
                 cameraDataSection
                 errorSection
             }
-            .onAppear { sendExif = includeCameraData }
             .safeAreaInset(edge: .bottom) {
                 MentionSuggestionOverlay(state: mentionState) { suggestion in
                     mentionState.complete(handle: suggestion.handle, in: &description)
@@ -68,21 +65,21 @@ struct CreateGalleryView: View {
                 }
             }
             .fullScreenCover(isPresented: $showCamera) {
-                CameraPicker { image in
+                CameraPicker { image, metadata in
                     let thumb = PhotoItem.makeThumbnail(from: image)
-                    let item = PhotoItem(thumbnail: thumb, source: .camera(image))
+                    let exif = metadata.flatMap { makeExifSummary(from: $0) }
+                    let item = PhotoItem(thumbnail: thumb, source: .camera(image, metadata: metadata), exifSummary: exif)
                     photoItems.append(item)
                     if selectedPhotoID == nil { selectedPhotoID = item.id }
                 }
                 .ignoresSafeArea()
             }
             .task {
-                if let authContext = await auth.authContext() {
-                    if let prefs = try? await client.getPreferences(auth: authContext).preferences {
-                        if let exif = prefs.includeExif {
-                            includeExif = exif
-                        }
-                    }
+                if let authContext = await auth.authContext(),
+                   let prefs = try? await client.getPreferences(auth: authContext).preferences
+                {
+                    if let exif = prefs.includeExif { sendExif = exif }
+                    if let location = prefs.includeLocation { includeLocation = location }
                 }
             }
             .navigationTitle("New Gallery")
@@ -119,12 +116,10 @@ struct CreateGalleryView: View {
                 Label("Select Photos", systemImage: "photo.on.rectangle.angled")
             }
 
-            if photoItems.isEmpty {
-                Button {
-                    showCamera = true
-                } label: {
-                    Label("Take Photo", systemImage: "camera")
-                }
+            Button {
+                showCamera = true
+            } label: {
+                Label("Take Photo", systemImage: "camera")
             }
         }
     }
@@ -310,9 +305,18 @@ struct CreateGalleryView: View {
         // Always extract GPS from the first photo so "Use photo location" can be offered
         photoLocationResult = nil
         for item in photoItems {
-            guard case let .picker(pickerItem) = item.source,
-                  let data = try? await pickerItem.loadTransferable(type: Data.self),
-                  let gps = ImageProcessing.extractGPS(from: data) else { continue }
+            var gps: (latitude: Double, longitude: Double)?
+
+            switch item.source {
+            case let .picker(pickerItem):
+                if let data = try? await pickerItem.loadTransferable(type: Data.self) {
+                    gps = ImageProcessing.extractGPS(from: data)
+                }
+            case .camera:
+                continue
+            }
+
+            guard let gps else { continue }
 
             if let result = await LocationServices.reverseGeocode(latitude: gps.latitude, longitude: gps.longitude) {
                 photoLocationResult = result
@@ -355,7 +359,7 @@ struct CreateGalleryView: View {
                 repo: repo,
                 client: client,
                 authContext: authContext,
-                includeExif: includeCameraData
+                includeExif: sendExif
             )
 
             // 3. Create gallery record with pre-resolved location
@@ -471,9 +475,9 @@ struct PhotoItem: Identifiable {
     }
 }
 
-enum PhotoSource {
+enum PhotoSource: @unchecked Sendable {
     case picker(PhotosPickerItem)
-    case camera(UIImage)
+    case camera(UIImage, metadata: [String: Any]?)
 }
 
 // MARK: - Gallery Upload Helpers
@@ -506,14 +510,14 @@ private func processGalleryPhotos(
                 exif: exif
             ))
 
-        case let .camera(image):
+        case let .camera(image, metadata):
+            let exif = skipExif ? nil : extractExifFromMetadata(metadata)
             let (resized, size) = ImageProcessing.resizeImage(image, maxDimension: 2000, maxBytes: 900_000)
-            logger.info("Uploading camera photo \(resized.count) bytes, \(Int(size.width))x\(Int(size.height))")
             let response = try await client.uploadBlob(data: resized, mimeType: "image/jpeg", auth: authContext)
             processed.append(ProcessedPhoto(
                 blob: response.blob,
                 aspectRatio: AspectRatio(width: Int(size.width), height: Int(size.height)),
-                exif: nil
+                exif: exif
             ))
         }
     }
@@ -642,15 +646,21 @@ private func extractExposureInfo(
     }
 }
 
+private func makeExifSummary(from metadata: [String: Any]) -> ExifSummary? {
+    let exifDict = metadata[kCGImagePropertyExifDictionary as String] as? [String: Any]
+    let tiffDict = metadata[kCGImagePropertyTIFFDictionary as String] as? [String: Any]
+    let exifAux = metadata[kCGImagePropertyExifAuxDictionary as String] as? [String: Any]
+    return buildExifSummary(exifDict: exifDict, tiffDict: tiffDict, exifAux: exifAux)
+}
+
 private func makeExifSummary(from data: Data) -> ExifSummary? {
     guard let source = CGImageSourceCreateWithData(data as CFData, nil),
           let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any]
     else { return nil }
+    return makeExifSummary(from: properties)
+}
 
-    let exifDict = properties[kCGImagePropertyExifDictionary as String] as? [String: Any]
-    let tiffDict = properties[kCGImagePropertyTIFFDictionary as String] as? [String: Any]
-    let exifAux = properties[kCGImagePropertyExifAuxDictionary as String] as? [String: Any]
-
+private func buildExifSummary(exifDict: [String: Any]?, tiffDict: [String: Any]?, exifAux: [String: Any]?) -> ExifSummary? {
     var summary = ExifSummary()
 
     let make = (tiffDict?[kCGImagePropertyTIFFMake as String] as? String)?.trimmingCharacters(in: .whitespaces)
@@ -682,6 +692,17 @@ private func makeExifSummary(from data: Data) -> ExifSummary? {
 
     guard summary.camera != nil || summary.lens != nil || summary.exposure != nil else { return nil }
     return summary
+}
+
+private func extractExifFromMetadata(_ metadata: [String: Any]?) -> [String: AnyCodable]? {
+    guard let metadata else { return nil }
+    let exifDict = metadata[kCGImagePropertyExifDictionary as String] as? [String: Any]
+    let tiffDict = metadata[kCGImagePropertyTIFFDictionary as String] as? [String: Any]
+    let exifAux = metadata[kCGImagePropertyExifAuxDictionary as String] as? [String: Any]
+    var result: [String: AnyCodable] = [:]
+    extractCameraInfo(exifDict: exifDict, tiffDict: tiffDict, exifAux: exifAux, into: &result)
+    extractExposureInfo(exifDict: exifDict, scale: 1_000_000, into: &result)
+    return result.isEmpty ? nil : result
 }
 
 private func extractGalleryExif(from data: Data) -> [String: AnyCodable]? {

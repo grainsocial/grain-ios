@@ -7,9 +7,8 @@ struct SettingsView: View {
     let client: XRPCClient
     @State private var cacheSizeText = "Calculating..."
     @State private var includeExif = true
-    @State private var hasLoadedExifPref = false
-    @AppStorage("privacy.includeLocation") private var includeLocation = true
-    @AppStorage("privacy.includeCameraData") private var includeCameraData = true
+    @State private var includeLocation = true
+    @State private var hasLoadedPrefs = false
     @AppStorage("privacy.showSuggestedUsers") private var showSuggestedUsers = true
 
     var body: some View {
@@ -24,20 +23,23 @@ struct SettingsView: View {
                 }
             }
 
-            Section("Photos") {
-                Toggle("Include camera data (EXIF) when uploading", isOn: $includeExif)
+                Section {
+                Toggle("Include location", isOn: $includeLocation)
+                    .onChange(of: includeLocation) {
+                        guard hasLoadedPrefs else { return }
+                        Task {
+                            guard let authContext = await auth.authContext() else { return }
+                            try? await client.putIncludeLocation(includeLocation, auth: authContext)
+                        }
+                    }
+                Toggle("Include camera data", isOn: $includeExif)
                     .onChange(of: includeExif) {
-                        guard hasLoadedExifPref else { return }
+                        guard hasLoadedPrefs else { return }
                         Task {
                             guard let authContext = await auth.authContext() else { return }
                             try? await client.putIncludeExif(includeExif, auth: authContext)
                         }
                     }
-            }
-
-            Section {
-                Toggle("Include location", isOn: $includeLocation)
-                Toggle("Include camera data", isOn: $includeCameraData)
                 Toggle("Show suggested users", isOn: $showSuggestedUsers)
             } header: {
                 Text("Privacy")
@@ -76,12 +78,12 @@ struct SettingsView: View {
         .navigationTitle("Settings")
         .task {
             if let authContext = await auth.authContext(),
-               let prefs = try? await client.getPreferences(auth: authContext).preferences,
-               let exif = prefs.includeExif
+               let prefs = try? await client.getPreferences(auth: authContext).preferences
             {
-                includeExif = exif
+                if let exif = prefs.includeExif { includeExif = exif }
+                if let location = prefs.includeLocation { includeLocation = location }
             }
-            hasLoadedExifPref = true
+            hasLoadedPrefs = true
         }
     }
 

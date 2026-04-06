@@ -3,7 +3,7 @@ import UIKit
 
 struct CameraPicker: UIViewControllerRepresentable {
     @Environment(\.dismiss) private var dismiss
-    let onImagePicked: (UIImage) -> Void
+    let onImagePicked: (UIImage, [String: Any]?) -> Void
 
     func makeUIViewController(context: Context) -> UIImagePickerController {
         let picker = UIImagePickerController()
@@ -20,16 +20,17 @@ struct CameraPicker: UIViewControllerRepresentable {
 
     class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
         let dismiss: DismissAction
-        let onImagePicked: (UIImage) -> Void
+        let onImagePicked: (UIImage, [String: Any]?) -> Void
 
-        init(dismiss: DismissAction, onImagePicked: @escaping (UIImage) -> Void) {
+        init(dismiss: DismissAction, onImagePicked: @escaping (UIImage, [String: Any]?) -> Void) {
             self.dismiss = dismiss
             self.onImagePicked = onImagePicked
         }
 
         func imagePickerController(_: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
             if let image = info[.originalImage] as? UIImage {
-                onImagePicked(image)
+                let metadata = info[.mediaMetadata] as? [String: Any]
+                onImagePicked(image, metadata)
             }
             dismiss()
         }
@@ -41,11 +42,9 @@ struct CameraPicker: UIViewControllerRepresentable {
 }
 
 #Preview {
-    // CameraPicker wraps UIImagePickerController — camera unavailable in simulator.
-    // Preview shows the picker presented over a placeholder.
     @Previewable @State var show = true
     Color.gray.opacity(0.1)
         .sheet(isPresented: $show) {
-            CameraPicker { _ in }
+            CameraPicker { _, _ in }
         }
 }

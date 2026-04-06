@@ -24,6 +24,7 @@ struct GetPreferencesResponse: Codable, Sendable {
 struct UserPreferences: Codable, Sendable {
     var pinnedFeeds: [PinnedFeed]?
     var includeExif: Bool?
+    var includeLocation: Bool?
 }
 
 struct PinnedFeed: Codable, Sendable, Identifiable, Hashable {
@@ -114,6 +115,14 @@ extension XRPCClient {
             let value: Bool
         }
         try await procedure("dev.hatk.putPreference", input: Input(key: "includeExif", value: value), auth: auth)
+    }
+
+    func putIncludeLocation(_ value: Bool, auth: AuthContext? = nil) async throws {
+        struct Input: Encodable {
+            let key: String
+            let value: Bool
+        }
+        try await procedure("dev.hatk.putPreference", input: Input(key: "includeLocation", value: value), auth: auth)
     }
 
     func searchGalleries(
