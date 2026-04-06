@@ -16,7 +16,7 @@ struct MainTabView: View {
     @State private var notificationsVM = NotificationsViewModel(client: XRPCClient(baseURL: AuthManager.serverURL))
     @Binding var pendingDeepLink: DeepLink?
 
-    static let badgeAppearanceConfigured: Bool = {
+    @MainActor static let badgeAppearanceConfigured: Bool = {
         let color = UIColor(named: "AccentColor")
         let textAttrs: [NSAttributedString.Key: Any] = [.foregroundColor: UIColor.white]
         let appearance = UITabBarAppearance()
