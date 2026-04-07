@@ -12,6 +12,7 @@ final class ImageZoomState {
     var anchor: UnitPoint = .center
     var offset: CGSize = .zero
     var imageURL: String = ""
+    var localImage: UIImage?
     var aspectRatio: CGFloat = 1
     var sourceFrame: CGRect = .zero
 }
@@ -30,11 +31,19 @@ struct ImageZoomOverlay: ViewModifier {
                         let localX = zoomState.sourceFrame.midX - overlayGlobal.x
                         let localY = zoomState.sourceFrame.midY - overlayGlobal.y
 
-                        LazyImage(url: URL(string: zoomState.imageURL)) { state in
-                            if let image = state.image {
-                                image
+                        Group {
+                            if let local = zoomState.localImage {
+                                Image(uiImage: local)
                                     .resizable()
                                     .aspectRatio(zoomState.aspectRatio, contentMode: .fit)
+                            } else {
+                                LazyImage(url: URL(string: zoomState.imageURL)) { state in
+                                    if let image = state.image {
+                                        image
+                                            .resizable()
+                                            .aspectRatio(zoomState.aspectRatio, contentMode: .fit)
+                                    }
+                                }
                             }
                         }
                         .frame(
@@ -152,19 +161,85 @@ struct PinchZoomOverlay: UIViewRepresentable {
 // MARK: - ZoomableImage
 
 struct ZoomableImage: View {
-    let url: String
-    var thumbURL: String?
+    enum Source {
+        case url(String, thumbURL: String? = nil)
+        case local(UIImage)
+    }
+
+    let source: Source
     let aspectRatio: CGFloat
     var onDoubleTap: ((CGPoint) -> Void)?
     @Environment(ImageZoomState.self) private var zoomState: ImageZoomState?
 
     @State private var snapBackTask: Task<Void, Never>?
 
+    init(url: String, thumbURL: String? = nil, aspectRatio: CGFloat, onDoubleTap: ((CGPoint) -> Void)? = nil) {
+        source = .url(url, thumbURL: thumbURL)
+        self.aspectRatio = aspectRatio
+        self.onDoubleTap = onDoubleTap
+    }
+
+    init(localImage: UIImage, aspectRatio: CGFloat, onDoubleTap: ((CGPoint) -> Void)? = nil) {
+        source = .local(localImage)
+        self.aspectRatio = aspectRatio
+        self.onDoubleTap = onDoubleTap
+    }
+
+    private var sourceID: String {
+        switch source {
+        case let .url(url, _): "url:\(url)"
+        case let .local(image): "local:\(ObjectIdentifier(image).hashValue)"
+        }
+    }
+
+    private var isCurrentlyZoomed: Bool {
+        guard let zoomState, zoomState.showOverlay else { return false }
+        switch source {
+        case let .url(url, _):
+            return zoomState.imageURL == url
+        case let .local(image):
+            return zoomState.localImage === image
+        }
+    }
+
     var body: some View {
-        // PinchZoomOverlay is a ZStack sibling (not an overlay on LazyImage) so the
+        // PinchZoomOverlay is a ZStack sibling (not an overlay on the image) so the
         // UIView fills the full carousel slot — black-bar areas are tappable and
         // UIKit coordinates already map to the carousel ZStack space with no correction.
         ZStack {
+            sourceView
+                .opacity(isCurrentlyZoomed ? 0 : 1)
+
+            if let zoomState {
+                PinchZoomOverlay(
+                    zoomState: zoomState,
+                    onBegan: { anchor, frame in
+                        switch source {
+                        case let .url(url, _):
+                            zoomState.imageURL = url
+                            zoomState.localImage = nil
+                        case let .local(image):
+                            zoomState.imageURL = ""
+                            zoomState.localImage = image
+                        }
+                        zoomState.aspectRatio = aspectRatio
+                        zoomState.anchor = anchor
+                        zoomState.sourceFrame = frame
+                        zoomState.showOverlay = true
+                    },
+                    onEnded: { scheduleSnapBack() },
+                    onDoubleTap: onDoubleTap
+                )
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onChange(of: sourceID) { resetZoom() }
+    }
+
+    @ViewBuilder
+    private var sourceView: some View {
+        switch source {
+        case let .url(url, thumbURL):
             LazyImage(request: ImageRequest(url: URL(string: url), priority: .veryHigh)) { state in
                 if let image = state.image {
                     image
@@ -190,25 +265,11 @@ struct ZoomableImage: View {
                         .aspectRatio(aspectRatio, contentMode: .fit)
                 }
             }
-            .opacity(zoomState?.showOverlay == true && zoomState?.imageURL == url ? 0 : 1)
-
-            if let zoomState {
-                PinchZoomOverlay(
-                    zoomState: zoomState,
-                    onBegan: { anchor, frame in
-                        zoomState.imageURL = url
-                        zoomState.aspectRatio = aspectRatio
-                        zoomState.anchor = anchor
-                        zoomState.sourceFrame = frame
-                        zoomState.showOverlay = true
-                    },
-                    onEnded: { scheduleSnapBack() },
-                    onDoubleTap: onDoubleTap
-                )
-            }
+        case let .local(image):
+            Image(uiImage: image)
+                .resizable()
+                .aspectRatio(aspectRatio, contentMode: .fit)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onChange(of: url) { resetZoom() }
     }
 
     private func scheduleSnapBack() {
