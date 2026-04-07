@@ -90,8 +90,8 @@ struct ExifSettingsRow: View {
         ZStack(alignment: .leading) {
             Text(" ").hidden() // holds caption line height when all tokens are nil
             HStack(spacing: 6) {
-                ForEach(tokens.indices, id: \.self) { i in
-                    if let value = tokens[i] {
+                ForEach(Array(tokens.enumerated()), id: \.offset) { _, value in
+                    if let value {
                         Text(value.digitWidthProxy)
                             .hidden()
                             .overlay(Text(value).contentTransition(.identity))
