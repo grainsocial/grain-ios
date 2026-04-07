@@ -9,6 +9,8 @@ final class ViewedStoryStorage {
     private static let urisKey = "viewedStoryUris"
     private static let authorKey = "viewedStoryAuthors"
 
+    private var saveTask: Task<Void, Never>?
+
     init() {
         #if DEBUG
             Self.wipeDefaults()
@@ -52,7 +54,7 @@ final class ViewedStoryStorage {
         } else {
             authorLastViewed[authorDid] = createdAt
         }
-        save()
+        scheduleSave()
     }
 
     /// Check if a specific story has been viewed.
@@ -104,6 +106,15 @@ final class ViewedStoryStorage {
            let decoded = try? JSONDecoder().decode([String: String].self, from: data)
         {
             authorLastViewed = decoded
+        }
+    }
+
+    private func scheduleSave() {
+        saveTask?.cancel()
+        saveTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled else { return }
+            self?.save()
         }
     }
 
