@@ -134,6 +134,7 @@ struct StoryViewer: View {
             }
         }
         .clipped()
+        .background(Color.black.ignoresSafeArea())
         .background(
             DragToDismissInstaller(
                 handle: fadeDismissHandle,
@@ -463,7 +464,7 @@ struct StoryViewer: View {
 
                     if author.did == auth.userDID {
                         Button {
-                            guard let story else { return }
+                            guard story != nil else { return }
                             timer.stop()
                             showDeleteConfirm = true
                         } label: {
