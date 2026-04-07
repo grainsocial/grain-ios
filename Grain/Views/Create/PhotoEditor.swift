@@ -175,17 +175,22 @@ struct PhotoEditor: View {
                     PhotoStrip(
                         items: $items,
                         selectedPhotoID: $selectedPhotoID,
+                        matchedNamespace: photoNamespace,
                         isAnimatingMode: isAnimatingMode
                     )
                     .transition(.opacity)
-                } else {
+                } else if mode == .reorder {
                     ReorderablePhotoGrid(
                         items: $items,
                         selectedPhotoID: $selectedPhotoID,
                         isReordering: $isReordering,
+                        matchedNamespace: photoNamespace,
                         isAnimatingMode: isAnimatingMode
                     )
                     .transition(.opacity)
+                } else {
+                    captionsList
+                        .transition(.opacity)
                 }
             }
             .animation(.smooth, value: mode)
@@ -235,25 +240,50 @@ struct PhotoEditor: View {
             .opacity(isAnimatingMode ? 0 : 1)
             .animation(.smooth, value: isAnimatingMode)
         }
+    }
 
-        // MARK: Alt text section — both modes, tied to selectedPhotoID
+    // MARK: - Captions list
 
-        // Always visible when there's a selected photo, regardless of mode.
-        // Previously gated on `!isAnimatingMode` to hide during the morph,
-        // but the user reported the disappear/reappear is jarring. Letting
-        // it stay visible lets the form layout reflow it smoothly as the
-        // section above grows/shrinks.
-        if let idx = selectedIndex {
-            Section {
-                TextField(
-                    "Add a description for accessibility",
-                    text: $items[idx].alt,
-                    axis: .vertical
-                )
-                .font(.subheadline)
-                .lineLimit(2 ... 4)
-            } header: {
-                Text("Alt text")
+    /// Scrollable list of photo rows shown in `.captions` mode. Each row has a
+    /// small square thumbnail on the left and an inline alt-text TextField on
+    /// the right, so the user can caption every photo without tapping around.
+    private var captionsList: some View {
+        VStack(spacing: 0) {
+            ForEach($items) { $item in
+                HStack(alignment: .top, spacing: 12) {
+                    let aspect: CGFloat = {
+                        let w = item.thumbnail.size.width
+                        let h = item.thumbnail.size.height
+                        return h > 0 ? w / h : 1
+                    }()
+                    let geo = CellGeometry(mode: .captions, maskSide: 60, photoAspect: aspect)
+                    Image(uiImage: item.thumbnail)
+                        .resizable()
+                        .frame(width: geo.photoSize.width, height: geo.photoSize.height)
+                        .frame(width: geo.maskSide, height: geo.maskSide)
+                        .clipped()
+                        .cornerRadius(geo.maskCornerRadius)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        TextField(
+                            "Add a description for accessibility",
+                            text: $item.alt,
+                            axis: .vertical
+                        )
+                        .font(.subheadline)
+                        .lineLimit(2 ... 4)
+
+                        if sendExif, item.exifSummary != nil {
+                            exifInfo(for: item)
+                        }
+                    }
+                }
+                .padding(.vertical, 10)
+                .padding(.horizontal, 20)
+
+                if item.id != items.last?.id {
+                    Divider().padding(.leading, 92)
+                }
             }
         }
     }
