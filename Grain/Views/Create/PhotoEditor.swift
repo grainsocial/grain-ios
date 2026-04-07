@@ -2,46 +2,22 @@ import SwiftUI
 
 // MARK: - Editor mode
 
-/// The two modes the gallery editor can be in. Owned by `PhotoEditor` as
-/// `@State`. Each mode encodes everything the section header needs to render
-/// its trailing affordance (icon + label + slide direction), so the call site
-/// never has to switch on a `Bool` and forget which mode "true" means.
-///
-/// The header button shows the *destination* mode — i.e. when the editor is
-/// in `.preview`, the button reads "Reorder" with the shuffle icon, and tap-
-/// ping it transitions to `.reorder`. The slide direction encodes the spatial
-/// metaphor: entering reorder feels like the form *dropping down* into the
-/// grid, so the "Reorder" label slides in from the **top** edge; returning to
-/// preview feels like the strip *rising back up*, so "Preview" slides in from
-/// the **bottom** edge.
-enum EditorMode: Equatable {
-    /// Strip layout + Post Preview carousel + Alt Text editor.
+/// The three modes the gallery editor can be in. Owned by `PhotoEditor` as
+/// `@State` and surfaced via a segmented `Picker` in the section header.
+enum EditorMode: Equatable, CaseIterable {
+    /// Strip layout + Post Preview carousel.
     case preview
     /// 3-column reorder grid.
     case reorder
+    /// Scrollable list of photos with inline alt-text fields.
+    case captions
 
-    var toggled: EditorMode {
-        self == .preview ? .reorder : .preview
-    }
-
-    /// SF Symbol shown in the trailing header button while in `self`. Always
-    /// the icon of the *destination* mode (button is a verb, not a noun).
-    var destinationIcon: String {
-        toggled == .reorder ? "shuffle" : "magnifyingglass"
-    }
-
-    /// Label shown in the trailing header button while in `self`. Always the
-    /// destination mode's label, for the same reason as `destinationIcon`.
-    var destinationLabel: String {
-        toggled == .reorder ? "Reorder" : "Preview"
-    }
-
-    /// Edge the destination label slides in from. "Reorder" drops in from the
-    /// top (form expands DOWN into the grid). "Preview" rises in from the
-    /// bottom (strip rises back UP into preview). Encoded on the destination
-    /// mode itself so the header view doesn't need to special-case strings.
-    var destinationSlideEdge: Edge {
-        toggled == .reorder ? .top : .bottom
+    var label: String {
+        switch self {
+        case .preview: "Preview"
+        case .reorder: "Reorder"
+        case .captions: "Captions"
+        }
     }
 }
 
@@ -84,15 +60,20 @@ struct CellGeometry: Equatable {
             photoAspect >= 1
                 ? CGSize(width: maskSide, height: maskSide / photoAspect)
                 : CGSize(width: maskSide * photoAspect, height: maskSide)
+        case .captions:
+            // Captions list uses the same scaledToFill rule as preview so
+            // small row thumbnails fill their square without letterboxing.
+            photoAspect >= 1
+                ? CGSize(width: maskSide * photoAspect, height: maskSide)
+                : CGSize(width: maskSide, height: maskSide / photoAspect)
         }
     }
 
-    /// Corner radius applied to the mask. Strip cells get 8pt rounded corners
-    /// (matches the prior strip aesthetic), grid cells get a sharp square so
-    /// the photo's edges aren't pinched. The cell uses this value directly so
-    /// it animates smoothly across the morph alongside `maskSide`.
+    /// Corner radius applied to the mask. Strip and captions cells get 8pt
+    /// rounded corners; grid cells get a sharp square so the full photo is
+    /// visible without a pinched edge.
     var maskCornerRadius: CGFloat {
-        mode == .preview ? 8 : 0
+        mode == .reorder ? 0 : 8
     }
 }
 
@@ -112,14 +93,12 @@ struct PhotoEditor: View {
     /// strip + carousel are visible when a gallery first appears.
     @State private var mode: EditorMode = .preview
     /// True from the moment the user taps the header button until the
-    /// withAnimation completion fires. Drives three things in concert:
+    /// withAnimation completion fires. Drives two things in concert:
     /// (1) cells hide their X buttons so they don't pop in mid-morph,
     /// (2) the Post Preview carousel section stays gone for the full duration
     ///     of the move (instead of popping back in the instant mode flips back
-    ///     to .preview), and
-    /// (3) the Alt text editor section stays gone for the full duration too,
-    ///     for the same reason.
-    /// All three settle simultaneously when the animation completes.
+    ///     to .preview).
+    /// Both settle simultaneously when the animation completes.
     @State private var isAnimatingMode = false
     @State private var showingCarouselAlt = false
     /// Shared namespace for the strip↔grid matched-geometry transition. The
@@ -145,6 +124,26 @@ struct PhotoEditor: View {
     private var selectedIndex: Int? {
         guard let id = selectedPhotoID else { return nil }
         return items.firstIndex(where: { $0.id == id })
+    }
+
+    /// Wraps `mode` so the segmented Picker gets the same `isAnimatingMode`
+    /// gating as the old button: gate goes up synchronously at the start of the
+    /// animation and comes back down in the completion handler.
+    private var modeBinding: Binding<EditorMode> {
+        Binding(
+            get: { mode },
+            set: { newMode in
+                guard newMode != mode else { return }
+                withAnimation(.smooth) {
+                    isAnimatingMode = true
+                    mode = newMode
+                } completion: {
+                    withAnimation(.smooth) {
+                        isAnimatingMode = false
+                    }
+                }
+            }
+        )
     }
 
     var body: some View {
@@ -193,65 +192,13 @@ struct PhotoEditor: View {
             .listRowInsets(EdgeInsets())
             .listRowSeparator(.hidden)
         } header: {
-            // The section title stays "Photos" in both modes. The only mode
-            // affordance is the trailing button, which shows the icon + label
-            // of the *destination* mode — i.e. while in .preview the button
-            // reads "Reorder" with the shuffle icon (tap it to drop into the
-            // grid), and while in .reorder it reads "Preview" with the
-            // magnifyingglass icon (tap it to rise back into the carousel).
-            //
-            // The icon morphs via .contentTransition(.symbolEffect(.replace))
-            // so SwiftUI handles the SF Symbol cross-fade. The label slides
-            // VERTICALLY: "Reorder" enters from the top edge (mirroring the
-            // form expanding DOWN into reorder), "Preview" enters from the
-            // bottom edge (mirroring the strip rising back UP). Each label's
-            // slide direction is encoded on EditorMode itself so the view
-            // can't get the metaphor wrong.
-            HStack {
-                Text("Photos")
-                Spacer()
-                Button {
-                    // Flip the gate FIRST (synchronous, outside any Task or
-                    // animation closure) so the cells reach their hide-X
-                    // state on the same render pass that begins the matched-
-                    // geometry morph. The completion handler fires once the
-                    // .smooth animation has fully settled, which is when the
-                    // carousel + alt-text sections are allowed to come back.
-                    withAnimation(.smooth) {
-                        isAnimatingMode = true
-                        mode = mode.toggled
-                    } completion: {
-                        withAnimation(.smooth) {
-                            isAnimatingMode = false
-                        }
-                    }
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: mode.destinationIcon)
-                            .contentTransition(.symbolEffect(.replace))
-
-                        // ZStack with conditional content so the inserting
-                        // and removing labels can co-exist briefly during
-                        // the slide. .clipShape(Rectangle()) on the outer
-                        // chain keeps the slide from spilling outside the
-                        // header row.
-                        ZStack {
-                            Text(mode.destinationLabel)
-                                .id(mode)
-                                .transition(.move(edge: mode.destinationSlideEdge)
-                                    .combined(with: .opacity))
-                        }
-                    }
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Color.accentColor)
-                    .frame(minHeight: 28)
-                    .clipShape(Rectangle())
-                    .contentShape(Rectangle())
+            Picker("Mode", selection: modeBinding) {
+                ForEach(EditorMode.allCases, id: \.self) { m in
+                    Text(m.label).tag(m)
                 }
-                .buttonStyle(.plain)
-                .disabled(isAnimatingMode)
-                .accessibilityLabel("Switch to \(mode.destinationLabel) mode")
             }
+            .pickerStyle(.segmented)
+            .disabled(isAnimatingMode)
         }
 
         // MARK: Post Preview section (carousel + EXIF) — preview mode only
