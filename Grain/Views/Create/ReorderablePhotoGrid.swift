@@ -8,6 +8,15 @@ import SwiftUI
 struct ReorderablePhotoGrid: View {
     @Binding var items: [PhotoItem]
     @Binding var selectedPhotoID: UUID?
+    /// Hoisted up to CreateGalleryView so the Form can apply .scrollDisabled when
+    /// a cell is picked up. Set to true in beginDrag, false in resetDragState.
+    /// Deliberately gated on the picked-up state, NOT on the 0.18s arming window —
+    /// we don't want scroll to hitch during the "maybe a tap" period.
+    @Binding var isReordering: Bool
+    /// Shared matched-geometry namespace for the photo view inside each cell.
+    /// Passed down so strip and grid renderings of the same photo share geometry
+    /// IDs — prep for the future strip↔grid transition.
+    var matchedNamespace: Namespace.ID?
 
     @State private var draggedID: UUID?
     @State private var dragStartIndex: Int?
@@ -33,58 +42,72 @@ struct ReorderablePhotoGrid: View {
         return total / CGFloat(columnCount)
     }
 
-    /// Slot height is driven by the *most-portrait* photo in the gallery (the one
-    /// with the smallest W/H ratio). At slot width, that photo's natural-aspect height
-    /// is `cellWidth / minAspect`, which becomes the slot height for every cell.
-    /// Effect: the most portrait photo fills its slot exactly; every other photo is
-    /// aspect-fit (letterboxed top/bottom) inside the same uniform slot. This mirrors
-    /// the carousel's per-photo size scaled down by `cellWidth / carouselWidth`, since
-    /// the grid container width ≈ the carousel width.
-    private var cellHeight: CGFloat {
-        let aspects = items.map { item -> CGFloat in
-            let w = item.thumbnail.size.width
-            let h = item.thumbnail.size.height
-            return h > 0 ? w / h : 1
+    /// Each cell sizes itself to its photo's natural aspect at column width, so
+    /// rows have variable heights. For the drag-stride calculation we need a
+    /// single "how far is the next row?" number — we use the average actual row
+    /// height (sum of each row's max cell height, divided by row count). Close
+    /// enough for reorder snapping without per-row hit-testing state. Not exact
+    /// for heterogeneous galleries; good enough to feel right until we iterate.
+    private var averageRowHeight: CGFloat {
+        guard cellWidth > 0, !items.isEmpty else { return cellWidth }
+        var rowHeights: [CGFloat] = []
+        var i = 0
+        while i < items.count {
+            let rowEnd = min(i + columnCount, items.count)
+            var rowMax: CGFloat = 0
+            for j in i ..< rowEnd {
+                let w = items[j].thumbnail.size.width
+                let h = items[j].thumbnail.size.height
+                guard h > 0, w > 0 else { continue }
+                let cellH = cellWidth * h / w
+                rowMax = max(rowMax, cellH)
+            }
+            if rowMax > 0 {
+                rowHeights.append(rowMax)
+            }
+            i = rowEnd
         }
-        let minAspect = aspects.min() ?? 1
-        // Clamp the minimum aspect so we don't end up with absurdly tall slots when
-        // someone uploads an extreme panorama portrait. 0.5 (2:4 vertical) is a sane
-        // floor — taller than that and we just letterbox the offender.
-        let safeMinAspect = max(minAspect, 0.5)
-        return cellWidth / safeMinAspect
+        guard !rowHeights.isEmpty else { return cellWidth }
+        return rowHeights.reduce(0, +) / CGFloat(rowHeights.count)
     }
 
     private var stride: CGSize {
-        CGSize(width: cellWidth + spacing, height: cellHeight + spacing)
+        CGSize(width: cellWidth + spacing, height: averageRowHeight + spacing)
     }
 
     var body: some View {
         LazyVGrid(columns: columns, spacing: spacing) {
-            ForEach(items) { item in
+            // ForEach($items) gives us a Binding<PhotoItem> per-id directly, with no
+            // unsafe `items[0]` fallback. Necessary because the previous bindingFor
+            // helper crashes when items briefly becomes empty during a delete.
+            ForEach($items) { $item in
+                let id = item.id
                 PhotoThumbnailCell(
-                    item: bindingFor(itemID: item.id),
-                    mode: .slot(CGSize(width: cellWidth, height: cellHeight)),
-                    isSelected: selectedPhotoID == item.id,
+                    item: $item,
+                    mode: .grid,
+                    isSelected: selectedPhotoID == id,
+                    isDragging: draggedID == id,
                     // All Xs always visible — z-order on the dragged cell handles
                     // the "X is below the picked-up photo" effect via covering.
                     hideDelete: false,
+                    matchedNamespace: matchedNamespace,
                     onTap: {
-                        guard draggedID == nil else { return }
-                        selectedPhotoID = item.id
+                        guard draggedID != id else { return }
+                        selectedPhotoID = id
                     },
-                    onDelete: { handleDelete(item: item) }
+                    onDelete: { handleDelete(itemID: id) }
                 )
-                .id(item.id)
+                .id(id)
                 .offset(slotShift(for: item))
                 .geometryGroup()
-                .zIndex(draggedID == item.id ? 1 : 0)
+                .zIndex(draggedID == id ? 1 : 0)
                 // UIKit-backed long-press-drag (see ReorderRecognizer). The
                 // SwiftUI .simultaneousGesture(LongPress.sequenced(Drag)) we used
                 // before silently broke vertical Form scroll AND inner taps on
                 // real hardware.
                 .gesture(
                     ReorderRecognizer { phase, translation in
-                        handleReorder(phase: phase, translation: translation, item: item)
+                        handleReorder(phase: phase, translation: translation, itemID: id)
                     }
                 )
             }
@@ -140,11 +163,11 @@ struct ReorderablePhotoGrid: View {
     private func handleReorder(
         phase: ReorderRecognizer.Phase,
         translation: CGSize,
-        item: PhotoItem
+        itemID: UUID
     ) {
         switch phase {
         case .began:
-            beginDrag(item: item)
+            beginDrag(itemID: itemID)
         case .changed:
             handleDragChanged(translation: translation)
         case .ended, .cancelled:
@@ -152,13 +175,14 @@ struct ReorderablePhotoGrid: View {
         }
     }
 
-    private func beginDrag(item: PhotoItem) {
+    private func beginDrag(itemID: UUID) {
         guard draggedID == nil,
-              let idx = items.firstIndex(where: { $0.id == item.id })
+              let idx = items.firstIndex(where: { $0.id == itemID })
         else { return }
-        draggedID = item.id
+        draggedID = itemID
         dragStartIndex = idx
         dragCurrentIndex = idx
+        isReordering = true
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     }
 
@@ -215,12 +239,12 @@ struct ReorderablePhotoGrid: View {
         draggedID = nil
         dragStartIndex = nil
         dragCurrentIndex = nil
+        isReordering = false
     }
 
-    private func handleDelete(item: PhotoItem) {
-        let removedID = item.id
-        if selectedPhotoID == removedID,
-           let removedIdx = items.firstIndex(where: { $0.id == removedID })
+    private func handleDelete(itemID: UUID) {
+        if selectedPhotoID == itemID,
+           let removedIdx = items.firstIndex(where: { $0.id == itemID })
         {
             if removedIdx > 0 {
                 selectedPhotoID = items[removedIdx - 1].id
@@ -230,26 +254,20 @@ struct ReorderablePhotoGrid: View {
                 selectedPhotoID = nil
             }
         }
-        items.removeAll { $0.id == removedID }
-    }
-
-    private func bindingFor(itemID: UUID) -> Binding<PhotoItem> {
-        Binding(
-            get: { items.first(where: { $0.id == itemID }) ?? items[0] },
-            set: { newValue in
-                if let idx = items.firstIndex(where: { $0.id == itemID }) {
-                    items[idx] = newValue
-                }
-            }
-        )
+        items.removeAll { $0.id == itemID }
     }
 }
 
 #Preview {
     @Previewable @State var state: [PhotoItem] = PreviewData.photoItems
     @Previewable @State var selected: UUID?
+    @Previewable @State var reordering = false
     ScrollView {
-        ReorderablePhotoGrid(items: $state, selectedPhotoID: $selected)
+        ReorderablePhotoGrid(
+            items: $state,
+            selectedPhotoID: $selected,
+            isReordering: $reordering
+        )
     }
     .onAppear { selected = state.first?.id }
     .preferredColorScheme(.dark)

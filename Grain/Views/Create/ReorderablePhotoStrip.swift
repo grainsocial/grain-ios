@@ -29,6 +29,14 @@ private extension AnyTransition {
 struct ReorderablePhotoStrip: View {
     @Binding var items: [PhotoItem]
     @Binding var selectedPhotoID: UUID?
+    /// Hoisted up to CreateGalleryView so the Form can apply .scrollDisabled when
+    /// a cell is picked up. Set to true in beginDrag, false in resetDragState.
+    /// Deliberately gated on the picked-up state, NOT on the 0.18s arming window.
+    @Binding var isReordering: Bool
+    /// Shared matched-geometry namespace for the photo view inside each cell. Passed
+    /// down to PhotoThumbnailCell so the strip and grid views of the same photo
+    /// share geometry IDs — prep for the eventual strip↔grid transition.
+    var matchedNamespace: Namespace.ID?
     var onTapped: ((UUID) -> Void)?
 
     // Drag state — visual only. items[] is mutated exactly once on release.
@@ -59,40 +67,45 @@ struct ReorderablePhotoStrip: View {
         ScrollViewReader { proxy in
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: spacing) {
-                    ForEach(items) { item in
+                    // ForEach($items) for safe per-id Bindings — avoids the
+                    // bindingFor `items[0]` crash when the array is briefly empty
+                    // mid-delete.
+                    ForEach($items) { $item in
+                        let id = item.id
                         PhotoThumbnailCell(
-                            item: bindingFor(itemID: item.id),
+                            item: $item,
                             mode: .square(thumbSize),
-                            isSelected: selectedPhotoID == item.id,
+                            isSelected: selectedPhotoID == id,
+                            isDragging: draggedID == id,
                             // All Xs always visible. The dragged cell's zIndex(1)
                             // visually covers other cells (and their Xs) when
                             // overlapping; that's the "Xs are below the picked-up
                             // photo" effect, achieved via z-order, not visibility.
                             hideDelete: false,
+                            matchedNamespace: matchedNamespace,
                             onTap: {
-                                guard draggedID == nil else { return }
-                                onTapped?(item.id)
-                                selectedPhotoID = item.id
+                                guard draggedID != id else { return }
+                                onTapped?(id)
+                                selectedPhotoID = id
                             },
-                            onDelete: { handleDelete(item: item) }
+                            onDelete: { handleDelete(itemID: id) }
                         )
-                        .id(item.id)
+                        .id(id)
                         .offset(x: xOffset(for: item))
                         .geometryGroup()
-                        .zIndex(draggedID == item.id ? 1 : 0)
+                        .zIndex(draggedID == id ? 1 : 0)
                         .transition(.walletRemove)
                         // UIKit-backed long-press-drag recognizer (ReorderRecognizer).
                         // SwiftUI's LongPressGesture.sequenced(DragGesture) breaks
                         // scroll AND inner taps on real hardware even with
                         // .simultaneousGesture; the UIKit recognizer cooperates
-                        // properly because it sets cancelsTouchesInView=false and
-                        // implements shouldRecognizeSimultaneouslyWith.
+                        // properly via its UIGestureRecognizerDelegate.
                         .gesture(
                             ReorderRecognizer { phase, translation in
                                 handleReorder(
                                     phase: phase,
                                     translation: translation,
-                                    item: item,
+                                    itemID: id,
                                     proxy: proxy
                                 )
                             }
@@ -104,6 +117,11 @@ struct ReorderablePhotoStrip: View {
                 .padding(.horizontal, horizontalPadding)
             }
             .scrollClipDisabled()
+            // Lock user-driven horizontal scroll while a cell is picked up.
+            // SwiftUI's .scrollDisabled gates USER gestures only — programmatic
+            // proxy.scrollTo(_, anchor:) still works, so autoScrollIfNeeded
+            // keeps pushing the scroll forward as the finger nears an edge.
+            .scrollDisabled(isReordering)
             .frame(height: thumbSize + verticalPadding * 2)
             .onScrollGeometryChange(for: ScrollGeometry.self, of: { $0 }) { _, geo in
                 let newOffset = geo.contentOffset.x
@@ -132,12 +150,12 @@ struct ReorderablePhotoStrip: View {
     private func handleReorder(
         phase: ReorderRecognizer.Phase,
         translation: CGSize,
-        item: PhotoItem,
+        itemID: UUID,
         proxy: ScrollViewProxy
     ) {
         switch phase {
         case .began:
-            beginDrag(item: item)
+            beginDrag(itemID: itemID)
         case .changed:
             handleDragChanged(translationX: translation.width, proxy: proxy)
         case .ended, .cancelled:
@@ -167,13 +185,14 @@ struct ReorderablePhotoStrip: View {
         return 0
     }
 
-    private func beginDrag(item: PhotoItem) {
+    private func beginDrag(itemID: UUID) {
         guard draggedID == nil,
-              let idx = items.firstIndex(where: { $0.id == item.id })
+              let idx = items.firstIndex(where: { $0.id == itemID })
         else { return }
-        draggedID = item.id
+        draggedID = itemID
         dragStartIndex = idx
         dragCurrentIndex = idx
+        isReordering = true
         // Safety: sync lastScrollOffsetX to the current scroll position so the
         // first .onScrollGeometryChange delta during this drag is 0, not a stale
         // value carried over from before the drag started.
@@ -218,10 +237,12 @@ struct ReorderablePhotoStrip: View {
               let start = dragStartIndex,
               let current = dragCurrentIndex else { return }
 
-        // Cell center in viewport coords. naturalX is the cell's left edge in
-        // content coords; subtracting scrollOffsetX brings it to viewport coords;
-        // adding dragOffsetX accounts for the live drag, then half cellWidth gives
-        // the center.
+        // Cell center in viewport coords. naturalX is the dragged cell's left edge
+        // in content coords (`cellWidth` = thumbSize + spacing is the stride between
+        // consecutive cells, so `n * cellWidth` gets to the left edge of cell n).
+        // Subtract scrollOffsetX to convert content → viewport coords, add
+        // dragOffsetX for the live drag translation, then + thumbSize/2 (NOT
+        // cellWidth/2) for the photo center — the spacing is empty gap, not photo.
         let naturalX = horizontalPadding + CGFloat(start) * cellWidth
         let cellCenterViewportX = naturalX - scrollOffsetX + dragOffsetX + thumbSize / 2
 
@@ -285,16 +306,16 @@ struct ReorderablePhotoStrip: View {
         draggedID = nil
         dragStartIndex = nil
         dragCurrentIndex = nil
+        isReordering = false
     }
 
     // MARK: - Delete logic
 
     /// When deleting the selected photo: prefer the previous index, fall back to next,
     /// fall back to nil. When deleting a non-selected photo: leave selection unchanged.
-    private func handleDelete(item: PhotoItem) {
-        let removedID = item.id
-        if selectedPhotoID == removedID,
-           let removedIdx = items.firstIndex(where: { $0.id == removedID })
+    private func handleDelete(itemID: UUID) {
+        if selectedPhotoID == itemID,
+           let removedIdx = items.firstIndex(where: { $0.id == itemID })
         {
             if removedIdx > 0 {
                 selectedPhotoID = items[removedIdx - 1].id
@@ -304,26 +325,20 @@ struct ReorderablePhotoStrip: View {
                 selectedPhotoID = nil
             }
         }
-        items.removeAll { $0.id == removedID }
-    }
-
-    private func bindingFor(itemID: UUID) -> Binding<PhotoItem> {
-        Binding(
-            get: { items.first(where: { $0.id == itemID }) ?? items[0] },
-            set: { newValue in
-                if let idx = items.firstIndex(where: { $0.id == itemID }) {
-                    items[idx] = newValue
-                }
-            }
-        )
+        items.removeAll { $0.id == itemID }
     }
 }
 
 #Preview {
     @Previewable @State var state: [PhotoItem] = PreviewData.photoItems
     @Previewable @State var selected: UUID?
-    ReorderablePhotoStrip(items: $state, selectedPhotoID: $selected)
-        .padding()
-        .onAppear { selected = state.first?.id }
-        .preferredColorScheme(.dark)
+    @Previewable @State var reordering = false
+    ReorderablePhotoStrip(
+        items: $state,
+        selectedPhotoID: $selected,
+        isReordering: $reordering
+    )
+    .padding()
+    .onAppear { selected = state.first?.id }
+    .preferredColorScheme(.dark)
 }

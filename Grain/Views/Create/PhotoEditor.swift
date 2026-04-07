@@ -3,10 +3,20 @@ import SwiftUI
 struct PhotoEditor: View {
     @Binding var items: [PhotoItem]
     @Binding var selectedPhotoID: UUID?
+    /// True while a cell is in the picked-up state (between long-press-fires and
+    /// touch-release). The parent Form uses this to drive .scrollDisabled so that
+    /// vertical scroll is locked only during the actual drag — not during the
+    /// 0.18s arming window that precedes it.
+    @Binding var isReordering: Bool
     let sendExif: Bool
 
     @State private var isExpanded = false
     @State private var showingCarouselAlt = false
+    /// Shared namespace for the future strip↔grid matched-geometry transition. The
+    /// namespace itself is declared once at the editor level and passed to both
+    /// PhotoThumbnailCell callsites so their photo views share stable geometry IDs
+    /// across the isExpanded toggle.
+    @Namespace private var photoNamespace
 
     /// LRU preview cache. The carousel uses these instead of `item.thumbnail` (which
     /// is downsized to 150pt for the strip/grid and looks blurry full-screen). Cache
@@ -34,12 +44,16 @@ struct PhotoEditor: View {
                 if isExpanded {
                     ReorderablePhotoGrid(
                         items: $items,
-                        selectedPhotoID: $selectedPhotoID
+                        selectedPhotoID: $selectedPhotoID,
+                        isReordering: $isReordering,
+                        matchedNamespace: photoNamespace
                     )
                 } else {
                     ReorderablePhotoStrip(
                         items: $items,
-                        selectedPhotoID: $selectedPhotoID
+                        selectedPhotoID: $selectedPhotoID,
+                        isReordering: $isReordering,
+                        matchedNamespace: photoNamespace
                     )
                 }
             }
@@ -204,6 +218,11 @@ struct PhotoEditor: View {
             await MainActor.run {
                 loadingPreviewIDs.remove(id)
                 guard let image else { return }
+                // Bail if the item was deleted while we were loading.
+                guard items.contains(where: { $0.id == id }) else { return }
+                // Move id to the most-recent slot in the LRU. removeAll-then-append
+                // is correct even if the id was somehow already present (it never
+                // double-counts in the order array).
                 previewCache[id] = image
                 previewCacheOrder.removeAll { $0 == id }
                 previewCacheOrder.append(id)
@@ -315,7 +334,12 @@ struct PhotoEditor: View {
     @Previewable @State var selected: UUID?
     @Previewable @State var zoomState = ImageZoomState()
     Form {
-        PhotoEditor(items: $state, selectedPhotoID: $selected, sendExif: true)
+        PhotoEditor(
+            items: $state,
+            selectedPhotoID: $selected,
+            isReordering: .constant(false),
+            sendExif: true
+        )
     }
     .environment(zoomState)
     .modifier(ImageZoomOverlay(zoomState: zoomState))

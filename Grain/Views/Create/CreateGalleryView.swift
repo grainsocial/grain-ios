@@ -29,6 +29,12 @@ struct CreateGalleryView: View {
     @State private var sendExif = true
     @State private var includeLocation = true
     @State private var imageZoomState = ImageZoomState()
+    /// True while a photo is in the picked-up state inside PhotoEditor. Drives
+    /// .scrollDisabled on the Form so the user's drag translation isn't eaten by
+    /// the Form's pan recognizer. Gated on the picked-up state only — the 0.18s
+    /// arming window before pickup still scrolls normally, so tapping on a cell
+    /// feels instant.
+    @State private var isReordering = false
 
     let client: XRPCClient
     var onCreated: (() -> Void)?
@@ -48,6 +54,7 @@ struct CreateGalleryView: View {
             }
             errorSection
         }
+        .scrollDisabled(isReordering)
         .scrollDismissesKeyboard(.interactively)
         .safeAreaInset(edge: .bottom) {
             MentionSuggestionOverlay(state: mentionState) { suggestion in
@@ -90,6 +97,11 @@ struct CreateGalleryView: View {
         }
         .navigationTitle("New Gallery")
         .navigationBarTitleDisplayMode(.inline)
+        // Hiding the back button ALSO disables the interactive pop swipe. We
+        // reuse the same isReordering flag that drives scroll lock so a
+        // finger-near-the-left-edge drag during reorder doesn't accidentally
+        // pop the view. The button reappears the instant the drag releases.
+        .navigationBarBackButtonHidden(isReordering)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -135,6 +147,7 @@ struct CreateGalleryView: View {
             PhotoEditor(
                 items: $photoItems,
                 selectedPhotoID: $selectedPhotoID,
+                isReordering: $isReordering,
                 sendExif: sendExif
             )
         }
@@ -768,6 +781,14 @@ private struct CreateGalleryViewPreview: View {
                     .lineLimit(3 ... 6)
             } header: {
                 Text("Gallery")
+            }
+            Section {
+                PhotoEditor(
+                    items: $photoItems,
+                    selectedPhotoID: $selectedPhotoID,
+                    isReordering: .constant(false),
+                    sendExif: true
+                )
             }
         }
         .navigationTitle("New Gallery")
