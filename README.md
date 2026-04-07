@@ -1,6 +1,6 @@
 # Grain for iOS
 
-A photography community app built on the [AT Protocol](https://atproto.com). Share galleries, discover photographers, and celebrate the craft.
+A photography community built on the [AT Protocol](https://atproto.com). Share your work, follow photographers, and explore galleries with rich camera metadata.
 
 <p float="left">
   <img src="Screenshots/feed.png" width="250" />
@@ -9,17 +9,14 @@ A photography community app built on the [AT Protocol](https://atproto.com). Sha
 
 ## Features
 
-- Photo feed
-- EXIF metadata — camera, lens, aperture, shutter, ISO
-- Multi-photo galleries
+- Feed
+- Galleries
 - Stories
-- Likes & comments
-- Search
+- Camera & EXIF metadata
+- Likes, comments & shares
 - Notifications
-- Follow / unfollow
-- Profile
-- Camera capture
-- Location tagging
+- Search
+- Profiles
 
 ## License
 
@@ -27,4 +24,4 @@ A photography community app built on the [AT Protocol](https://atproto.com). Sha
 
 ---
 
-See [DEVELOPMENT.md](DEVELOPMENT.md) to build and run locally.
+See [DEVELOPMENT.md](DEVELOPMENT.md) to build and run.
