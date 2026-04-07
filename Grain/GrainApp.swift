@@ -12,6 +12,7 @@ struct GrainApp: App {
     }
 
     @UIApplicationDelegateAdaptor private var appDelegate: AppDelegate
+    @Environment(\.scenePhase) private var scenePhase
     @State private var authManager = AuthManager()
     @State private var pushManager = PushManager()
     @State private var storyStatusCache = StoryStatusCache()
@@ -51,6 +52,11 @@ struct GrainApp: App {
             .onOpenURL { url in
                 if let deepLink = DeepLink.from(url: url) {
                     pendingDeepLink = deepLink
+                }
+            }
+            .onChange(of: scenePhase) {
+                if scenePhase == .background {
+                    viewedStoryStorage.cleanup()
                 }
             }
         }

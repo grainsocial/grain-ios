@@ -11,7 +11,6 @@ struct BlueskyPostOptions {
 }
 
 enum BlueskyPost {
-
     /// Create a cross-post to Bluesky with images, location, and description.
     /// Mirrors the web client's `createBskyPost()` in `bsky-post.ts`.
     static func create(
@@ -43,15 +42,15 @@ enum BlueskyPost {
                 "$type": AnyCodable(img.blob.type ?? "blob"),
                 "ref": AnyCodable(["$link": AnyCodable(img.blob.ref?.link ?? "")] as [String: AnyCodable]),
                 "mimeType": AnyCodable(img.blob.mimeType ?? "image/jpeg"),
-                "size": AnyCodable(img.blob.size ?? 0)
+                "size": AnyCodable(img.blob.size ?? 0),
             ]
             imageEmbeds.append([
                 "image": AnyCodable(blobDict),
                 "alt": AnyCodable(img.alt),
                 "aspectRatio": AnyCodable([
                     "width": AnyCodable(img.width),
-                    "height": AnyCodable(img.height)
-                ] as [String: AnyCodable])
+                    "height": AnyCodable(img.height),
+                ] as [String: AnyCodable]),
             ])
             logger.info("  image blob: type=\(img.blob.type ?? "nil"), ref=\(img.blob.ref?.link ?? "nil"), size=\(img.blob.size ?? 0)")
         }
@@ -61,27 +60,27 @@ enum BlueskyPost {
         var record: [String: AnyCodable] = [
             "text": AnyCodable(postText),
             "tags": AnyCodable(["grainsocial"] as [String]),
-            "createdAt": AnyCodable(DateFormatting.nowISO())
+            "createdAt": AnyCodable(DateFormatting.nowISO()),
         ]
 
         if !facets.isEmpty {
             let facetDicts: [[String: AnyCodable]] = facets.map { facet in
                 let featureDicts: [[String: AnyCodable]] = facet.features.map { feature in
                     switch feature {
-                    case .link(let uri):
-                        return ["$type": AnyCodable("app.bsky.richtext.facet#link"), "uri": AnyCodable(uri)]
-                    case .mention(let did):
-                        return ["$type": AnyCodable("app.bsky.richtext.facet#mention"), "did": AnyCodable(did)]
-                    case .tag(let tag):
-                        return ["$type": AnyCodable("app.bsky.richtext.facet#tag"), "tag": AnyCodable(tag)]
+                    case let .link(uri):
+                        ["$type": AnyCodable("app.bsky.richtext.facet#link"), "uri": AnyCodable(uri)]
+                    case let .mention(did):
+                        ["$type": AnyCodable("app.bsky.richtext.facet#mention"), "did": AnyCodable(did)]
+                    case let .tag(tag):
+                        ["$type": AnyCodable("app.bsky.richtext.facet#tag"), "tag": AnyCodable(tag)]
                     }
                 }
                 return [
                     "index": AnyCodable([
                         "byteStart": AnyCodable(facet.index.byteStart),
-                        "byteEnd": AnyCodable(facet.index.byteEnd)
+                        "byteEnd": AnyCodable(facet.index.byteEnd),
                     ] as [String: AnyCodable]),
-                    "features": AnyCodable(featureDicts as [[String: AnyCodable]])
+                    "features": AnyCodable(featureDicts as [[String: AnyCodable]]),
                 ]
             }
             record["facets"] = AnyCodable(facetDicts as [[String: AnyCodable]])
@@ -90,13 +89,14 @@ enum BlueskyPost {
         if !imageEmbeds.isEmpty {
             record["embed"] = AnyCodable([
                 "$type": AnyCodable("app.bsky.embed.images"),
-                "images": AnyCodable(imageEmbeds as [[String: AnyCodable]])
+                "images": AnyCodable(imageEmbeds as [[String: AnyCodable]]),
             ] as [String: AnyCodable])
         }
 
         // 5. Log the full JSON for debugging
         if let jsonData = try? JSONEncoder().encode(AnyCodable(record)),
-           let jsonStr = String(data: jsonData, encoding: .utf8) {
+           let jsonStr = String(data: jsonData, encoding: .utf8)
+        {
             logger.info("  record JSON: \(jsonStr)")
         }
 
@@ -159,7 +159,7 @@ enum BlueskyPost {
                 truncated = String(truncated.prefix(max(0, maxDescGraphemes - 1))) + "…"
             }
             // Truncate further to fit byte limit
-            while truncated.utf8.count > maxDescBytes && !truncated.isEmpty {
+            while truncated.utf8.count > maxDescBytes, !truncated.isEmpty {
                 truncated = String(truncated.dropLast(2)) + "…"
             }
             if !truncated.isEmpty {
@@ -192,12 +192,16 @@ enum BlueskyPost {
         }
 
         func isRangeClaimed(_ start: Int, _ end: Int) -> Bool {
-            for i in start..<end where claimed.contains(i) { return true }
+            for i in start ..< end where claimed.contains(i) {
+                return true
+            }
             return false
         }
 
         func claimRange(_ start: Int, _ end: Int) {
-            for i in start..<end { claimed.insert(i) }
+            for i in start ..< end {
+                claimed.insert(i)
+            }
         }
 
         let nsText = text as NSString
@@ -262,14 +266,15 @@ enum BlueskyPost {
     /// Same as web's `resolveHandle()` in `bsky-post.ts`.
     private static func resolveHandle(_ handle: String) async -> String? {
         guard let encoded = handle.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let url = URL(string: "https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle?handle=\(encoded)") else {
+              let url = URL(string: "https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle?handle=\(encoded)")
+        else {
             return nil
         }
 
         do {
             let (data, response) = try await URLSession.shared.data(from: url)
             guard let httpResponse = response as? HTTPURLResponse,
-                  (200...299).contains(httpResponse.statusCode) else { return nil }
+                  (200 ... 299).contains(httpResponse.statusCode) else { return nil }
             let json = try JSONDecoder().decode([String: String].self, from: data)
             return json["did"]
         } catch {

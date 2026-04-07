@@ -121,18 +121,54 @@ struct CreateGalleryView: View {
             } label: {
                 Label("Take Photo", systemImage: "camera")
             }
+
+            if !photoItems.isEmpty {
+                ReorderablePhotoStrip(items: $photoItems, selectedPhotoID: $selectedPhotoID)
+                Label("Touch and hold a photo to reorder", systemImage: "hand.draw")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
     @ViewBuilder
     private var photoEditorSection: some View {
         if !photoItems.isEmpty {
-            Section {
-                PhotoEditor(
-                    items: $photoItems,
-                    selectedPhotoID: $selectedPhotoID,
-                    sendExif: sendExif
-                )
+            Section("Alt Text") {
+                Text("Alt text describes images for blind and low-vision users, and helps give context to everyone.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                ForEach($photoItems) { $item in
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(alignment: .top, spacing: 12) {
+                            Image(uiImage: item.thumbnail)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 60)
+
+                            TextField("Describe this photo...", text: $item.alt, axis: .vertical)
+                                .font(.subheadline)
+                                .lineLimit(2 ... 4)
+                        }
+                        if let exif = item.exifSummary {
+                            VStack(alignment: .leading, spacing: 2) {
+                                if let camera = exif.camera {
+                                    Text(camera).font(.caption)
+                                }
+                                HStack {
+                                    Text([exif.shutterSpeed, exif.iso].compactMap(\.self).joined(separator: "  "))
+                                        .font(.caption)
+                                    Spacer()
+                                    Text([exif.focalLength, exif.aperture].compactMap(\.self).joined(separator: "  "))
+                                        .font(.caption)
+                                }
+                            }
+                            .foregroundStyle(sendExif ? .secondary : .tertiary)
+                            .padding(.leading, 72)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
             }
         }
     }
@@ -752,9 +788,6 @@ private struct CreateGalleryViewPreview: View {
                     .lineLimit(3 ... 6)
             } header: {
                 Text("Gallery")
-            }
-            Section {
-                PhotoEditor(items: $photoItems, selectedPhotoID: $selectedPhotoID, sendExif: true)
             }
         }
         .navigationTitle("New Gallery")

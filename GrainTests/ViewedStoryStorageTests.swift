@@ -115,4 +115,30 @@ final class ViewedStoryStorageTests: XCTestCase {
         let stories: [StubStory] = []
         XCTAssertEqual(storage.firstUnviewedIndex(in: stories), 0)
     }
+
+    // MARK: - cleanup
+
+    func testCleanupRemovesOldAuthorEntries() {
+        storage.markViewed(uri: "at://story/old", authorDid: "did:plc:old", createdAt: "2020-01-01T12:00:00.000Z")
+        storage.markViewed(uri: "at://story/new", authorDid: "did:plc:new", createdAt: "2099-01-01T12:00:00.000Z")
+        storage.cleanup()
+        XCTAssertFalse(storage.hasViewedAll(authorDid: "did:plc:old", latestAt: "2020-01-01T12:00:00.000Z"))
+        XCTAssertTrue(storage.hasViewedAll(authorDid: "did:plc:new", latestAt: "2099-01-01T12:00:00.000Z"))
+    }
+
+    func testCleanupPreservesRecentAuthorEntries() {
+        storage.markViewed(uri: "at://story/1", authorDid: "did:plc:alice", createdAt: "2099-06-15T12:00:00.000Z")
+        storage.cleanup()
+        XCTAssertTrue(storage.hasViewedAll(authorDid: "did:plc:alice", latestAt: "2099-06-15T12:00:00.000Z"))
+    }
+
+    func testCleanupCapsViewedUrisWhenOver500() {
+        for i in 0 ..< 600 {
+            storage.markViewed(uri: "at://story/\(i)", authorDid: "did:plc:alice", createdAt: "2099-01-01T12:00:00.000Z")
+        }
+        storage.cleanup()
+        // After cleanup, total viewed URIs should be capped — at least some should no longer be tracked
+        let stillViewedCount = (0 ..< 600).count(where: { storage.isViewed(uri: "at://story/\($0)") })
+        XCTAssertLessThanOrEqual(stillViewedCount, 200)
+    }
 }

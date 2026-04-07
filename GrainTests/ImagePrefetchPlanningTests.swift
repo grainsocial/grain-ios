@@ -162,14 +162,19 @@ final class ImagePrefetchPlanningTests: XCTestCase {
             fourthNextFirstStory: nil
         )
 
-        // High: stories 1, 2 of current + first of next author
-        XCTAssertEqual(urls(from: result.high), [
-            "https://cdn.example.com/full/1.jpg",
-            "https://cdn.example.com/full/2.jpg",
-            "https://cdn.example.com/full/0.jpg", // next author's first
-        ])
+        let highUrls = Set(urls(from: result.high))
 
-        // Normal: stories 3, 4 of current (rest of stack)
+        // High fullsizes: stories 1, 2 of current + first of next author
+        XCTAssertTrue(highUrls.contains("https://cdn.example.com/full/1.jpg"))
+        XCTAssertTrue(highUrls.contains("https://cdn.example.com/full/2.jpg"))
+        XCTAssertTrue(highUrls.contains("https://cdn.example.com/full/0.jpg"))
+
+        // High thumbs: every reachable thumb (current + next author)
+        for i in 0 ..< 5 {
+            XCTAssertTrue(highUrls.contains("https://cdn.example.com/thumb/\(i).jpg"))
+        }
+
+        // Normal: stories 3, 4 of current (rest of stack — fullsize only)
         XCTAssertEqual(urls(from: result.normal), [
             "https://cdn.example.com/full/3.jpg",
             "https://cdn.example.com/full/4.jpg",
@@ -189,8 +194,15 @@ final class ImagePrefetchPlanningTests: XCTestCase {
             fourthNextFirstStory: nil
         )
 
-        // High: only next author's first (no more current stories to prefetch)
-        XCTAssertEqual(urls(from: result.high), ["https://cdn.example.com/full/0.jpg"])
+        let highUrls = Set(urls(from: result.high))
+
+        // High fullsize: only next author's first (no more current stories)
+        XCTAssertTrue(highUrls.contains("https://cdn.example.com/full/0.jpg"))
+        XCTAssertFalse(highUrls.contains("https://cdn.example.com/full/1.jpg"))
+
+        // High thumbs: current + next author thumbs
+        XCTAssertTrue(highUrls.contains("https://cdn.example.com/thumb/0.jpg"))
+        XCTAssertTrue(highUrls.contains("https://cdn.example.com/thumb/1.jpg"))
     }
 
     func testStory_noNextAuthorData_skipsThatTier() {
@@ -205,8 +217,16 @@ final class ImagePrefetchPlanningTests: XCTestCase {
             fourthNextFirstStory: nil
         )
 
-        // High: only current author stories 1, 2
-        XCTAssertEqual(urls(from: result.high).count, 2)
+        let highUrls = Set(urls(from: result.high))
+
+        // High fullsize: only current stories 1, 2 (no next author tier)
+        XCTAssertTrue(highUrls.contains("https://cdn.example.com/full/1.jpg"))
+        XCTAssertTrue(highUrls.contains("https://cdn.example.com/full/2.jpg"))
+        // High thumbs: only current author's thumbs
+        XCTAssertTrue(highUrls.contains("https://cdn.example.com/thumb/0.jpg"))
+        XCTAssertTrue(highUrls.contains("https://cdn.example.com/thumb/1.jpg"))
+        XCTAssertTrue(highUrls.contains("https://cdn.example.com/thumb/2.jpg"))
+
         XCTAssertTrue(result.low.isEmpty)
     }
 
@@ -227,11 +247,23 @@ final class ImagePrefetchPlanningTests: XCTestCase {
             fourthNextFirstStory: fourth
         )
 
-        // High: current story 1 + next author first
-        XCTAssertEqual(urls(from: result.high).count, 2)
-        // Normal: second-next author stories 0, 1
+        let highUrls = Set(urls(from: result.high))
+
+        // High fullsizes: current story 1 + next author first
+        XCTAssertTrue(highUrls.contains("https://cdn.example.com/full/1.jpg"))
+        XCTAssertTrue(highUrls.contains("https://next/f0"))
+        // High thumbs: every reachable thumb at every tier
+        XCTAssertTrue(highUrls.contains("https://cdn.example.com/thumb/0.jpg"))
+        XCTAssertTrue(highUrls.contains("https://cdn.example.com/thumb/1.jpg"))
+        XCTAssertTrue(highUrls.contains("https://next/t0"))
+        XCTAssertTrue(highUrls.contains("https://second/t0"))
+        XCTAssertTrue(highUrls.contains("https://second/t1"))
+        XCTAssertTrue(highUrls.contains("https://third/t0"))
+        XCTAssertTrue(highUrls.contains("https://fourth/t0"))
+
+        // Normal: second-next author stories 0, 1 (fullsize only)
         XCTAssertEqual(urls(from: result.normal).count, 2)
-        // Low: third + fourth author firsts
+        // Low: third + fourth author firsts (fullsize only)
         XCTAssertEqual(urls(from: result.low).count, 2)
     }
 

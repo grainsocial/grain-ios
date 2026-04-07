@@ -4,14 +4,29 @@ import SwiftUI
 struct AvatarView: View {
     let url: String?
     var size: CGFloat = 32
+    /// Set to false to suppress all NukeUI transitions — use when the avatar is inside
+    /// an animated parent (e.g. story parallax pane) so it snaps atomically.
+    var animated: Bool = true
+
+    /// Retains the last successfully loaded image so URL changes don't flash gray.
+    @State private var lastUIImage: UIImage?
 
     var body: some View {
         if let url, let imageURL = URL(string: url) {
             LazyImage(url: imageURL) { state in
-                if let image = state.image {
-                    image.resizable()
+                if let uiImage = state.imageContainer?.image {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .transition(animated ? .opacity : .identity)
+                        .onAppear { lastUIImage = uiImage }
+                } else if let prev = lastUIImage {
+                    // Show previous image while new URL loads — no gray flash
+                    Image(uiImage: prev)
+                        .resizable()
+                        .transition(.identity)
                 } else {
                     fallback
+                        .transition(animated ? .opacity : .identity)
                 }
             }
             .frame(width: size, height: size)

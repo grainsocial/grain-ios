@@ -80,7 +80,7 @@ struct ReportView: View {
 
     private func loadLabels() async {
         do {
-            labelDefs = try await client.describeLabels(auth: await auth.authContext())
+            labelDefs = try await client.describeLabels(auth: auth.authContext())
             if let first = labelDefs.first {
                 selectedLabel = first.identifier
             }
@@ -99,7 +99,7 @@ struct ReportView: View {
                 subjectCid: subjectCid,
                 label: selectedLabel,
                 reason: reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : reason.trimmingCharacters(in: .whitespacesAndNewlines),
-                auth: await auth.authContext()
+                auth: auth.authContext()
             )
             isSubmitted = true
         } catch {

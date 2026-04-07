@@ -92,6 +92,45 @@ private struct DoubleTapHeartView: View {
     }
 }
 
+// MARK: - Subtle like-button particle burst
+
+private struct LikeParticleView: View {
+    let index: Int
+
+    /// Deterministic per slot — no random state stored in parent
+    private static let configs: [(x: CGFloat, y: CGFloat, scale: CGFloat)] = [
+        (x: -15, y: -30, scale: 0.85),
+        (x: -4, y: -38, scale: 1.00),
+        (x: 7, y: -32, scale: 0.90),
+        (x: 17, y: -26, scale: 0.80),
+        (x: 2, y: -43, scale: 0.95),
+    ]
+
+    @State private var scale: CGFloat = 0.3
+    @State private var offset: CGSize = .zero
+    @State private var opacity: Double = 0.9
+
+    var body: some View {
+        let cfg = Self.configs[index]
+        Image(systemName: "heart.fill")
+            .font(.system(size: 10))
+            .foregroundStyle(Color("AccentColor").opacity(0.9))
+            .scaleEffect(scale)
+            .offset(offset)
+            .opacity(opacity)
+            .onAppear {
+                let delay = Double(index) * 0.07
+                withAnimation(.easeOut(duration: 0.55).delay(delay)) {
+                    scale = cfg.scale
+                    offset = CGSize(width: cfg.x, height: cfg.y)
+                }
+                withAnimation(.easeIn(duration: 0.38).delay(delay + 0.32)) {
+                    opacity = 0
+                }
+            }
+    }
+}
+
 struct GalleryCardView: View {
     @Environment(AuthManager.self) private var auth
     @Environment(StoryStatusCache.self) private var storyStatusCache
@@ -105,12 +144,12 @@ struct GalleryCardView: View {
     var onLocationTap: ((String, String) -> Void)?
     var onStoryTap: ((GrainStoryAuthor) -> Void)?
     @State private var isFavoriting = false
+    @State private var likeParticleBursts: [UUID] = []
     @State private var currentPage = 0
     @State private var showingAlt = false
     @State private var hearts: [HeartAnimationState] = []
     @State private var showCopiedToast = false
-    @State private var shareWiggle = false
-    @State private var didLongPressShare = false
+    @State private var shareAnimating = false
     @State private var prefetcher = ImagePrefetcher()
 
     private var isFavorited: Bool {
@@ -220,12 +259,35 @@ struct GalleryCardView: View {
             ZStack(alignment: .bottom) {
                 TabView(selection: $currentPage) {
                     ForEach(Array(photos.enumerated()), id: \.element.id) { index, photo in
-                        ZoomableImage(
-                            url: photo.fullsize,
-                            thumbURL: photo.thumb,
-                            aspectRatio: photo.aspectRatio.ratio,
-                            onDoubleTap: { point in doubleTapLike(at: point) }
-                        )
+                        ZStack {
+                            ZoomableImage(
+                                url: photo.fullsize,
+                                thumbURL: photo.thumb,
+                                aspectRatio: photo.aspectRatio.ratio,
+                                onDoubleTap: { point in doubleTapLike(at: point) }
+                            )
+
+                            // Per-page alt text overlay — lives INSIDE the TabView page so
+                            // it translates with the photo during a swipe instead of
+                            // staying fixed while the photo moves underneath. Wrapping
+                            // grey + text in a single ZStack guarantees they share one
+                            // transition (no out-of-sync fade between them).
+                            if showingAlt, let alt = photo.alt, !alt.isEmpty {
+                                ZStack {
+                                    Color.black.opacity(0.6)
+                                    Text(alt)
+                                        .font(.subheadline)
+                                        .foregroundStyle(.white)
+                                        .multilineTextAlignment(.center)
+                                        .padding(20)
+                                }
+                                .transition(.asymmetric(
+                                    insertion: .opacity.animation(.easeIn(duration: 0.35)),
+                                    removal: .opacity
+                                ))
+                                .allowsHitTesting(false)
+                            }
+                        }
                         .tag(index)
                     }
                 }
@@ -238,7 +300,6 @@ struct GalleryCardView: View {
                 .allowsHitTesting(lr.action != .warnMedia || gallery.labelRevealed)
 
                 pageIndicator(photos: photos, hasPortrait: hasPortrait)
-                altTextOverlay(photos: photos)
                 altButton(photos: photos)
 
                 // Double-tap heart animations
@@ -254,6 +315,13 @@ struct GalleryCardView: View {
                     MediaWarningOverlay(name: lr.name) {
                         withAnimation { gallery.labelRevealed = true }
                     }
+                }
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                let photo = currentPage < photos.count ? photos[currentPage] : nil
+                if let alt = photo?.alt, !alt.isEmpty {
+                    withAnimation(.easeInOut(duration: 0.2)) { showingAlt.toggle() }
                 }
             }
             .frame(height: height)
@@ -298,26 +366,6 @@ struct GalleryCardView: View {
     }
 
     @ViewBuilder
-    private func altTextOverlay(photos: [GrainPhoto]) -> some View {
-        if showingAlt, let alt = photos[currentPage].alt, !alt.isEmpty {
-            Color.black.opacity(0.6)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .onTapGesture {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        showingAlt = false
-                    }
-                }
-            Text(alt)
-                .font(.subheadline)
-                .foregroundStyle(.white)
-                .multilineTextAlignment(.center)
-                .padding(20)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .allowsHitTesting(false)
-        }
-    }
-
-    @ViewBuilder
     private func altButton(photos: [GrainPhoto]) -> some View {
         if let alt = photos[currentPage].alt, !alt.isEmpty {
             VStack {
@@ -346,19 +394,34 @@ struct GalleryCardView: View {
         HStack(spacing: 16) {
             Button {
                 guard !isFavoriting else { return }
-                isFavoriting = true
-                Task {
-                    await toggleFavorite()
-                    isFavoriting = false
-                }
+                if !isFavorited { addParticleBurst() }
+                triggerFavoriteToggle()
             } label: {
                 HStack(spacing: 5) {
                     Image(systemName: isFavorited ? "heart.fill" : "heart")
                         .font(.system(size: 22))
-                    Text("\(gallery.favCount ?? 0)")
+                        .contentTransition(.symbolEffect(.replace.downUp.byLayer, options: .nonRepeating))
+                        .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isFavorited)
+                    ZStack {
+                        let count = gallery.favCount ?? 0
+                        Text(String(repeating: "8", count: max(1, "\(count)".count)))
+                            .hidden()
+                        Text("\(count)")
+                    }
                 }
             }
             .foregroundStyle(isFavorited ? Color("AccentColor") : .secondary)
+            .overlay(alignment: .leading) {
+                ZStack {
+                    ForEach(likeParticleBursts, id: \.self) { _ in
+                        ForEach(0 ..< 5, id: \.self) { i in
+                            LikeParticleView(index: i)
+                        }
+                    }
+                }
+                .offset(x: 11)
+                .allowsHitTesting(false)
+            }
 
             Button {
                 onNavigate()
@@ -374,33 +437,28 @@ struct GalleryCardView: View {
             ShareLink(item: galleryShareURL) {
                 Image(systemName: "paperplane")
                     .font(.system(size: 20))
-                    .rotationEffect(.degrees(shareWiggle ? -15 : 0))
+                    .rotationEffect(.degrees(shareAnimating ? -15 : 0))
                     .animation(
-                        shareWiggle
+                        shareAnimating
                             ? .easeInOut(duration: 0.08).repeatCount(5, autoreverses: true)
                             : .default,
-                        value: shareWiggle
+                        value: shareAnimating
                     )
             }
             .foregroundStyle(.secondary)
-            .disabled(didLongPressShare)
+            .disabled(shareAnimating)
             .simultaneousGesture(
                 LongPressGesture(minimumDuration: 0.5)
                     .onEnded { _ in
-                        didLongPressShare = true
                         UIPasteboard.general.url = galleryShareURL
-                        let generator = UIImpactFeedbackGenerator(style: .medium)
-                        generator.impactOccurred()
-                        shareWiggle = true
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                            shareWiggle = false
-                        }
+                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                        shareAnimating = true
                         showCopiedToast = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                            shareAnimating = false
+                        }
                         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                             showCopiedToast = false
-                        }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                            didLongPressShare = false
                         }
                     }
             )
@@ -408,6 +466,7 @@ struct GalleryCardView: View {
             Spacer()
         }
         .font(.subheadline)
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: gallery.favCount)
         .padding(.horizontal, 12)
         .padding(.top, 12)
         .padding(.bottom, 4)
@@ -467,6 +526,14 @@ struct GalleryCardView: View {
         }
     }
 
+    private func addParticleBurst() {
+        let id = UUID()
+        likeParticleBursts.append(id)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.3) {
+            likeParticleBursts.removeAll { $0 == id }
+        }
+    }
+
     private func prefetchCarousel(photos: [GrainPhoto], page: Int) {
         let input = photos.map { (thumb: $0.thumb, fullsize: $0.fullsize) }
         let plan = ImagePrefetchPlanning.carouselPrefetchRequests(photos: input, currentPage: page)
@@ -475,8 +542,12 @@ struct GalleryCardView: View {
 
     private func doubleTapLike(at point: CGPoint) {
         hearts.append(HeartAnimationState(position: point))
-
+        addParticleBurst()
         guard !isFavorited, !isFavoriting else { return }
+        triggerFavoriteToggle()
+    }
+
+    private func triggerFavoriteToggle() {
         isFavoriting = true
         Task {
             await toggleFavorite()

@@ -9,7 +9,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    DEVELOPMENT_TEAM: 54P9BCDR92
+    DEVELOPMENT_TEAM: ${APPLE_TEAM_ID}
+    PRODUCT_NAME: ${BUNDLE_NAME}
   configs:
     Debug:
       SWIFT_ACTIVE_COMPILATION_CONDITIONS: "DEBUG PRODUCTION_API"
@@ -41,9 +42,9 @@ targets:
     settings:
       base:
         INFOPLIST_FILE: Grain/Info.plist
-        PRODUCT_BUNDLE_IDENTIFIER: social.grain.grain
+        PRODUCT_BUNDLE_IDENTIFIER: ${BUNDLE_ID}
         MARKETING_VERSION: "1.0.0"
-        CURRENT_PROJECT_VERSION: "38"
+        CURRENT_PROJECT_VERSION: "41"
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_ASSET_PATHS: "\"$(SRCROOT)/Grain/Preview Content\""
     dependencies:
@@ -83,3 +84,26 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: Grain
+
+schemes:
+  Grain:
+    build:
+      targets:
+        Grain:
+          - running
+          - testing
+          - profiling
+          - analyzing
+          - archiving
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - GrainTests
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release

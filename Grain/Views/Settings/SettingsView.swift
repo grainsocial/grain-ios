@@ -23,7 +23,7 @@ struct SettingsView: View {
                 }
             }
 
-                Section {
+            Section {
                 Toggle("Include location", isOn: $includeLocation)
                     .onChange(of: includeLocation) {
                         guard hasLoadedPrefs else { return }

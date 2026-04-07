@@ -20,7 +20,7 @@ struct MainTabView: View {
         let color = UIColor(named: "AccentColor")
         let textAttrs: [NSAttributedString.Key: Any] = [.foregroundColor: UIColor.white]
         let appearance = UITabBarAppearance()
-        func apply(_ itemAppearance: UITabBarItemAppearance) {
+        @MainActor func apply(_ itemAppearance: UITabBarItemAppearance) {
             itemAppearance.normal.badgeBackgroundColor = color
             itemAppearance.normal.badgeTextAttributes = textAttrs
             itemAppearance.selected.badgeBackgroundColor = color
