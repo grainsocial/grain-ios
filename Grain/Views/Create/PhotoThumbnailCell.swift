@@ -47,12 +47,13 @@ struct PhotoThumbnailCell: View {
     /// disappear/reappear was jarring, so it now stays visible and rides the
     /// cell's matched-geometry transition along with the photo.
     var hideDelete: Bool = false
+    /// EXIF chip state for the bottom-leading corner overlay. Defaults to
+    /// `.absent` so existing call sites that don't pass the parameter compile
+    /// unchanged and render no chip.
+    var exifState: ExifState = .absent
+    var cameraName: String?
     /// Shared namespace for the strip↔grid matched-geometry transition.
     var matchedNamespace: Namespace.ID?
-    /// Shared namespace for the selection ring. The ring uses matched-geometry
-    /// so it flies between cells when selection changes rather than
-    /// snapping opacity on/off.
-    var selectionNamespace: Namespace.ID?
     let onTap: () -> Void
     let onDelete: () -> Void
 
@@ -68,16 +69,31 @@ struct PhotoThumbnailCell: View {
                 .resizable()
                 .frame(width: geometry.photoSize.width, height: geometry.photoSize.height)
                 .frame(width: geometry.maskSide, height: geometry.maskSide)
-                .clipShape(RoundedRectangle(cornerRadius: geometry.maskCornerRadius))
+                .clipShape(RoundedRectangle(cornerRadius: geometry.maskCornerRadius, style: .continuous))
                 .overlay(alignment: .bottomTrailing) {
                     altPill.opacity(hideDelete ? 0 : 1)
                 }
+                .overlay(alignment: .bottomLeading) {
+                    ExifChip(state: exifState, cameraName: cameraName, compact: true)
+                        .padding(5)
+                        .opacity(hideDelete ? 0 : 1)
+                }
                 .overlay {
-                    if isSelected {
-                        RoundedRectangle(cornerRadius: geometry.maskCornerRadius)
-                            .stroke(Color.accentColor, lineWidth: 2.5)
-                            .modifier(MatchedSelectionModifier(namespace: selectionNamespace))
-                    }
+                    // Selection ring. RoundedRectangle(.continuous) gives
+                    // squircle corners whose stroke weight is visually even
+                    // around the whole ring. Frame expanded by lw so .stroke's
+                    // inner edge lands on the image boundary. Corner radius
+                    // bumped by lw/2 so the inner arc matches the clip.
+                    let lw: CGFloat = 3.0
+                    RoundedRectangle(
+                        cornerRadius: geometry.maskCornerRadius + lw / 2,
+                        style: .continuous
+                    )
+                    .trim(from: 0, to: isSelected ? 1 : 0)
+                    .stroke(Color.accentColor, style: StrokeStyle(lineWidth: lw, lineCap: .round))
+                    .frame(width: geometry.maskSide + lw, height: geometry.maskSide + lw)
+                    .animation(.easeInOut(duration: 0.25), value: isSelected)
+                    .drawingGroup()
                 }
 
             // 2. X button — positioned so its center sits exactly on the
@@ -163,21 +179,6 @@ struct PhotoThumbnailCell: View {
 /// is needed. SwiftUI snapshots the source's bounds at unmount time and
 /// animates the destination from those bounds to its natural bounds inside
 /// the same `withAnimation` that drives the swap.
-/// Applies `matchedGeometryEffect(id: "selectionRing", in: namespace)` when a
-/// namespace is provided. The ring is presence-based (only rendered when the
-/// cell is selected) so SwiftUI sees it leave one cell and appear in another,
-/// animating it between positions with the ambient `withAnimation` context.
-struct MatchedSelectionModifier: ViewModifier {
-    let namespace: Namespace.ID?
-    func body(content: Content) -> some View {
-        if let namespace {
-            content.matchedGeometryEffect(id: "selectionRing", in: namespace)
-        } else {
-            content
-        }
-    }
-}
-
 struct MatchedPhotoModifier: ViewModifier {
     let id: UUID
     let namespace: Namespace.ID?

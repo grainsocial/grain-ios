@@ -174,6 +174,11 @@ struct ZoomableImage: View {
 
     let source: Source
     let aspectRatio: CGFloat
+    /// Higher-resolution image to show in the zoom overlay. When nil, the
+    /// overlay falls back to the same image used for normal display. Pass a
+    /// lazily-loaded hi-res version here so the normal display path uses a
+    /// lighter image while zoom gets more detail if it's ready.
+    var zoomImage: UIImage?
     var onDoubleTap: ((CGPoint) -> Void)?
     @Environment(ImageZoomState.self) private var zoomState: ImageZoomState?
 
@@ -192,9 +197,10 @@ struct ZoomableImage: View {
         self.onDoubleTap = onDoubleTap
     }
 
-    init(localImage: UIImage, aspectRatio: CGFloat, onDoubleTap: ((CGPoint) -> Void)? = nil) {
+    init(localImage: UIImage, aspectRatio: CGFloat, zoomImage: UIImage? = nil, onDoubleTap: ((CGPoint) -> Void)? = nil) {
         source = .local(localImage)
         self.aspectRatio = aspectRatio
+        self.zoomImage = zoomImage
         self.onDoubleTap = onDoubleTap
     }
 
@@ -238,7 +244,9 @@ struct ZoomableImage: View {
                             zoomState.localImage = nil
                         case let .local(image):
                             zoomState.imageURL = ""
-                            zoomState.localImage = image
+                            // Prefer zoomImage (hi-res) if available; fall back to
+                            // the carousel preview already in memory.
+                            zoomState.localImage = zoomImage ?? image
                         }
                         zoomState.aspectRatio = aspectRatio
                         zoomState.anchor = anchor

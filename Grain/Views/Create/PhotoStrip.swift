@@ -38,14 +38,13 @@ struct PhotoStrip: View {
     /// Passed down to PhotoThumbnailCell so the strip and grid views of the same
     /// photo share geometry IDs — prep for the eventual strip↔grid transition.
     var matchedNamespace: Namespace.ID?
-    /// Shared namespace for the selection ring matched-geometry effect.
-    var selectionNamespace: Namespace.ID?
     /// True for the duration of the strip↔grid mode swap. Currently unused
     /// at the cell level (X buttons stay visible during the morph so they
     /// can ride the matched-geometry transition with the cell, per user
     /// feedback that the disappear/reappear was jarring). Kept on the API
     /// for the editor's convenience and in case future work needs it back.
     var isAnimatingMode: Bool = false
+    var sendExif: Bool = true
     var onTapped: ((UUID) -> Void)?
 
     private let thumbSize: CGFloat = 72
@@ -62,6 +61,10 @@ struct PhotoStrip: View {
                     // mid-delete.
                     ForEach($items) { $item in
                         let id = item.id
+                        let exifState: ExifState = {
+                            guard item.exifSummary != nil else { return .absent }
+                            return sendExif ? .active : .inactive
+                        }()
                         PhotoThumbnailCell(
                             item: $item,
                             geometry: CellGeometry(
@@ -70,11 +73,16 @@ struct PhotoStrip: View {
                                 photoAspect: aspect(of: item)
                             ),
                             isSelected: selectedPhotoID == id,
+                            exifState: exifState,
+                            cameraName: item.exifSummary?.camera,
                             matchedNamespace: matchedNamespace,
-                            selectionNamespace: selectionNamespace,
                             onTap: {
                                 onTapped?(id)
-                                withAnimation(.snappy) { selectedPhotoID = id }
+                                // No withAnimation here — the selection ring animates
+                                // via its own .animation(_:value:) modifier and the
+                                // scroll is handled by onChange below. Two concurrent
+                                // .snappy contexts on the same layout were competing.
+                                selectedPhotoID = id
                             },
                             onDelete: { handleDelete(itemID: id) }
                         )
@@ -82,13 +90,31 @@ struct PhotoStrip: View {
                         .transition(.walletRemove)
                     }
                 }
-                .padding(.top, verticalPadding)
-                .padding(.bottom, verticalPadding)
-                .padding(.horizontal, horizontalPadding)
+                .padding(.vertical, verticalPadding)
+                // Horizontal space lives in contentMargins (not HStack padding) so
+                // the scroll view enforces it as a hard boundary — the first and last
+                // photos can never be dragged flush to the edge. With plain .padding
+                // the leading gap is part of the content; UIScrollView will happily
+                // scroll past it to contentOffset = horizontalPadding, eating the
+                // margin. contentMargins maps to UIScrollView.contentInset, which
+                // clamps the natural rest position to the margin.
             }
+            .contentMargins(.leading, horizontalPadding - 22, for: .scrollContent)
+            .contentMargins(.trailing, horizontalPadding + 2, for: .scrollContent)
             .scrollClipDisabled()
             .frame(height: thumbSize + verticalPadding * 2)
+            .onAppear {
+                // Restore scroll position when the strip remounts after a
+                // grid→strip mode swap. No animation — this fires before the
+                // first frame is drawn, so it's an invisible position set.
+                guard let id = selectedPhotoID else { return }
+                proxy.scrollTo(id, anchor: .center)
+            }
             .onChange(of: selectedPhotoID) {
+                // Skip during mode transitions — the TabView inside the carousel
+                // can briefly reset selectedPhotoID on mount, which would fire a
+                // spurious scroll-to-center mid-morph.
+                guard !isAnimatingMode else { return }
                 guard let id = selectedPhotoID else { return }
                 withAnimation(.snappy) {
                     proxy.scrollTo(id, anchor: .center)

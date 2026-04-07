@@ -88,8 +88,9 @@ struct CreateGalleryView: View {
         .fullScreenCover(isPresented: $showCamera) {
             CameraPicker { image, metadata in
                 let thumb = PhotoItem.makeThumbnail(from: image)
+                let carousel = PhotoItem.makeCarouselPreview(from: image, width: UIScreen.main.bounds.width)
                 let exif = metadata.flatMap { makeExifSummary(from: $0) }
-                let item = PhotoItem(thumbnail: thumb, source: .camera(image, metadata: metadata), exifSummary: exif)
+                let item = PhotoItem(thumbnail: thumb, carouselPreview: carousel, source: .camera(image, metadata: metadata), exifSummary: exif)
                 photoItems.append(item)
                 if selectedPhotoID == nil { selectedPhotoID = item.id }
             }
@@ -252,7 +253,10 @@ struct CreateGalleryView: View {
         }
         guard !newSelections.isEmpty else { return }
 
-        // Load all new items concurrently, preserving selection order
+        // Load all new items concurrently, preserving selection order.
+        // Capture screen width here (main actor) before task bodies run on
+        // background threads where UIScreen.main is unavailable.
+        let carouselWidth = UIScreen.main.bounds.width
         var loaded: [(index: Int, item: PhotoItem)] = []
         await withTaskGroup(of: (Int, PhotoItem?).self) { group in
             for (index, pickerItem) in newSelections.enumerated() {
@@ -260,8 +264,9 @@ struct CreateGalleryView: View {
                     guard let data = try? await pickerItem.loadTransferable(type: Data.self),
                           let image = UIImage(data: data) else { return (index, nil) }
                     let thumb = PhotoItem.makeThumbnail(from: image)
+                    let carousel = PhotoItem.makeCarouselPreview(from: image, width: carouselWidth)
                     let exif = makeExifSummary(from: data)
-                    return (index, PhotoItem(thumbnail: thumb, source: .picker(pickerItem), exifSummary: exif))
+                    return (index, PhotoItem(thumbnail: thumb, carouselPreview: carousel, source: .picker(pickerItem), exifSummary: exif))
                 }
             }
             for await (index, item) in group {
@@ -424,12 +429,31 @@ struct ExifSummary {
 struct PhotoItem: Identifiable {
     let id = UUID()
     let thumbnail: UIImage
+    /// Screen-width image for the carousel. Built at creation time via
+    /// `UIGraphicsImageRenderer`, which forces a full decode during the draw
+    /// call — so the resulting UIImage is backed by a decoded bitmap and
+    /// displays with zero decode work. Kept in memory for the editor session
+    /// so the carousel never stalls on first draw regardless of scroll speed.
+    let carouselPreview: UIImage
     let source: PhotoSource
     var alt: String = ""
     var exifSummary: ExifSummary?
 
     static func makeThumbnail(from image: UIImage, maxSize: CGFloat = 150) -> UIImage {
         let scale = min(maxSize / image.size.width, maxSize / image.size.height, 1)
+        let newSize = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+        let renderer = UIGraphicsImageRenderer(size: newSize)
+        return renderer.image { _ in
+            image.draw(in: CGRect(origin: .zero, size: newSize))
+        }
+    }
+
+    /// Downscale `image` so its width matches `width` (default: screen width),
+    /// preserving aspect ratio. The renderer applies UIScreen.main.scale so
+    /// the output is pixel-perfect at 1× zoom in the carousel without
+    /// upscaling on any standard iPhone.
+    static func makeCarouselPreview(from image: UIImage, width: CGFloat) -> UIImage {
+        let scale = min(width / image.size.width, 1)
         let newSize = CGSize(width: image.size.width * scale, height: image.size.height * scale)
         let renderer = UIGraphicsImageRenderer(size: newSize)
         return renderer.image { _ in
