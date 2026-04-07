@@ -43,19 +43,31 @@ struct CreateGalleryView: View {
     private let maxDescription = 1000
 
     var body: some View {
-        Form {
-            photosSection
-            gallerySection
-            photoEditorSection
-            cameraDataSection
-            ContentLabelPicker(selectedLabels: $selectedLabels)
-            Section {
-                Toggle("Post to Bluesky", isOn: $postToBluesky)
+        // The Form is wrapped in an outer ZStack so `ImageZoomOverlay` attaches at
+        // the ZStack level rather than to the Form directly. Applied to the Form,
+        // its `.overlay { ... }` content lives inside the Form's own clipping
+        // context (Form is a UICollectionView under the hood) which can leave the
+        // zoomed image visually beneath sibling chrome on some transitions. Mounting
+        // the overlay one level above guarantees it composites on top of every-
+        // thing, mirroring how FeedView nests its zoom overlay above ScrollView.
+        ZStack {
+            Form {
+                photosSection
+                gallerySection
+                photoEditorSection
+                cameraDataSection
+                ContentLabelPicker(selectedLabels: $selectedLabels)
+                Section {
+                    Toggle("Post to Bluesky", isOn: $postToBluesky)
+                }
+                errorSection
             }
-            errorSection
+            // Lock the Form's vertical scroll while the zoom overlay is up so a
+            // pinch that drifts vertically can't scroll the page underneath the
+            // overlay. Also stays locked during reorder, same as before.
+            .scrollDisabled(isReordering || imageZoomState.showOverlay)
+            .scrollDismissesKeyboard(.interactively)
         }
-        .scrollDisabled(isReordering)
-        .scrollDismissesKeyboard(.interactively)
         .safeAreaInset(edge: .bottom) {
             MentionSuggestionOverlay(state: mentionState) { suggestion in
                 mentionState.complete(handle: suggestion.handle, in: &description)
@@ -97,11 +109,12 @@ struct CreateGalleryView: View {
         }
         .navigationTitle("New Gallery")
         .navigationBarTitleDisplayMode(.inline)
-        // Hiding the back button ALSO disables the interactive pop swipe. We
-        // reuse the same isReordering flag that drives scroll lock so a
-        // finger-near-the-left-edge drag during reorder doesn't accidentally
-        // pop the view. The button reappears the instant the drag releases.
-        .navigationBarBackButtonHidden(isReordering)
+        // Lock the iOS edge-swipe-to-pop at the UIKit level while a cell is
+        // picked up. `.navigationBarBackButtonHidden` alone doesn't disable
+        // the interactive pop gesture on iOS 17+; InteractivePopLocker walks
+        // the responder chain to the UINavigationController and toggles
+        // interactivePopGestureRecognizer.isEnabled directly.
+        .background { InteractivePopLocker(isDisabled: isReordering) }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {

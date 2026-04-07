@@ -188,12 +188,12 @@ struct PhotoEditor: View {
                 }
                 .onChange(of: selectedPhotoID) { _, newID in
                     showingCarouselAlt = false
-                    if let id = newID, let item = items.first(where: { $0.id == id }) {
-                        loadPreviewIfNeeded(for: item)
+                    if newID != nil {
+                        prefetchPreviewsAroundSelection()
                     }
                 }
                 .onAppear {
-                    loadPreviewIfNeeded(for: items[safeIdx])
+                    prefetchPreviewsAroundSelection()
                 }
                 .frame(height: height)
             }
@@ -202,6 +202,22 @@ struct PhotoEditor: View {
     }
 
     // MARK: - Preview cache
+
+    /// Load high-res previews for the currently-selected photo PLUS its immediate
+    /// neighbors (prev/next), so that by the time the user pinches to zoom, the
+    /// 1500pt preview is already in the cache instead of the 150pt thumbnail.
+    /// Without this prefetch the zoom overlay shows a heavily-blurred image until
+    /// the load completes — by which point the user has already given up.
+    private func prefetchPreviewsAroundSelection() {
+        guard let id = selectedPhotoID,
+              let centerIdx = items.firstIndex(where: { $0.id == id }) else { return }
+        let neighborOffsets = [0, -1, 1]
+        for offset in neighborOffsets {
+            let idx = centerIdx + offset
+            guard items.indices.contains(idx) else { continue }
+            loadPreviewIfNeeded(for: items[idx])
+        }
+    }
 
     /// Load a higher-resolution preview image for `item` into `previewCache` unless
     /// it's already cached or in flight. The cache is bounded by `previewCacheLimit`

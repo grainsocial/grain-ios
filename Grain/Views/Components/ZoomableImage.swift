@@ -130,7 +130,10 @@ struct PinchZoomOverlay: UIViewRepresentable {
                 parent.onBegan(anchor, globalFrame)
             case .changed:
                 state.scale = max(startScale * gesture.scale, 1)
-            case .ended, .cancelled:
+            case .ended, .cancelled, .failed:
+                // .failed is essential — without it a pinch interrupted by another
+                // recognizer (e.g. parent ScrollView claiming the gesture) leaves
+                // the zoom state stuck and the snap-back never fires.
                 startScale = state.scale
                 parent.onEnded()
             default:
@@ -149,7 +152,10 @@ struct PinchZoomOverlay: UIViewRepresentable {
                 guard parent.zoomState.scale > 1 else { return }
                 let translation = gesture.translation(in: gesture.view)
                 parent.zoomState.offset = CGSize(width: translation.x, height: translation.y)
-            case .ended, .cancelled:
+            case .ended, .cancelled, .failed:
+                // Include .failed so that an interrupted pan (e.g. a third finger
+                // touched down, or a sibling recognizer claimed the gesture) still
+                // triggers the snap-back instead of leaving the offset frozen.
                 parent.onEnded()
             default:
                 break
@@ -172,6 +178,12 @@ struct ZoomableImage: View {
     @Environment(ImageZoomState.self) private var zoomState: ImageZoomState?
 
     @State private var snapBackTask: Task<Void, Never>?
+    /// Per-instance flag flipped on in `onBegan` and off in `resetZoom`. We use this
+    /// instead of comparing `zoomState.localImage === source` because the rendered
+    /// image instance can change mid-lifetime (e.g. PhotoEditor's preview cache
+    /// swaps a low-res thumbnail for the high-res preview), which would defeat
+    /// identity-based equality and leave the base image visible behind the overlay.
+    @State private var isZoomingMe = false
 
     init(url: String, thumbURL: String? = nil, aspectRatio: CGFloat, onDoubleTap: ((CGPoint) -> Void)? = nil) {
         source = .url(url, thumbURL: thumbURL)
@@ -197,8 +209,13 @@ struct ZoomableImage: View {
         switch source {
         case let .url(url, _):
             return zoomState.imageURL == url
-        case let .local(image):
-            return zoomState.localImage === image
+        case .local:
+            // Identity (`===`) comparison fails when the rendered UIImage instance
+            // changes during the same view lifetime — e.g. when PhotoEditor's
+            // preview cache swaps a 150pt thumbnail for the 1500pt preview.
+            // The per-instance flag is set in onBegan and cleared in resetZoom,
+            // so it tracks the gesture session rather than image identity.
+            return isZoomingMe
         }
     }
 
@@ -226,6 +243,7 @@ struct ZoomableImage: View {
                         zoomState.anchor = anchor
                         zoomState.sourceFrame = frame
                         zoomState.showOverlay = true
+                        isZoomingMe = true
                     },
                     onEnded: { scheduleSnapBack() },
                     onDoubleTap: onDoubleTap
@@ -291,6 +309,7 @@ struct ZoomableImage: View {
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(120))
             zoomState.showOverlay = false
+            isZoomingMe = false
         }
     }
 }

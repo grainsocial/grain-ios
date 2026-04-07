@@ -117,11 +117,14 @@ struct ReorderablePhotoStrip: View {
                 .padding(.horizontal, horizontalPadding)
             }
             .scrollClipDisabled()
-            // Lock user-driven horizontal scroll while a cell is picked up.
-            // SwiftUI's .scrollDisabled gates USER gestures only — programmatic
-            // proxy.scrollTo(_, anchor:) still works, so autoScrollIfNeeded
-            // keeps pushing the scroll forward as the finger nears an edge.
-            .scrollDisabled(isReordering)
+            // Lock USER horizontal scroll while a cell is picked up. Uses the
+            // UIKit-level `ScrollPanLocker` (not SwiftUI's `.scrollDisabled`)
+            // because the latter also blocks programmatic `scrollTo`, which
+            // would kill the auto-scroll that fires from `autoScrollIfNeeded`
+            // when the dragged cell nears an edge. `ScrollPanLocker` only
+            // toggles `panGestureRecognizer.isEnabled`, so programmatic
+            // `setContentOffset` continues to work.
+            .background { ScrollPanLocker(isDisabled: isReordering) }
             .frame(height: thumbSize + verticalPadding * 2)
             .onScrollGeometryChange(for: ScrollGeometry.self, of: { $0 }) { _, geo in
                 let newOffset = geo.contentOffset.x
