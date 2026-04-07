@@ -83,3 +83,26 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: Grain
+
+schemes:
+  Grain:
+    build:
+      targets:
+        Grain:
+          - running
+          - testing
+          - profiling
+          - analyzing
+          - archiving
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - GrainTests
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
