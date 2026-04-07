@@ -1,56 +1,30 @@
 # Grain for iOS
 
-Native iOS client for [Grain](https://grain.social), a photography community built on the [AT Protocol](https://atproto.com).
+A photography community app built on the [AT Protocol](https://atproto.com). Share galleries, discover photographers, and celebrate the craft.
 
-## Requirements
+<p float="left">
+  <img src="Screenshots/feed.png" width="250" />
+  <img src="Screenshots/notifications.png" width="250" />
+</p>
 
-- Xcode 26+
-- iOS 26.0+
-- [XcodeGen](https://github.com/yonaskolb/XcodeGen)
-- [just](https://github.com/casey/just) (optional, for task running)
-- [xcbeautify](https://github.com/cpisciotta/xcbeautify) (for formatted build/test output)
-- [SwiftFormat](https://github.com/nicklockwood/SwiftFormat) (code formatter)
-- [SwiftLint](https://github.com/realm/SwiftLint) (linter)
+## Features
 
-## Setup
-
-```bash
-brew install xcodegen just xcbeautify swiftformat swiftlint
-```
-
-Create a `.env` file in the repo root with your Apple team and bundle configuration:
-
-```
-APPLE_TEAM_ID=YOUR_TEAM_ID
-BUNDLE_ID=com.yourorg.grain
-BUNDLE_NAME=Grain
-```
-
-Then generate the Xcode project and open it:
-
-```bash
-just generate
-open Grain.xcodeproj
-```
-
-The app connects to the [Grain backend](https://tangled.org/grain.social/grain), which must be running for full functionality.
-
-## Commands
-
-```bash
-just generate   # Regenerate Xcode project from project.yml
-just build      # Build for simulator
-just sim-local  # Build + install + launch on simulator (local/dev API)
-just sim        # Build + install + launch on simulator (production API)
-just test       # Run tests
-just format     # Check formatting (list unformatted files)
-just format-fix # Fix formatting in-place
-just lint       # Lint Swift code
-just lint-fix   # Fix lint violations
-just device ID  # Build + install to a plugged-in iOS device
-just release    # Bump build, archive, upload to App Store Connect
-```
+- Photo feed
+- EXIF metadata — camera, lens, aperture, shutter, ISO
+- Multi-photo galleries
+- Stories
+- Likes & comments
+- Search
+- Notifications
+- Follow / unfollow
+- Profile
+- Camera capture
+- Location tagging
 
 ## License
 
 [MIT](LICENSE) — Copyright (c) 2026 Grain Social
+
+---
+
+See [DEVELOPMENT.md](DEVELOPMENT.md) to build and run locally.
