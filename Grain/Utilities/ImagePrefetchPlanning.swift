@@ -113,11 +113,14 @@ enum ImagePrefetchPlanning {
     // MARK: - Stories
 
     /// Prefetch story images with priority queue:
-    /// 1. Next 2 stories of current author — high
-    /// 2. First story of next author — high
-    /// 3. Rest of current author's stack — normal
-    /// 4. Next 2 stories of author-after-next — normal
-    /// 5. First story of next 2 authors beyond — low
+    /// - Thumbs (all reachable authors) — high (tiny payload, used by the
+    ///   StoryViewer's fullsize-loading placeholder; needs to be cache-hot to
+    ///   avoid a 1-frame flash on transition)
+    /// 1. Next 2 stories of current author — fullsize at high
+    /// 2. First story of next author — fullsize at high
+    /// 3. Rest of current author's stack — fullsize at normal
+    /// 4. Next 2 stories of author-after-next — fullsize at normal
+    /// 5. First story of next 2 authors beyond — fullsize at low
     static func storyPrefetchRequests(
         currentStories: [(thumb: String, fullsize: String)],
         currentStoryIndex: Int,
@@ -129,6 +132,19 @@ enum ImagePrefetchPlanning {
         var high: [ImageRequest] = []
         var normal: [ImageRequest] = []
         var low: [ImageRequest] = []
+
+        // Thumbs are tiny — prefetch every reachable thumb at high priority so
+        // the StoryViewer's fullsize-loading placeholder always hits the
+        // synchronous Nuke cache (mirrors `feedPrefetchRequests`' policy).
+        let allThumbStrings: [String] = currentStories.map(\.thumb)
+            + (nextAuthorStories?.map(\.thumb) ?? [])
+            + (secondNextAuthorStories?.map(\.thumb) ?? [])
+            + [thirdNextFirstStory?.thumb, fourthNextFirstStory?.thumb].compactMap(\.self)
+        for thumbStr in allThumbStrings {
+            if let url = URL(string: thumbStr) {
+                high.append(ImageRequest(url: url, priority: .high))
+            }
+        }
 
         // 1. Next 2 stories of current author — high
         let storyEnd = min(currentStoryIndex + 3, currentStories.count)
