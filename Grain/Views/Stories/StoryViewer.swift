@@ -121,10 +121,17 @@ struct StoryViewer: View {
                     .scaleEffect(0.92 + swipeAmount * 0.08)
                     .opacity(Double(swipeAmount))
             }
-            storyContent
-                .offset(x: faceOffsets.current)
-                .scaleEffect(1 - swipeAmount * 0.08)
-                .opacity(1 - Double(swipeAmount))
+            // Drop storyContent from the tree once it's fully faded so the spring's
+            // settle window (~200ms past visual completion) doesn't keep an invisible
+            // layer alive across the commit — otherwise the stale subtree pops off
+            // visibly at commit time.
+            if swipeAmount < 1 {
+                storyContent
+                    .offset(x: faceOffsets.current)
+                    .scaleEffect(1 - swipeAmount * 0.08)
+                    .opacity(1 - Double(swipeAmount))
+                    .transition(.identity)
+            }
         }
         .clipped()
         .background(
@@ -276,6 +283,24 @@ struct StoryViewer: View {
         }
     }
 
+    /// Synchronous Nuke cache lookup so the avatar swaps atomically at commit.
+    /// Falls back to AvatarView(animated:false) whose lastUIImage shows the prior
+    /// avatar during any mid-animation cache miss — visually identical, no type-switch artifact.
+    @ViewBuilder
+    private func storyAvatarView(url: String?) -> some View {
+        if let urlStr = url,
+           let imageURL = URL(string: urlStr),
+           let img = ImagePipeline.shared.cache.cachedImage(for: ImageRequest(url: imageURL))?.image
+        {
+            Image(uiImage: img)
+                .resizable()
+                .frame(width: 32, height: 32)
+                .clipShape(Circle())
+        } else {
+            AvatarView(url: url, size: 32, animated: false)
+        }
+    }
+
     private var storyContent: some View {
         ZStack {
             Color.black.ignoresSafeArea()
@@ -303,13 +328,28 @@ struct StoryViewer: View {
                                 }
                         } else {
                             ZStack {
-                                LazyImage(url: URL(string: story.thumb)) { thumbState in
-                                    if let thumb = thumbState.image {
-                                        thumb
-                                            .resizable()
-                                            .aspectRatio(story.aspectRatio.ratio, contentMode: .fit)
-                                            .blur(radius: 20)
-                                            .clipped()
+                                // Hit Nuke's memory cache synchronously so the blurred
+                                // thumb is in frame 1 — LazyImage takes a frame to
+                                // publish even from cache, causing a 1-frame flash
+                                // right after a story transition.
+                                if let thumbURL = URL(string: story.thumb),
+                                   let cachedThumb = ImagePipeline.shared.cache
+                                   .cachedImage(for: ImageRequest(url: thumbURL))?.image
+                                {
+                                    Image(uiImage: cachedThumb)
+                                        .resizable()
+                                        .aspectRatio(story.aspectRatio.ratio, contentMode: .fit)
+                                        .blur(radius: 20)
+                                        .clipped()
+                                } else {
+                                    LazyImage(url: URL(string: story.thumb)) { thumbState in
+                                        if let thumb = thumbState.image {
+                                            thumb
+                                                .resizable()
+                                                .aspectRatio(story.aspectRatio.ratio, contentMode: .fit)
+                                                .blur(radius: 20)
+                                                .clipped()
+                                        }
                                     }
                                 }
                                 ProgressView()
@@ -368,7 +408,7 @@ struct StoryViewer: View {
                         }
                     } label: {
                         HStack(alignment: .center, spacing: 8) {
-                            AvatarView(url: story?.creator.avatar ?? author.avatar, size: 32, animated: false)
+                            storyAvatarView(url: story?.creator.avatar ?? author.avatar)
                             VStack(alignment: .leading, spacing: 0) {
                                 Text(story?.creator.displayName ?? story?.creator.handle ?? author.displayName ?? author.handle)
                                     .font(.subheadline.bold())
@@ -599,12 +639,12 @@ struct StoryViewer: View {
             faceOffsets.current = 0
             faceOffsets.pending = resetOffset
         } completion: {
-            guard self.transitionGeneration == gen else { return }
+            guard transitionGeneration == gen else { return }
             withTransaction(Transaction(animation: nil)) {
-                self.pendingTransition = PendingAuthorTransition()
-                self.faceOffsets = FaceOffsets()
+                pendingTransition = PendingAuthorTransition()
+                faceOffsets = FaceOffsets()
             }
-            self.startTimerIfSafe()
+            startTimerIfSafe()
         }
     }
 
@@ -629,18 +669,18 @@ struct StoryViewer: View {
             faceOffsets.current = targetCurrentOffset
             faceOffsets.pending = 0
         } completion: {
-            guard self.transitionGeneration == gen else { return }
+            guard transitionGeneration == gen else { return }
             withTransaction(Transaction(animation: nil)) {
-                let storiesToPresent = self.pendingTransition.stories
-                self.currentAuthorIndex = index
-                self.timer.progress = 0
+                let storiesToPresent = pendingTransition.stories
+                currentAuthorIndex = index
+                timer.progress = 0
                 if !storiesToPresent.isEmpty {
-                    self.presentStories(storiesToPresent, resumeIndex: resumeIndex)
+                    presentStories(storiesToPresent, resumeIndex: resumeIndex)
                 } else {
-                    self.switchToCurrentAuthor(resumeIndex: resumeIndex)
+                    switchToCurrentAuthor(resumeIndex: resumeIndex)
                 }
-                self.pendingTransition = PendingAuthorTransition()
-                self.faceOffsets = FaceOffsets()
+                pendingTransition = PendingAuthorTransition()
+                faceOffsets = FaceOffsets()
             }
         }
     }
