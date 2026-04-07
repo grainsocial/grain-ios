@@ -36,3 +36,7 @@ logo-options/
 
 # Local environment variables
 .env
+
+# Zed personal config
+.zed/keymap.json
+.zed/tasks.json
