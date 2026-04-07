@@ -108,6 +108,13 @@ struct FeedView: View {
             .navigationDestination(item: $deepLinkGalleryUri) { uri in
                 GalleryDetailView(client: client, galleryUri: uri)
             }
+            // Create gallery is a NavigationStack push (HIG-aligned for editing flows
+            // the user dwells on; supports the iOS edge-swipe back gesture for free).
+            .navigationDestination(isPresented: $showCreate) {
+                CreateGalleryView(client: client) {
+                    showCreate = false
+                }
+            }
             .fullScreenCover(item: $deepLinkStoryAuthor) { author in
                 StoryViewer(
                     authors: [author],

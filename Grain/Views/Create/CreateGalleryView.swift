@@ -28,6 +28,7 @@ struct CreateGalleryView: View {
     @State private var photoLocationResult: NominatimResult?
     @State private var sendExif = true
     @State private var includeLocation = true
+    @State private var imageZoomState = ImageZoomState()
 
     let client: XRPCClient
     var onCreated: (() -> Void)?
@@ -36,72 +37,76 @@ struct CreateGalleryView: View {
     private let maxDescription = 1000
 
     var body: some View {
-        NavigationStack {
-            Form {
-                photosSection
-                gallerySection
-                photoEditorSection
-                cameraDataSection
-                ContentLabelPicker(selectedLabels: $selectedLabels)
-                Section {
-                    Toggle("Post to Bluesky", isOn: $postToBluesky)
-                }
-                errorSection
+        Form {
+            photosSection
+            gallerySection
+            photoEditorSection
+            cameraDataSection
+            ContentLabelPicker(selectedLabels: $selectedLabels)
+            Section {
+                Toggle("Post to Bluesky", isOn: $postToBluesky)
             }
-            .safeAreaInset(edge: .bottom) {
-                MentionSuggestionOverlay(state: mentionState) { suggestion in
-                    mentionState.complete(handle: suggestion.handle, in: &description)
-                }
-            }
-            .onChange(of: selectedPhotos) {
-                Task {
-                    await loadPickerPhotos()
-                    if let id = selectedPhotoID, !photoItems.contains(where: { $0.id == id }) {
-                        selectedPhotoID = photoItems.first?.id
-                    } else if selectedPhotoID == nil {
-                        selectedPhotoID = photoItems.first?.id
-                    }
-                    await detectLocation()
-                }
-            }
-            .fullScreenCover(isPresented: $showCamera) {
-                CameraPicker { image, metadata in
-                    let thumb = PhotoItem.makeThumbnail(from: image)
-                    let exif = metadata.flatMap { makeExifSummary(from: $0) }
-                    let item = PhotoItem(thumbnail: thumb, source: .camera(image, metadata: metadata), exifSummary: exif)
-                    photoItems.append(item)
-                    if selectedPhotoID == nil { selectedPhotoID = item.id }
-                }
-                .ignoresSafeArea()
-            }
-            .task {
-                if let authContext = await auth.authContext(),
-                   let prefs = try? await client.getPreferences(auth: authContext).preferences
-                {
-                    if let exif = prefs.includeExif { sendExif = exif }
-                    if let location = prefs.includeLocation { includeLocation = location }
-                }
-            }
-            .navigationTitle("New Gallery")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        Task { await createGallery() }
-                    } label: {
-                        if isUploading {
-                            ProgressView()
-                        } else {
-                            Text("Post")
-                                .bold()
-                        }
-                    }
-                    .disabled(title.isEmpty || photoItems.isEmpty || isUploading || title.count > maxTitle || description.count > maxDescription)
-                }
+            errorSection
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .safeAreaInset(edge: .bottom) {
+            MentionSuggestionOverlay(state: mentionState) { suggestion in
+                mentionState.complete(handle: suggestion.handle, in: &description)
             }
         }
+        .onChange(of: selectedPhotos) {
+            Task {
+                await loadPickerPhotos()
+                if let id = selectedPhotoID, !photoItems.contains(where: { $0.id == id }) {
+                    selectedPhotoID = photoItems.first?.id
+                } else if selectedPhotoID == nil {
+                    selectedPhotoID = photoItems.first?.id
+                }
+                await detectLocation()
+            }
+        }
+        // Re-derive the suggested location whenever the *first* photo changes
+        // (reorder, removal, etc.) so "Use first photo location" stays accurate.
+        .onChange(of: photoItems.first?.id) {
+            Task { await detectLocation() }
+        }
+        .fullScreenCover(isPresented: $showCamera) {
+            CameraPicker { image, metadata in
+                let thumb = PhotoItem.makeThumbnail(from: image)
+                let exif = metadata.flatMap { makeExifSummary(from: $0) }
+                let item = PhotoItem(thumbnail: thumb, source: .camera(image, metadata: metadata), exifSummary: exif)
+                photoItems.append(item)
+                if selectedPhotoID == nil { selectedPhotoID = item.id }
+            }
+            .ignoresSafeArea()
+        }
+        .task {
+            if let authContext = await auth.authContext(),
+               let prefs = try? await client.getPreferences(auth: authContext).preferences
+            {
+                if let exif = prefs.includeExif { sendExif = exif }
+                if let location = prefs.includeLocation { includeLocation = location }
+            }
+        }
+        .navigationTitle("New Gallery")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    Task { await createGallery() }
+                } label: {
+                    if isUploading {
+                        ProgressView()
+                    } else {
+                        Text("Post")
+                            .bold()
+                    }
+                }
+                .disabled(title.isEmpty || photoItems.isEmpty || isUploading || title.count > maxTitle || description.count > maxDescription)
+            }
+        }
+        .environment(imageZoomState)
+        .modifier(ImageZoomOverlay(zoomState: imageZoomState))
     }
 
     // MARK: - Form Sections
@@ -121,55 +126,17 @@ struct CreateGalleryView: View {
             } label: {
                 Label("Take Photo", systemImage: "camera")
             }
-
-            if !photoItems.isEmpty {
-                ReorderablePhotoStrip(items: $photoItems, selectedPhotoID: $selectedPhotoID)
-                Label("Touch and hold a photo to reorder", systemImage: "hand.draw")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
         }
     }
 
     @ViewBuilder
     private var photoEditorSection: some View {
         if !photoItems.isEmpty {
-            Section("Alt Text") {
-                Text("Alt text describes images for blind and low-vision users, and helps give context to everyone.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                ForEach($photoItems) { $item in
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(alignment: .top, spacing: 12) {
-                            Image(uiImage: item.thumbnail)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 60)
-
-                            TextField("Describe this photo...", text: $item.alt, axis: .vertical)
-                                .font(.subheadline)
-                                .lineLimit(2 ... 4)
-                        }
-                        if let exif = item.exifSummary {
-                            VStack(alignment: .leading, spacing: 2) {
-                                if let camera = exif.camera {
-                                    Text(camera).font(.caption)
-                                }
-                                HStack {
-                                    Text([exif.shutterSpeed, exif.iso].compactMap(\.self).joined(separator: "  "))
-                                        .font(.caption)
-                                    Spacer()
-                                    Text([exif.focalLength, exif.aperture].compactMap(\.self).joined(separator: "  "))
-                                        .font(.caption)
-                                }
-                            }
-                            .foregroundStyle(sendExif ? .secondary : .tertiary)
-                            .padding(.leading, 72)
-                        }
-                    }
-                    .padding(.vertical, 4)
-                }
-            }
+            PhotoEditor(
+                items: $photoItems,
+                selectedPhotoID: $selectedPhotoID,
+                sendExif: sendExif
+            )
         }
     }
 
@@ -232,7 +199,7 @@ struct CreateGalleryView: View {
                             .foregroundStyle(.secondary)
                             .frame(width: 20)
                         VStack(alignment: .leading, spacing: 1) {
-                            Text("Use photo location")
+                            Text("Use first photo location")
                                 .font(.subheadline)
                             Text(photoLoc.name)
                                 .font(.caption)
@@ -325,42 +292,55 @@ struct CreateGalleryView: View {
             return pickerItem.itemIdentifier
         })
 
-        // Only load and append truly new selections
-        for item in selectedPhotos where !(item.itemIdentifier.map { existingIDs.contains($0) } ?? false) {
-            if let data = try? await item.loadTransferable(type: Data.self),
-               let image = UIImage(data: data)
-            {
-                let thumb = PhotoItem.makeThumbnail(from: image)
-                let exif = makeExifSummary(from: data)
-                photoItems.append(PhotoItem(thumbnail: thumb, source: .picker(item), exifSummary: exif))
+        let newSelections = selectedPhotos.filter {
+            !($0.itemIdentifier.map { existingIDs.contains($0) } ?? false)
+        }
+        guard !newSelections.isEmpty else { return }
+
+        // Load all new items concurrently, preserving selection order
+        var loaded: [(index: Int, item: PhotoItem)] = []
+        await withTaskGroup(of: (Int, PhotoItem?).self) { group in
+            for (index, pickerItem) in newSelections.enumerated() {
+                group.addTask {
+                    guard let data = try? await pickerItem.loadTransferable(type: Data.self),
+                          let image = UIImage(data: data) else { return (index, nil) }
+                    let thumb = PhotoItem.makeThumbnail(from: image)
+                    let exif = makeExifSummary(from: data)
+                    return (index, PhotoItem(thumbnail: thumb, source: .picker(pickerItem), exifSummary: exif))
+                }
             }
+            for await (index, item) in group {
+                if let item { loaded.append((index, item)) }
+            }
+        }
+
+        for (_, item) in loaded.sorted(by: { $0.index < $1.index }) {
+            photoItems.append(item)
         }
     }
 
     private func detectLocation() async {
-        // Always extract GPS from the first photo so "Use photo location" can be offered
+        // Always derive from the *currently first* photo so reordering re-runs detection.
         photoLocationResult = nil
-        for item in photoItems {
-            var gps: (latitude: Double, longitude: Double)?
+        guard let first = photoItems.first else { return }
 
-            switch item.source {
-            case let .picker(pickerItem):
-                if let data = try? await pickerItem.loadTransferable(type: Data.self) {
-                    gps = ImageProcessing.extractGPS(from: data)
-                }
-            case .camera:
-                continue
+        var gps: (latitude: Double, longitude: Double)?
+        switch first.source {
+        case let .picker(pickerItem):
+            if let data = try? await pickerItem.loadTransferable(type: Data.self) {
+                gps = ImageProcessing.extractGPS(from: data)
             }
+        case .camera:
+            return
+        }
 
-            guard let gps else { continue }
+        guard let gps else { return }
 
-            if let result = await LocationServices.reverseGeocode(latitude: gps.latitude, longitude: gps.longitude) {
-                photoLocationResult = result
-                if includeLocation, resolvedLocation == nil {
-                    selectLocation(result)
-                }
+        if let result = await LocationServices.reverseGeocode(latitude: gps.latitude, longitude: gps.longitude) {
+            photoLocationResult = result
+            if includeLocation, resolvedLocation == nil {
+                selectLocation(result)
             }
-            break
         }
     }
 
@@ -712,7 +692,7 @@ private func buildExifSummary(exifDict: [String: Any]?, tiffDict: [String: Any]?
         summary.shutterSpeed = et < 1 ? "1/\(Int((1 / et).rounded()))s" : "\(et)s"
     }
     if let fn = exifDict?[kCGImagePropertyExifFNumber as String] as? Double {
-        summary.aperture = "f/\(fn)"
+        summary.aperture = formatAperture(fn)
     }
     if let isoRaw = exifDict?[kCGImagePropertyExifISOSpeedRatings as String] as? [Any],
        let iso = (isoRaw.first as? NSNumber)?.intValue

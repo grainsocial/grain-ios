@@ -99,12 +99,6 @@ struct MainTabView: View {
                 }
             }
         }
-        .sheet(isPresented: $showCreate) {
-            CreateGalleryView(client: client) {
-                selectedTab = .feed
-                feedRefreshID = UUID()
-            }
-        }
         .onReceive(NotificationCenter.default.publisher(for: .grainShortcutAction)) { notification in
             guard let rawValue = notification.object as? String,
                   let action = GrainShortcutAction(rawValue: rawValue)
