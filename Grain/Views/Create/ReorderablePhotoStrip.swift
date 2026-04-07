@@ -32,7 +32,7 @@ struct ReorderablePhotoStrip: View {
                                 .foregroundStyle(.white, Color("AccentColor"))
                         }
                         .buttonStyle(.plain)
-                        .offset(x: 4, y: -4)
+                        .offset(x: 9, y: -9)
                     }
                     .offset(x: draggingID == item.id ? dragOffset : 0)
                     .opacity(draggingID == item.id ? 0.8 : 1)
@@ -65,7 +65,7 @@ struct ReorderablePhotoStrip: View {
                     )
                 }
             }
-            .padding(.vertical, 4)
+            .padding(.vertical, 10)
         }
     }
 
