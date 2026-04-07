@@ -21,9 +21,8 @@ final class GalleryDetailViewModel {
         error = nil
 
         do {
-            async let galleryResponse = client.getGallery(uri: uri, auth: auth)
-            async let commentsResponse = client.getGalleryThread(gallery: uri, auth: auth)
-            let (galleryResult, commentsResult) = try await (galleryResponse, commentsResponse)
+            let galleryResult = try await client.getGallery(uri: uri, auth: auth)
+            let commentsResult = try await client.getGalleryThread(gallery: uri, auth: auth)
             gallery = galleryResult.gallery
             comments = commentsResult.comments
             commentCursor = commentsResult.cursor
