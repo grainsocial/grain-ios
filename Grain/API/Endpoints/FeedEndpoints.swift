@@ -125,6 +125,17 @@ extension XRPCClient {
         try await procedure("dev.hatk.putPreference", input: Input(key: "includeLocation", value: value), auth: auth)
     }
 
+    func getActorFavorites(
+        actor: String,
+        limit: Int = 30,
+        cursor: String? = nil,
+        auth: AuthContext? = nil
+    ) async throws -> GetFeedResponse {
+        var params = ["actor": actor, "limit": String(limit)]
+        if let cursor { params["cursor"] = cursor }
+        return try await query("social.grain.unspecced.getActorFavorites", params: params, auth: auth, as: GetFeedResponse.self)
+    }
+
     func searchGalleries(
         query queryString: String,
         limit: Int = 30,

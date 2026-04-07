@@ -2,7 +2,7 @@ import NukeUI
 import SwiftUI
 
 enum ProfileViewMode: String, CaseIterable {
-    case grid, stories
+    case grid, favorites, stories
 }
 
 
@@ -208,13 +208,18 @@ struct ProfileView: View {
                     VStack(spacing: 0) {
                         if did == auth.userDID {
                             HStack(spacing: 0) {
-                                tabButton(icon: "square.grid.3x3.fill", mode: .grid)
-                                tabButton(icon: "clock.fill", mode: .stories)
+                                tabButton(icon: "square.grid.3x3", mode: .grid)
+                                tabButton(icon: "heart", mode: .favorites)
+                                tabButton(icon: "clock", mode: .stories)
                             }
                         }
 
                         if viewMode == .grid {
                             galleriesGrid
+                        }
+
+                        if viewMode == .favorites {
+                            favoritesGrid
                         }
 
                         if viewMode == .stories {
@@ -228,11 +233,18 @@ struct ProfileView: View {
                                     let h = value.translation.width
                                     let v = value.translation.height
                                     guard abs(h) > abs(v) else { return }
-                                    if h < 0, viewMode == .grid {
-                                        withAnimation(.easeInOut(duration: 0.2)) { viewMode = .stories }
-                                        Task { await viewModel.loadStoryArchive(did: did, auth: auth.authContext()) }
-                                    } else if h > 0, viewMode == .stories {
-                                        withAnimation(.easeInOut(duration: 0.2)) { viewMode = .grid }
+                                    let modes: [ProfileViewMode] = [.grid, .favorites, .stories]
+                                    guard let currentIdx = modes.firstIndex(of: viewMode) else { return }
+                                    if h < 0, currentIdx < modes.count - 1 {
+                                        let next = modes[currentIdx + 1]
+                                        withAnimation(.easeInOut(duration: 0.2)) { viewMode = next }
+                                        if next == .stories {
+                                            Task { await viewModel.loadStoryArchive(did: did, auth: auth.authContext()) }
+                                        } else if next == .favorites {
+                                            Task { await viewModel.loadFavorites(did: did, auth: auth.authContext()) }
+                                        }
+                                    } else if h > 0, currentIdx > 0 {
+                                        withAnimation(.easeInOut(duration: 0.2)) { viewMode = modes[currentIdx - 1] }
                                     }
                                 }
                             : nil
@@ -418,18 +430,22 @@ struct ProfileView: View {
     }
 
     private func tabButton(icon: String, mode: ProfileViewMode) -> some View {
-        Button {
+        let isActive = viewMode == mode
+        let symbolName = isActive ? icon + ".fill" : icon
+        return Button {
             withAnimation(.easeInOut(duration: 0.2)) { viewMode = mode }
             if mode == .stories {
                 Task { await viewModel.loadStoryArchive(did: did, auth: auth.authContext()) }
+            } else if mode == .favorites {
+                Task { await viewModel.loadFavorites(did: did, auth: auth.authContext()) }
             }
         } label: {
             VStack(spacing: 4) {
-                Image(systemName: icon)
+                Image(systemName: symbolName)
                     .font(.system(size: 18))
-                    .foregroundStyle(viewMode == mode ? .primary : .tertiary)
+                    .foregroundStyle(isActive ? .primary : .secondary)
                 Rectangle()
-                    .fill(viewMode == mode ? Color.primary : .clear)
+                    .fill(viewMode == mode ? Color("AccentColor") : .clear)
                     .frame(width: 32, height: 2.5)
             }
             .frame(maxWidth: .infinity)
@@ -557,6 +573,66 @@ struct ProfileView: View {
                     .onAppear {
                         if story.id == viewModel.archivedStories.last?.id {
                             Task { await viewModel.loadMoreArchive(did: did, auth: auth.authContext()) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var favoritesGrid: some View {
+        if viewModel.favoriteGalleries.isEmpty, !viewModel.isLoading {
+            Text("No favorites yet")
+                .font(.subheadline)
+                .foregroundStyle(.tertiary)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 60)
+        } else {
+            LazyVGrid(columns: [
+                GridItem(.flexible(), spacing: 2),
+                GridItem(.flexible(), spacing: 2),
+                GridItem(.flexible(), spacing: 2),
+            ], spacing: 2) {
+                ForEach(viewModel.favoriteGalleries) { gallery in
+                    Button {
+                        selectedGalleryUri = nil
+                        DispatchQueue.main.async {
+                            selectedGalleryUri = gallery.uri
+                        }
+                    } label: {
+                        Color.clear
+                            .aspectRatio(3.0 / 4.0, contentMode: .fit)
+                            .overlay {
+                                if let photo = gallery.items?.first {
+                                    LazyImage(url: URL(string: photo.thumb)) { state in
+                                        if let image = state.image {
+                                            image
+                                                .resizable()
+                                                .scaledToFill()
+                                        } else {
+                                            Rectangle().fill(.quaternary)
+                                        }
+                                    }
+                                }
+                            }
+                            .clipped()
+                            .overlay(alignment: .topTrailing) {
+                                if (gallery.items?.count ?? 0) > 1 {
+                                    Image(systemName: "square.on.square.fill")
+                                        .font(.system(size: 14))
+                                        .rotationEffect(.degrees(180))
+                                        .foregroundStyle(.white)
+                                        .shadow(color: .black.opacity(0.5), radius: 2, x: 0, y: 1)
+                                        .padding(6)
+                                }
+                            }
+                    }
+                    .buttonStyle(.plain)
+                    .matchedTransitionSource(id: gallery.uri, in: galleryZoomNS)
+                    .onAppear {
+                        if gallery.id == viewModel.favoriteGalleries.last?.id {
+                            Task { await viewModel.loadMoreFavorites(did: did, auth: auth.authContext()) }
                         }
                     }
                 }
