@@ -474,14 +474,20 @@ struct GalleryCardView: View {
 
     @ViewBuilder
     private func captionSection(lr: LabelResolution) -> some View {
-        // EXIF info
-        if let photos = gallery.items, !photos.isEmpty,
-           let exif = photos[currentPage].exif,
-           exif.hasDisplayableData
-        {
-            ExifInfoView(exif: exif)
-                .padding(.horizontal, 12)
-                .padding(.top, 8)
+        // EXIF info — always rendered when any photo in the gallery has exif so
+        // the card height stays locked; content fades in/out per photo.
+        let allPhotos = gallery.items ?? []
+        if allPhotos.contains(where: { $0.exif?.hasDisplayableData ?? false }) {
+            let currentExif = allPhotos.indices.contains(currentPage)
+                ? allPhotos[currentPage].exif : nil
+            ExifInfoView(
+                exif: currentExif?.displayData,
+                reserveCameraRow: allPhotos.contains(where: { $0.exif?.cameraName != nil }),
+                reserveLensRow: allPhotos.contains(where: { $0.exif?.lensName != nil })
+            )
+            .transaction { $0.animation = nil }
+            .padding(.horizontal, 12)
+            .padding(.top, 8)
         }
 
         // Title & description
