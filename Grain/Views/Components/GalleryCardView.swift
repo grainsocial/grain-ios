@@ -485,6 +485,7 @@ struct GalleryCardView: View {
                 reserveCameraRow: allPhotos.contains(where: { $0.exif?.cameraName != nil }),
                 reserveLensRow: allPhotos.contains(where: { $0.exif?.lensName != nil })
             )
+            .transaction { $0.animation = nil }
             .padding(.horizontal, 12)
             .padding(.top, 8)
         }
