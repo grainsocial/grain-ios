@@ -16,7 +16,20 @@ Native iOS client for [Grain](https://grain.social), a photography community bui
 
 ```bash
 brew install xcodegen just xcbeautify swiftformat swiftlint
-xcodegen generate
+```
+
+Create a `.env` file in the repo root with your Apple team and bundle configuration:
+
+```
+APPLE_TEAM_ID=YOUR_TEAM_ID
+BUNDLE_ID=com.yourorg.grain
+BUNDLE_NAME=Grain
+```
+
+Then generate the Xcode project and open it:
+
+```bash
+just generate
 open Grain.xcodeproj
 ```
 
