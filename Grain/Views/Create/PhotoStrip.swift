@@ -38,6 +38,8 @@ struct PhotoStrip: View {
     /// Passed down to PhotoThumbnailCell so the strip and grid views of the same
     /// photo share geometry IDs — prep for the eventual strip↔grid transition.
     var matchedNamespace: Namespace.ID?
+    /// Shared namespace for the selection ring matched-geometry effect.
+    var selectionNamespace: Namespace.ID?
     /// True for the duration of the strip↔grid mode swap. Currently unused
     /// at the cell level (X buttons stay visible during the morph so they
     /// can ride the matched-geometry transition with the cell, per user
@@ -69,9 +71,10 @@ struct PhotoStrip: View {
                             ),
                             isSelected: selectedPhotoID == id,
                             matchedNamespace: matchedNamespace,
+                            selectionNamespace: selectionNamespace,
                             onTap: {
                                 onTapped?(id)
-                                selectedPhotoID = id
+                                withAnimation(.snappy) { selectedPhotoID = id }
                             },
                             onDelete: { handleDelete(itemID: id) }
                         )

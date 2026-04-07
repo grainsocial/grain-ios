@@ -49,6 +49,10 @@ struct PhotoThumbnailCell: View {
     var hideDelete: Bool = false
     /// Shared namespace for the strip↔grid matched-geometry transition.
     var matchedNamespace: Namespace.ID?
+    /// Shared namespace for the selection ring. The ring uses matched-geometry
+    /// so it flies between cells when selection changes rather than
+    /// snapping opacity on/off.
+    var selectionNamespace: Namespace.ID?
     let onTap: () -> Void
     let onDelete: () -> Void
 
@@ -68,11 +72,13 @@ struct PhotoThumbnailCell: View {
                 .overlay(alignment: .bottomTrailing) {
                     altPill.opacity(hideDelete ? 0 : 1)
                 }
-                .overlay(
-                    RoundedRectangle(cornerRadius: geometry.maskCornerRadius)
-                        .stroke(Color.accentColor, lineWidth: 2.5)
-                        .opacity(isSelected && !hideDelete ? 1 : 0)
-                )
+                .overlay {
+                    if isSelected {
+                        RoundedRectangle(cornerRadius: geometry.maskCornerRadius)
+                            .stroke(Color.accentColor, lineWidth: 2.5)
+                            .modifier(MatchedSelectionModifier(namespace: selectionNamespace))
+                    }
+                }
 
             // 2. X button — positioned so its center sits exactly on the
             //    mask's top-right corner. The .position modifier sets the
@@ -157,6 +163,21 @@ struct PhotoThumbnailCell: View {
 /// is needed. SwiftUI snapshots the source's bounds at unmount time and
 /// animates the destination from those bounds to its natural bounds inside
 /// the same `withAnimation` that drives the swap.
+/// Applies `matchedGeometryEffect(id: "selectionRing", in: namespace)` when a
+/// namespace is provided. The ring is presence-based (only rendered when the
+/// cell is selected) so SwiftUI sees it leave one cell and appear in another,
+/// animating it between positions with the ambient `withAnimation` context.
+struct MatchedSelectionModifier: ViewModifier {
+    let namespace: Namespace.ID?
+    func body(content: Content) -> some View {
+        if let namespace {
+            content.matchedGeometryEffect(id: "selectionRing", in: namespace)
+        } else {
+            content
+        }
+    }
+}
+
 struct MatchedPhotoModifier: ViewModifier {
     let id: UUID
     let namespace: Namespace.ID?

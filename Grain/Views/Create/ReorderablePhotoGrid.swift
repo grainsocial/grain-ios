@@ -17,6 +17,8 @@ struct ReorderablePhotoGrid: View {
     /// Passed down so strip and grid renderings of the same photo share geometry
     /// IDs — prep for the future strip↔grid transition.
     var matchedNamespace: Namespace.ID?
+    /// Shared namespace for the selection ring matched-geometry effect.
+    var selectionNamespace: Namespace.ID?
     /// True for the duration of the strip↔grid mode swap. Currently unused
     /// at the cell level (X buttons stay visible during the morph so they
     /// can ride the matched-geometry transition with the cell, per user
@@ -28,7 +30,11 @@ struct ReorderablePhotoGrid: View {
     @State private var dragStartIndex: Int?
     @State private var dragCurrentIndex: Int?
     @State private var dragOffset: CGSize = .zero
-    @State private var containerWidth: CGFloat = 320
+    /// Starts at 0 (sentinel = not yet measured). `cellSide` returns 0 when this is 0,
+    /// so cells are zero-sized until the first `.onGeometryChange` fires on mount and
+    /// sets the real width. This prevents a 320→actualWidth jump mid matched-geometry
+    /// morph that was causing the grid-mount shake.
+    @State private var containerWidth: CGFloat = 0
 
     private let columnCount: Int = 3
     /// Bumped to give the X button overflow room. Each cell's X is offset (14, -14)
@@ -77,9 +83,10 @@ struct ReorderablePhotoGrid: View {
                     isSelected: selectedPhotoID == id,
                     isDragging: draggedID == id,
                     matchedNamespace: matchedNamespace,
+                    selectionNamespace: selectionNamespace,
                     onTap: {
                         guard draggedID != id else { return }
-                        selectedPhotoID = id
+                        withAnimation(.snappy) { selectedPhotoID = id }
                     },
                     onDelete: { handleDelete(itemID: id) }
                 )
@@ -108,7 +115,19 @@ struct ReorderablePhotoGrid: View {
         .padding(.horizontal, outerPadding)
         .padding(.top, 22)
         .padding(.bottom, 12)
-        .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { containerWidth = $0 }
+        .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { newWidth in
+            // Suppress the animation on the initial 0→real measurement so cells
+            // don't animate from zero-size during the matched-geometry morph.
+            // Subsequent width changes (orientation, split-view resize) can animate
+            // normally because the morph is no longer in flight at that point.
+            if containerWidth == 0 {
+                var t = Transaction()
+                t.animation = nil
+                withTransaction(t) { containerWidth = newWidth }
+            } else {
+                containerWidth = newWidth
+            }
+        }
     }
 
     /// Per-cell visual offset during a drag. The dragged cell follows the finger;

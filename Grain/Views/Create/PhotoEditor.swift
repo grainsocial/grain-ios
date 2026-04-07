@@ -106,6 +106,10 @@ struct PhotoEditor: View {
     /// PhotoThumbnailCell callsites so their photo views share stable geometry IDs
     /// across the mode toggle.
     @Namespace private var photoNamespace
+    /// Shared namespace for the selection ring matched-geometry effect. The ring
+    /// flies between cells when `selectedPhotoID` changes within a mode, and
+    /// rides the cell's `photoNamespace` morph when the mode itself switches.
+    @Namespace private var selectionNamespace
 
     /// LRU preview cache. The carousel uses these instead of `item.thumbnail` (which
     /// is downsized to 150pt for the strip/grid and looks blurry full-screen). Cache
@@ -129,18 +133,34 @@ struct PhotoEditor: View {
     /// Wraps `mode` so the segmented Picker gets the same `isAnimatingMode`
     /// gating as the old button: gate goes up synchronously at the start of the
     /// animation and comes back down in the completion handler.
+    ///
+    /// The `!isAnimatingMode` guard also prevents a mid-flight tap on a
+    /// different segment from racing with the in-progress transition.
+    ///
+    /// A 1.5 s Task safety-net forces the gate down if the completion is
+    /// silently dropped — a known iOS 17/18 issue when a concurrent transaction
+    /// replaces the animation before it settles.
     private var modeBinding: Binding<EditorMode> {
         Binding(
             get: { mode },
             set: { newMode in
-                guard newMode != mode else { return }
+                guard newMode != mode, !isAnimatingMode else { return }
                 withAnimation(.smooth) {
                     isAnimatingMode = true
                     mode = newMode
                 } completion: {
-                    withAnimation(.smooth) {
-                        isAnimatingMode = false
-                    }
+                    // Plain assignment — no withAnimation. The morph has already
+                    // settled; wrapping this in withAnimation(.smooth) re-runs a
+                    // smooth transaction over every view that reads isAnimatingMode
+                    // (both PhotoStrip and ReorderablePhotoGrid receive a new param
+                    // value), causing SwiftUI to re-interpolate cell positions that
+                    // are already at rest, which produces the post-morph wobble.
+                    isAnimatingMode = false
+                }
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(1.5))
+                    guard isAnimatingMode else { return }
+                    isAnimatingMode = false
                 }
             }
         )
@@ -172,28 +192,31 @@ struct PhotoEditor: View {
             // POSITION is what gets paired, not just the inner image bounds.
             Group {
                 if mode == .preview {
+                    // No .transition — matched-geometry drives the morph.
                     PhotoStrip(
                         items: $items,
                         selectedPhotoID: $selectedPhotoID,
                         matchedNamespace: photoNamespace,
+                        selectionNamespace: selectionNamespace,
                         isAnimatingMode: isAnimatingMode
                     )
-                    .transition(.opacity)
                 } else if mode == .reorder {
+                    // No .transition — matched-geometry drives the morph.
                     ReorderablePhotoGrid(
                         items: $items,
                         selectedPhotoID: $selectedPhotoID,
                         isReordering: $isReordering,
                         matchedNamespace: photoNamespace,
+                        selectionNamespace: selectionNamespace,
                         isAnimatingMode: isAnimatingMode
                     )
-                    .transition(.opacity)
                 } else {
+                    // Captions has no matched-geometry pairing, so opacity
+                    // crossfade is the only transition available.
                     captionsList
                         .transition(.opacity)
                 }
             }
-            .animation(.smooth, value: mode)
             .listRowInsets(EdgeInsets())
             .listRowSeparator(.hidden)
         } header: {
@@ -208,36 +231,45 @@ struct PhotoEditor: View {
 
         // MARK: Post Preview section (carousel + EXIF) — preview mode only
 
-        // Section enters the layout tree as soon as mode == .preview (even while
-        // the strip↔grid animation is still running) so that alt-text and
-        // sections below it are already in their final positions from the first
-        // frame of the transition. The section is invisible during the animation
-        // (opacity 0) and fades in when isAnimatingMode becomes false in the
-        // completion handler. This prevents the two-step jump where alt-text
-        // first collapses up (post-preview gone), then expands back down (post-
-        // preview fades in).
-        if let idx = selectedIndex, mode == .preview {
+        // The section stays in the tree for the entire duration of any
+        // transition that touches preview mode (mode == .preview OR
+        // isAnimatingMode). This prevents the hard-cut that would occur if we
+        // only gated on mode == .preview and the section left the tree the
+        // instant mode flipped to something else.
+        //
+        // `showingCarousel` is the single truth that drives both opacity and
+        // frame height simultaneously:
+        //   - Height 0 while hidden so the section takes no layout space and
+        //     the form doesn't show a black gap mid-morph.
+        //   - Both dimensions animate together on the .smooth curve so the
+        //     carousel expands+fades in as one motion.
+        if let idx = selectedIndex, mode == .preview || isAnimatingMode {
+            let showingCarousel = mode == .preview && !isAnimatingMode
             Section {
                 VStack(spacing: 0) {
                     photoCarousel
-                    if items[idx].exifSummary != nil {
-                        exifInfo(for: items[idx])
-                            .padding(.horizontal, 12)
-                            .padding(.top, 8)
-                            .padding(.bottom, 12)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .transition(.move(edge: .top).combined(with: .opacity))
+                    if items.contains(where: { $0.exifSummary != nil }) {
+                        ExifInfoView(
+                            exif: items[idx].exifSummary?.displayData,
+                            reserveCameraRow: items.contains(where: { $0.exifSummary?.camera != nil }),
+                            reserveLensRow: items.contains(where: { $0.exifSummary?.lens != nil }),
+                            style: AnyShapeStyle(sendExif ? .secondary : .tertiary)
+                        )
+                        .transaction { $0.animation = nil }
+                        .padding(.horizontal, 12)
+                        .padding(.top, 8)
+                        .padding(.bottom, 12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
-                .animation(.smooth, value: selectedPhotoID)
                 .background(Color.black)
                 .listRowInsets(EdgeInsets())
                 .listRowSeparator(.hidden)
-                .listRowBackground(Color.black)
+                .listRowBackground(Color.black.opacity(showingCarousel ? 1 : 0))
             } header: {
                 Text("Post Preview")
             }
-            .opacity(isAnimatingMode ? 0 : 1)
+            .opacity(showingCarousel ? 1 : 0)
             .animation(.smooth, value: isAnimatingMode)
         }
     }
@@ -273,8 +305,9 @@ struct PhotoEditor: View {
                         .font(.subheadline)
                         .lineLimit(2 ... 4)
 
-                        if sendExif, item.exifSummary != nil {
-                            exifInfo(for: item)
+                        if sendExif {
+                            ExifInfoView(exif: item.exifSummary?.displayData)
+                                .transaction { $0.animation = nil }
                         }
                     }
                 }
@@ -480,34 +513,6 @@ struct PhotoEditor: View {
             }
         }
         .allowsHitTesting(false)
-    }
-
-    // MARK: - EXIF Info (mirrors ExifInfoView from the feed)
-
-    @ViewBuilder
-    private func exifInfo(for item: PhotoItem) -> some View {
-        if let exif = item.exifSummary {
-            VStack(alignment: .leading, spacing: 4) {
-                if let camera = exif.camera {
-                    HStack(spacing: 6) {
-                        Image(systemName: "camera").font(.caption2)
-                        Text(camera).font(.caption)
-                    }
-                    .foregroundStyle(sendExif ? .secondary : .tertiary)
-                }
-                if let lens = exif.lens {
-                    HStack(spacing: 6) {
-                        Image(systemName: "circle.circle").font(.caption2)
-                        Text(lens).font(.caption)
-                    }
-                    .foregroundStyle(sendExif ? .secondary : .tertiary)
-                }
-                ExifSettingsRow(
-                    tokens: [exif.shutterSpeed, exif.aperture, exif.iso, exif.focalLength],
-                    style: AnyShapeStyle(sendExif ? .secondary : .tertiary)
-                )
-            }
-        }
     }
 }
 
