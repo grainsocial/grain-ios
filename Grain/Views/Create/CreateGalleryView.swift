@@ -15,10 +15,6 @@ struct CreateGalleryView: View {
     @State private var isUploading = false
     @State private var errorMessage: String?
     @State private var resolvedLocation: (h3: String, name: String, address: [String: AnyCodable]?)?
-    @State private var locationQuery = ""
-    @State private var locationSuggestions: [NominatimResult] = []
-    @State private var isSearchingLocation = false
-    @State private var locationSearchTask: Task<Void, Never>?
     @State private var showCamera = false
     @State private var photoItems: [PhotoItem] = []
     @State private var mentionState = MentionAutocompleteState()
@@ -201,80 +197,13 @@ struct CreateGalleryView: View {
         }
     }
 
-    @ViewBuilder
     private var locationRow: some View {
-        if let loc = resolvedLocation {
-            HStack {
-                Label(loc.name, systemImage: "mappin.and.ellipse")
-                    .font(.subheadline)
-                    .lineLimit(1)
-                Spacer()
-                Button {
-                    resolvedLocation = nil
-                    locationQuery = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
-                }
-            }
-        } else {
-            if let photoLoc = photoLocationResult {
-                Button { selectLocation(photoLoc) } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: "location.fill")
-                            .foregroundStyle(.secondary)
-                            .frame(width: 20)
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text("Use first photo location")
-                                .font(.subheadline)
-                            Text(photoLoc.name)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                .foregroundStyle(.primary)
-            }
-            locationSearchField
-            ForEach(locationSuggestions, id: \.placeId) { result in
-                Button {
-                    selectLocation(result)
-                } label: {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(result.name)
-                            .font(.subheadline)
-                            .foregroundStyle(.primary)
-                        if let context = result.context {
-                            Text(context)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private var locationSearchField: some View {
-        HStack {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
-            TextField("Search for a location...", text: $locationQuery)
-                .textInputAutocapitalization(.never)
-                .onChange(of: locationQuery) {
-                    locationSearchTask?.cancel()
-                    let query = locationQuery
-                    locationSearchTask = Task {
-                        try? await Task.sleep(for: .milliseconds(300))
-                        guard !Task.isCancelled else { return }
-                        await searchLocation(query: query)
-                    }
-                }
-            if isSearchingLocation {
-                ProgressView()
-                    .controlSize(.small)
-            }
-        }
+        LocationPickerRows(
+            resolvedLocation: $resolvedLocation,
+            photoLocationResult: photoLocationResult,
+            photoLocationLabel: "Use first photo location",
+            onSelectLocation: selectLocation
+        )
     }
 
     @ViewBuilder
@@ -370,17 +299,9 @@ struct CreateGalleryView: View {
         }
     }
 
-    private func searchLocation(query: String) async {
-        isSearchingLocation = true
-        defer { isSearchingLocation = false }
-        locationSuggestions = await LocationServices.searchLocation(query: query)
-    }
-
     private func selectLocation(_ result: NominatimResult) {
         let h3 = LocationServices.latLonToH3(latitude: result.latitude, longitude: result.longitude)
         resolvedLocation = (h3: h3, name: result.name, address: result.address)
-        locationQuery = ""
-        locationSuggestions = []
     }
 
     // MARK: - Create Gallery

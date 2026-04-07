@@ -3,126 +3,118 @@ import SwiftUI
 /// Shared photo cell. Drag is attached externally by the parent (custom SwiftUI
 /// gesture, NOT system .draggable). The pill is a passive ALT indicator with
 /// `.allowsHitTesting(false)` so touches always fall through to the cell's tap.
+///
+/// Layout model: each cell is structured as three independently animatable
+/// pieces stacked in a ZStack:
+///
+///   1. **Photo** — rendered at `geometry.photoSize`, which is the photo's
+///      natural-aspect rectangle scaled by the mode-specific rule (fill in
+///      preview, fit in reorder).
+///   2. **Mask** — a `geometry.maskSide × geometry.maskSide` square frame
+///      wrapped around the photo via `.frame().clipped()`, centered on the
+///      photo's center. The mask's side animates between modes; in `.preview`
+///      it crops the photo to a center square, in `.reorder` it grows to
+///      `geometry.maskSide` (the column-width square) which fully contains
+///      the natural-aspect photo with letterboxing on the off-axis.
+///   3. **X button** — positioned via `.position(x: maskSide, y: 0)` so its
+///      *center* sits on the mask's top-right corner. The X follows the mask
+///      (not the photo's intrinsic edges) so as the mask animates the X
+///      glides along its corner. Hidden via `hideDelete` while the parent
+///      strip↔grid morph is in flight.
+///
+/// `MatchedPhotoModifier` is applied to the **outer** ZStack (after the
+/// `.frame(maskSide × maskSide)`) so SwiftUI's matched-geometry pairs the
+/// whole cell — its position in the strip's HStack and its position in the
+/// grid's LazyVGrid — across the morph. Putting it on the inner Image (the
+/// previous mistake) only animated the inner image's bounds, not the cell's
+/// position in its parent layout, which is why photos appeared in their new
+/// spots without shifting.
 struct PhotoThumbnailCell: View {
     @Binding var item: PhotoItem
-    var mode: Mode
+    /// Bundle of layout values from the parent (mode + maskSide + photoAspect
+    /// → photoSize, maskCornerRadius). The type prevents callers from passing
+    /// a maskSide that doesn't match the cell's mode.
+    var geometry: CellGeometry
     var isSelected: Bool = false
-    /// True when this specific cell is the one currently being dragged. Drives the
-    /// pickup scale-up + opacity-fade + drop-shadow animation at the outer body
-    /// level so the X button and any future matched-geometry overlay scale together
-    /// with the photo.
+    /// True when this specific cell is the one currently being dragged. Drives
+    /// the pickup scale-up + opacity-fade + drop-shadow animation at the outer
+    /// body level so the X button and any matched-geometry overlay scale
+    /// together with the photo.
     var isDragging: Bool = false
-    /// Hide the X button. Currently always false in production — kept as a parameter
-    /// for future use (e.g., the planned force-square toggle UI).
+    /// Hide the X button. Currently always false in production — kept as a
+    /// parameter for future use (e.g. a force-square toggle). The X used to
+    /// be hidden during the strip↔grid morph, but the user reported the
+    /// disappear/reappear was jarring, so it now stays visible and rides the
+    /// cell's matched-geometry transition along with the photo.
     var hideDelete: Bool = false
-    /// Shared namespace for the future strip↔grid matched-geometry transition.
+    /// Shared namespace for the strip↔grid matched-geometry transition.
     var matchedNamespace: Namespace.ID?
     let onTap: () -> Void
     let onDelete: () -> Void
 
-    enum Mode: Equatable {
-        /// Strip: fixed square cell, image is scaledToFill into an explicit
-        /// square frame, cropped to that frame, then rounded. The visible cell
-        /// is ALWAYS a square regardless of the photo's aspect — center-crop.
-        case square(CGFloat)
-        /// Grid: cell takes its column width and its natural-aspect height.
-        /// Image is aspect-fit inside a frame that matches the photo's aspect
-        /// ratio exactly — no crop, no letterbox, no corner radius.
-        case grid
-    }
-
-    /// Photo's natural aspect ratio (W/H) from `item.thumbnail`. Used only by
-    /// grid mode to size its frame.
-    private var naturalAspect: CGFloat {
-        let w = item.thumbnail.size.width
-        let h = item.thumbnail.size.height
-        guard h > 0 else { return 1 }
-        return w / h
-    }
-
     var body: some View {
-        cellContent
-            // Pickup animation at the outer body so the whole ZStack (image +
-            // X button + any future matched-geometry overlay) scales together.
-            // Keeping the X tied to the photo's top-right means it physically
-            // rides outward with the corner as the photo grows.
-            .scaleEffect(isDragging ? 1.1 : 1)
-            .opacity(isDragging ? 0.8 : 1)
-            .shadow(
-                color: isDragging ? .black.opacity(0.25) : .clear,
-                radius: 10, y: 6
-            )
-            .animation(.spring(response: 0.28, dampingFraction: 0.72), value: isDragging)
-            // Tap gesture at the OUTER body (sibling to the parent's reorder
-            // recognizer instead of a contested child). The X button's own
-            // Button still claims its own taps.
-            .onTapGesture { onTap() }
-    }
+        ZStack(alignment: .topLeading) {
+            // 1. Photo — explicit frame at the rendered (natural-aspect)
+            //    photoSize, then wrapped in the mask square. .clipped() crops
+            //    to the outer (mask) frame. .frame() centers its child by
+            //    default, so the photo's center sits on the mask's center,
+            //    matching the spec ("center of mask and center of photo
+            //    should align").
+            Image(uiImage: item.thumbnail)
+                .resizable()
+                .frame(width: geometry.photoSize.width, height: geometry.photoSize.height)
+                .frame(width: geometry.maskSide, height: geometry.maskSide)
+                .clipShape(RoundedRectangle(cornerRadius: geometry.maskCornerRadius))
+                .overlay(alignment: .bottomTrailing) {
+                    altPill.opacity(hideDelete ? 0 : 1)
+                }
+                .overlay(
+                    RoundedRectangle(cornerRadius: geometry.maskCornerRadius)
+                        .stroke(Color.accentColor, lineWidth: 2.5)
+                        .opacity(isSelected && !hideDelete ? 1 : 0)
+                )
 
-    /// Explicit per-mode rendering. No shared ViewModifier wrappers — each mode
-    /// writes out its own frame and content mode so there's zero ambiguity about
-    /// what sizes / clips / scales happen.
-    @ViewBuilder
-    private var cellContent: some View {
-        switch mode {
-        case let .square(side):
-            ZStack(alignment: .topTrailing) {
-                squarePhoto(side: side)
-                deleteButton
-            }
-            .frame(width: side, height: side)
-        case .grid:
-            ZStack(alignment: .topTrailing) {
-                gridPhoto
-                deleteButton
-            }
-            .frame(maxWidth: .infinity)
-            .aspectRatio(naturalAspect, contentMode: .fit)
+            // 2. X button — positioned so its center sits exactly on the
+            //    mask's top-right corner. The .position modifier sets the
+            //    view's CENTER at the given point in the parent's coordinate
+            //    space. With the parent ZStack at maskSide × maskSide, the
+            //    point (maskSide, 0) IS the top-right corner. As maskSide
+            //    animates, the position updates and SwiftUI interpolates it
+            //    inside the same withAnimation that drives the morph.
+            deleteButton
+                .position(x: geometry.maskSide, y: 0)
+                .opacity(hideDelete ? 0 : 1)
+                .allowsHitTesting(!hideDelete)
         }
+        .frame(width: geometry.maskSide, height: geometry.maskSide)
+        // matched-geometry on the OUTER frame so SwiftUI pairs the cell's
+        // POSITION (not just the inner image's bounds) across the strip↔grid
+        // swap. This is the morph fix. The editor swaps strip and grid via
+        // if/else so at most one source exists per id at any moment — no
+        // isSource plumbing needed.
+        .modifier(MatchedPhotoModifier(
+            id: item.id,
+            namespace: matchedNamespace
+        ))
+        // Pickup animation at the outer body so the whole cell (photo + X)
+        // scales together. Keeps the X tied to the cell so it physically
+        // rides outward as the photo grows.
+        .scaleEffect(isDragging ? 1.1 : 1)
+        .opacity(isDragging ? 0.8 : 1)
+        .shadow(
+            color: isDragging ? .black.opacity(0.25) : .clear,
+            radius: 10, y: 6
+        )
+        .animation(.spring(response: 0.28, dampingFraction: 0.72), value: isDragging)
+        // Tap gesture at the OUTER body (sibling to the parent's reorder
+        // recognizer instead of a contested child). The X button's own
+        // Button still claims its own taps.
+        .onTapGesture { onTap() }
     }
 
-    /// Square cell for the strip. The chain is the canonical SwiftUI pattern
-    /// for "crop an arbitrary-aspect photo into a fixed square tile":
-    /// `.resizable().scaledToFill().frame(side, side).clipped()`. The inner
-    /// frame + clipped() is what enforces the square — wrapping this in a view
-    /// modifier was subtly losing the clip in some edge cases, so it's inline
-    /// now.
-    private func squarePhoto(side: CGFloat) -> some View {
-        Image(uiImage: item.thumbnail)
-            .resizable()
-            .scaledToFill()
-            .frame(width: side, height: side)
-            .clipped()
-            .modifier(MatchedPhotoModifier(id: item.id, namespace: matchedNamespace))
-            .overlay(alignment: .bottomTrailing) { altPill }
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color.accentColor, lineWidth: 2.5)
-                    .opacity(isSelected ? 1 : 0)
-            )
-    }
-
-    /// Grid cell. The surrounding `.aspectRatio(naturalAspect, .fit)` on the
-    /// ZStack means the cell's frame IS the photo's frame — so `scaledToFit`
-    /// here fills the frame exactly with no letterboxing and no crop. No
-    /// corner radius: raw rectangular photos per the "natural aspect" direction.
-    private var gridPhoto: some View {
-        Image(uiImage: item.thumbnail)
-            .resizable()
-            .scaledToFit()
-            .modifier(MatchedPhotoModifier(id: item.id, namespace: matchedNamespace))
-            .overlay(alignment: .bottomTrailing) { altPill }
-            .overlay(
-                Rectangle()
-                    .stroke(Color.accentColor, lineWidth: 2.5)
-                    .opacity(isSelected ? 1 : 0)
-            )
-    }
-
-    private var altPill: some View {
+    @ViewBuilder private var altPill: some View {
         let hasAlt = !item.alt.trimmingCharacters(in: .whitespaces).isEmpty
-        return Text("ALT")
+        Text("ALT")
             .font(.caption2.weight(.bold))
             .padding(.horizontal, 6)
             .padding(.vertical, 3)
@@ -134,12 +126,11 @@ struct PhotoThumbnailCell: View {
             .accessibilityLabel(hasAlt ? "Has alt text" : "No alt text")
     }
 
-    /// X button at the cell's top-right corner. 44pt frame for HIG-compliant tap area.
-    /// `.topTrailing` alignment of the parent ZStack puts the frame's top-right corner
-    /// at the cell's top-right corner, which means the frame's center (where the visible
-    /// icon sits) is 22pt INSIDE the cell along each axis. Offsetting by (+22, -22)
-    /// translates the frame so its center now lands exactly ON the cell's corner —
-    /// half the icon is inside the cell, half is outside, centered on the corner.
+    /// X button at the cell's top-right corner. 44pt frame for HIG-compliant
+    /// tap area. The .position modifier in `body` puts this view's CENTER on
+    /// the mask's top-right corner — half the icon visually overlaps the mask,
+    /// half overflows outside it. ZStack does NOT clip its children, so the
+    /// outer half stays visible into the parent layout's spacing.
     private var deleteButton: some View {
         Button(action: onDelete) {
             Image(systemName: "xmark.circle.fill")
@@ -149,17 +140,24 @@ struct PhotoThumbnailCell: View {
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .offset(x: 22, y: -22)
-        .opacity(hideDelete ? 0 : 1)
-        .animation(.snappy, value: hideDelete)
     }
 }
 
 /// Conditionally applies `matchedGeometryEffect` when a namespace is provided.
-/// Prep for the eventual strip↔grid transition — the strip and grid both pass
-/// the SAME `Namespace.ID` for the SAME photo id, so the photo view can animate
-/// between its strip-square and grid-slot bounds.
-private struct MatchedPhotoModifier: ViewModifier {
+/// The strip and grid both pass the SAME `Namespace.ID` for the SAME photo id,
+/// so the cell's outer frame can morph between its strip-square position and
+/// its grid-slot position. Applied to the cell's OUTER frame in
+/// `PhotoThumbnailCell.body`, not to the inner image — that's the difference
+/// between "inner image bounds wiggle" and "whole cell shifts across the
+/// layout swap".
+///
+/// We rely on the editor swapping strip and grid via `if/else` (NOT a ZStack
+/// with both subtrees mounted), which means at most one matched view exists
+/// per id at any moment — so `isSource` defaults to `true` and no plumbing
+/// is needed. SwiftUI snapshots the source's bounds at unmount time and
+/// animates the destination from those bounds to its natural bounds inside
+/// the same `withAnimation` that drives the swap.
+struct MatchedPhotoModifier: ViewModifier {
     let id: UUID
     let namespace: Namespace.ID?
 

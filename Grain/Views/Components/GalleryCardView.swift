@@ -131,6 +131,62 @@ private struct LikeParticleView: View {
     }
 }
 
+private struct PageIndicatorView: View {
+    let photos: [GrainPhoto]
+    let currentPage: Int
+    let hasPortrait: Bool
+
+    var body: some View {
+        if photos.count > 1 {
+            HStack(spacing: 5) {
+                let total = photos.count
+                let maxVisible = 5
+                let start = total <= maxVisible ? 0 : min(max(currentPage - 2, 0), total - maxVisible)
+                let end = total <= maxVisible ? total : start + maxVisible
+
+                ForEach(start ..< end, id: \.self) { index in
+                    let distance = abs(index - currentPage)
+                    let currentIsLandscape = photos[currentPage].aspectRatio.ratio >= 1
+                    let dotColor: Color = hasPortrait && currentIsLandscape ? .secondary : .white
+                    Circle()
+                        .fill(dotColor.opacity(index == currentPage ? 1.0 : distance == 1 ? 0.5 : distance == 2 ? 0.3 : 0.2))
+                        .frame(
+                            width: distance <= 1 ? 6 : distance == 2 ? 4 : 3,
+                            height: distance <= 1 ? 6 : distance == 2 ? 4 : 3
+                        )
+                        .animation(.easeInOut(duration: 0.2), value: currentPage)
+                }
+            }
+            .padding(.vertical, 8)
+        }
+    }
+}
+
+private struct CopiedToastView: View {
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "doc.on.doc.fill")
+                .font(.caption)
+            Text("Link copied")
+                .font(.subheadline.weight(.medium))
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.ultraThinMaterial, in: Capsule())
+        .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
+        .transition(.scale.combined(with: .opacity))
+    }
+}
+
+private extension View {
+    /// Overlays a "Link copied" toast and drives its entrance/exit animation.
+    /// Bundles the overlay and animation so they can't be accidentally separated.
+    func copiedToast(isShowing: Bool) -> some View {
+        overlay { if isShowing { CopiedToastView() } }
+            .animation(.spring(response: 0.4, dampingFraction: 0.7), value: isShowing)
+    }
+}
+
 struct GalleryCardView: View {
     @Environment(AuthManager.self) private var auth
     @Environment(StoryStatusCache.self) private var storyStatusCache
@@ -188,10 +244,7 @@ struct GalleryCardView: View {
             engagementRow
             captionSection(lr: lr)
         }
-        .overlay {
-            copiedToastOverlay
-        }
-        .animation(.spring(response: 0.4, dampingFraction: 0.7), value: showCopiedToast)
+        .copiedToast(isShowing: showCopiedToast)
     }
 
     private var cardHeader: some View {
@@ -299,7 +352,7 @@ struct GalleryCardView: View {
                 }
                 .allowsHitTesting(lr.action != .warnMedia || gallery.labelRevealed)
 
-                pageIndicator(photos: photos, hasPortrait: hasPortrait)
+                PageIndicatorView(photos: photos, currentPage: currentPage, hasPortrait: hasPortrait)
                 altButton(photos: photos)
 
                 // Double-tap heart animations
@@ -336,32 +389,6 @@ struct GalleryCardView: View {
         }
         .onDisappear {
             prefetcher.stopPrefetching()
-        }
-    }
-
-    @ViewBuilder
-    private func pageIndicator(photos: [GrainPhoto], hasPortrait: Bool) -> some View {
-        if photos.count > 1 {
-            HStack(spacing: 5) {
-                let total = photos.count
-                let maxVisible = 5
-                let start = total <= maxVisible ? 0 : min(max(currentPage - 2, 0), total - maxVisible)
-                let end = total <= maxVisible ? total : start + maxVisible
-
-                ForEach(start ..< end, id: \.self) { index in
-                    let distance = abs(index - currentPage)
-                    let currentIsLandscape = photos[currentPage].aspectRatio.ratio >= 1
-                    let dotColor: Color = hasPortrait && currentIsLandscape ? .secondary : .white
-                    Circle()
-                        .fill(dotColor.opacity(index == currentPage ? 1.0 : distance == 1 ? 0.5 : distance == 2 ? 0.3 : 0.2))
-                        .frame(
-                            width: distance <= 1 ? 6 : distance == 2 ? 4 : 3,
-                            height: distance <= 1 ? 6 : distance == 2 ? 4 : 3
-                        )
-                        .animation(.easeInOut(duration: 0.2), value: currentPage)
-                }
-            }
-            .padding(.vertical, 8)
         }
     }
 
@@ -513,23 +540,6 @@ struct GalleryCardView: View {
         .padding(.horizontal, 12)
         .padding(.top, 8)
         .padding(.bottom, 16)
-    }
-
-    @ViewBuilder
-    private var copiedToastOverlay: some View {
-        if showCopiedToast {
-            HStack(spacing: 6) {
-                Image(systemName: "doc.on.doc.fill")
-                    .font(.caption)
-                Text("Link copied")
-                    .font(.subheadline.weight(.medium))
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .background(.ultraThinMaterial, in: Capsule())
-            .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
-            .transition(.scale.combined(with: .opacity))
-        }
     }
 
     private func addParticleBurst() {
