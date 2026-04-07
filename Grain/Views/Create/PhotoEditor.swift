@@ -8,6 +8,19 @@ struct PhotoEditor: View {
     @State private var isExpanded = false
     @State private var showingCarouselAlt = false
 
+    /// LRU preview cache. The carousel uses these instead of `item.thumbnail` (which
+    /// is downsized to 150pt for the strip/grid and looks blurry full-screen). Cache
+    /// is capped to keep peak memory bounded — 20 photos × full-res would be hundreds
+    /// of MB on a phone. We load on selection change and prune the oldest entries.
+    @State private var previewCache: [UUID: UIImage] = [:]
+    @State private var previewCacheOrder: [UUID] = []
+    @State private var loadingPreviewIDs: Set<UUID> = []
+
+    /// 1500pt is plenty for a phone-screen carousel — at 3x density that's 4500
+    /// pixels of horizontal resolution, more than the screen's native width.
+    private let previewMaxDimension: CGFloat = 1500
+    private let previewCacheLimit = 5
+
     private var selectedIndex: Int? {
         guard let id = selectedPhotoID else { return nil }
         return items.firstIndex(where: { $0.id == id })
@@ -126,7 +139,7 @@ struct PhotoEditor: View {
                         ForEach(items) { item in
                             ZStack {
                                 ZoomableImage(
-                                    localImage: item.thumbnail,
+                                    localImage: previewCache[item.id] ?? item.thumbnail,
                                     aspectRatio: ratio(for: item)
                                 )
 
@@ -159,10 +172,61 @@ struct PhotoEditor: View {
                     guard !alt.isEmpty else { return }
                     withAnimation(.smooth) { showingCarouselAlt.toggle() }
                 }
-                .onChange(of: selectedPhotoID) { showingCarouselAlt = false }
+                .onChange(of: selectedPhotoID) { _, newID in
+                    showingCarouselAlt = false
+                    if let id = newID, let item = items.first(where: { $0.id == id }) {
+                        loadPreviewIfNeeded(for: item)
+                    }
+                }
+                .onAppear {
+                    loadPreviewIfNeeded(for: items[safeIdx])
+                }
                 .frame(height: height)
             }
             .aspectRatio(carouselRatio, contentMode: .fit)
+        }
+    }
+
+    // MARK: - Preview cache
+
+    /// Load a higher-resolution preview image for `item` into `previewCache` unless
+    /// it's already cached or in flight. The cache is bounded by `previewCacheLimit`
+    /// — when exceeded, the least-recently-used entry is evicted. The carousel reads
+    /// from this cache and falls back to `item.thumbnail` (150pt) while loading.
+    private func loadPreviewIfNeeded(for item: PhotoItem) {
+        guard previewCache[item.id] == nil,
+              !loadingPreviewIDs.contains(item.id) else { return }
+        loadingPreviewIDs.insert(item.id)
+        let id = item.id
+        let source = item.source
+        Task {
+            let image = await Self.loadPreviewImage(source: source, maxDimension: previewMaxDimension)
+            await MainActor.run {
+                loadingPreviewIDs.remove(id)
+                guard let image else { return }
+                previewCache[id] = image
+                previewCacheOrder.removeAll { $0 == id }
+                previewCacheOrder.append(id)
+                while previewCacheOrder.count > previewCacheLimit {
+                    let evict = previewCacheOrder.removeFirst()
+                    previewCache.removeValue(forKey: evict)
+                }
+            }
+        }
+    }
+
+    /// Static so the closure body doesn't capture `self`. For picker items we have
+    /// to fetch the original Data via PhotosPicker; for camera items the full UIImage
+    /// already lives in the PhotoSource enum. In both cases we downsize to
+    /// `maxDimension` so cached previews fit a sane memory budget.
+    private static func loadPreviewImage(source: PhotoSource, maxDimension: CGFloat) async -> UIImage? {
+        switch source {
+        case let .picker(pickerItem):
+            guard let data = try? await pickerItem.loadTransferable(type: Data.self),
+                  let image = UIImage(data: data) else { return nil }
+            return PhotoItem.makeThumbnail(from: image, maxSize: maxDimension)
+        case let .camera(image, _):
+            return PhotoItem.makeThumbnail(from: image, maxSize: maxDimension)
         }
     }
 
