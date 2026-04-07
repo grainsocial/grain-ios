@@ -84,14 +84,16 @@ device device_id:
 release:
     #!/usr/bin/env bash
     set -euo pipefail
-    # Read current build number and bump
+    # Compute next build number (don't write yet — only bump on successful upload)
     current=$(grep 'CURRENT_PROJECT_VERSION' project.yml | head -1 | sed 's/.*"\([0-9]*\)"/\1/')
     next=$((current + 1))
+    echo "Preparing build $next (current: $current)"
     sed -i '' "s/CURRENT_PROJECT_VERSION: \"$current\"/CURRENT_PROJECT_VERSION: \"$next\"/" project.yml
-    echo "Bumped build number: $current → $next"
-    xcodegen generate
+    # Restore on any failure so the next attempt reuses the same number
+    trap 'sed -i "" "s/CURRENT_PROJECT_VERSION: \"$next\"/CURRENT_PROJECT_VERSION: \"$current\"/" project.yml; BUNDLE_ID={{bundle_id}} xcodegen generate >/dev/null 2>&1 || true' ERR
+    BUNDLE_ID={{bundle_id}} xcodegen generate
     echo "Archiving..."
-    set -o pipefail && xcodebuild archive -scheme Grain -destination 'generic/platform=iOS' -archivePath /tmp/Grain.xcarchive CODE_SIGN_STYLE=Automatic DEVELOPMENT_TEAM={{team_id}} -allowProvisioningUpdates 2>&1 | xcbeautify
+    set -o pipefail && xcodebuild archive -scheme Grain -destination 'generic/platform=iOS' -archivePath /tmp/Grain.xcarchive CODE_SIGN_STYLE=Automatic DEVELOPMENT_TEAM={{team_id}} PRODUCT_BUNDLE_IDENTIFIER={{bundle_id}} -allowProvisioningUpdates 2>&1 | xcbeautify
     echo "Uploading to App Store Connect..."
     cat > /tmp/ExportOptions.plist << 'PLIST'
     <?xml version="1.0" encoding="UTF-8"?>
@@ -108,4 +110,5 @@ release:
     </plist>
     PLIST
     xcodebuild -exportArchive -archivePath /tmp/Grain.xcarchive -exportOptionsPlist /tmp/ExportOptions.plist -exportPath /tmp/GrainExport -allowProvisioningUpdates
+    trap - ERR
     echo "Build $next uploaded successfully!"
