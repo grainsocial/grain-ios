@@ -308,18 +308,26 @@ struct StoryViewer: View {
             if let story = currentStory {
                 let lr = storyLabelResult
 
-                // Story image
+                // Story image — check memory cache before creating LazyImage so
+                // we never get a two-state view swap (sync Image → LazyImage-delivered
+                // Image) for the same pixel content, which causes a flash.
+                let cachedFullsize: UIImage? = (lr.action != .hide || labelRevealed)
+                    ? URL(string: story.fullsize).flatMap {
+                        ImagePipeline.shared.cache.cachedImage(for: ImageRequest(url: $0))?.image
+                    }
+                    : nil
                 ZStack {
-                    LazyImage(request: {
-                        guard lr.action != .hide || labelRevealed,
-                              let url = URL(string: story.fullsize) else { return ImageRequest(url: nil) }
-                        return ImageRequest(url: url, priority: .veryHigh)
-                    }()) { state in
-                        if let image = state.image {
-                            image
+                    Group {
+                        if let cached = cachedFullsize {
+                            // DEBUG: blue = fullsize sync-pulled from memory cache (no LazyImage needed)
+                            Image(uiImage: cached)
                                 .resizable()
                                 .aspectRatio(story.aspectRatio.ratio, contentMode: .fit)
                                 .frame(maxWidth: .infinity)
+                                // .overlay(alignment: .topLeading) {
+                                //     Color.blue.opacity(0.35).ignoresSafeArea()
+                                //     Text("fullsize · cache").font(.caption2.bold()).padding(6).background(.black.opacity(0.5)).foregroundStyle(.white).padding(8)
+                                // }
                                 .onAppear {
                                     if !imageLoaded {
                                         imageLoaded = true
@@ -327,33 +335,63 @@ struct StoryViewer: View {
                                     }
                                 }
                         } else {
-                            ZStack {
-                                // Hit Nuke's memory cache synchronously so the blurred
-                                // thumb is in frame 1 — LazyImage takes a frame to
-                                // publish even from cache, causing a 1-frame flash
-                                // right after a story transition.
-                                if let thumbURL = URL(string: story.thumb),
-                                   let cachedThumb = ImagePipeline.shared.cache
-                                   .cachedImage(for: ImageRequest(url: thumbURL))?.image
-                                {
-                                    Image(uiImage: cachedThumb)
+                            LazyImage(request: {
+                                guard lr.action != .hide || labelRevealed,
+                                      let url = URL(string: story.fullsize) else { return ImageRequest(url: nil) }
+                                return ImageRequest(url: url, priority: .veryHigh)
+                            }()) { state in
+                                if let image = state.image {
+                                    image
                                         .resizable()
                                         .aspectRatio(story.aspectRatio.ratio, contentMode: .fit)
-                                        .blur(radius: 20)
-                                        .clipped()
+                                        .frame(maxWidth: .infinity)
+                                        // .overlay(alignment: .topLeading) {
+                                        //     // DEBUG: green = fullsize delivered by LazyImage (network/disk)
+                                        //     Color.green.opacity(0.35).ignoresSafeArea()
+                                        //     Text("fullsize · network").font(.caption2.bold()).padding(6).background(.black.opacity(0.5)).foregroundStyle(.white).padding(8)
+                                        // }
+                                        .onAppear {
+                                            if !imageLoaded {
+                                                imageLoaded = true
+                                                startTimerIfSafe()
+                                            }
+                                        }
                                 } else {
-                                    LazyImage(url: URL(string: story.thumb)) { thumbState in
-                                        if let thumb = thumbState.image {
-                                            thumb
+                                    ZStack {
+                                        if let thumbURL = URL(string: story.thumb),
+                                           let cachedThumb = ImagePipeline.shared.cache
+                                           .cachedImage(for: ImageRequest(url: thumbURL))?.image
+                                        {
+                                            Image(uiImage: cachedThumb)
                                                 .resizable()
                                                 .aspectRatio(story.aspectRatio.ratio, contentMode: .fit)
                                                 .blur(radius: 20)
                                                 .clipped()
+                                            // .overlay(alignment: .topLeading) {
+                                            //     // DEBUG: yellow = thumb sync-pulled from memory cache
+                                            //     Color.yellow.opacity(0.35).ignoresSafeArea()
+                                            //     Text("thumb · cache").font(.caption2.bold()).padding(6).background(.black.opacity(0.5)).foregroundStyle(.white).padding(8)
+                                            // }
+                                        } else {
+                                            LazyImage(url: URL(string: story.thumb)) { thumbState in
+                                                if let thumb = thumbState.image {
+                                                    thumb
+                                                        .resizable()
+                                                        .aspectRatio(story.aspectRatio.ratio, contentMode: .fit)
+                                                        .blur(radius: 20)
+                                                        .clipped()
+                                                    // .overlay(alignment: .topLeading) {
+                                                    //     // DEBUG: red = thumb from network (cache miss)
+                                                    //     Color.red.opacity(0.35).ignoresSafeArea()
+                                                    //     Text("thumb · network").font(.caption2.bold()).padding(6).background(.black.opacity(0.5)).foregroundStyle(.white).padding(8)
+                                                    // }
+                                                }
+                                            }
                                         }
+                                        ProgressView()
+                                            .tint(.white)
                                     }
                                 }
-                                ProgressView()
-                                    .tint(.white)
                             }
                         }
                     }

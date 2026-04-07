@@ -259,12 +259,35 @@ struct GalleryCardView: View {
             ZStack(alignment: .bottom) {
                 TabView(selection: $currentPage) {
                     ForEach(Array(photos.enumerated()), id: \.element.id) { index, photo in
-                        ZoomableImage(
-                            url: photo.fullsize,
-                            thumbURL: photo.thumb,
-                            aspectRatio: photo.aspectRatio.ratio,
-                            onDoubleTap: { point in doubleTapLike(at: point) }
-                        )
+                        ZStack {
+                            ZoomableImage(
+                                url: photo.fullsize,
+                                thumbURL: photo.thumb,
+                                aspectRatio: photo.aspectRatio.ratio,
+                                onDoubleTap: { point in doubleTapLike(at: point) }
+                            )
+
+                            // Per-page alt text overlay — lives INSIDE the TabView page so
+                            // it translates with the photo during a swipe instead of
+                            // staying fixed while the photo moves underneath. Wrapping
+                            // grey + text in a single ZStack guarantees they share one
+                            // transition (no out-of-sync fade between them).
+                            if showingAlt, let alt = photo.alt, !alt.isEmpty {
+                                ZStack {
+                                    Color.black.opacity(0.6)
+                                    Text(alt)
+                                        .font(.subheadline)
+                                        .foregroundStyle(.white)
+                                        .multilineTextAlignment(.center)
+                                        .padding(20)
+                                }
+                                .transition(.asymmetric(
+                                    insertion: .opacity.animation(.easeIn(duration: 0.35)),
+                                    removal: .opacity
+                                ))
+                                .allowsHitTesting(false)
+                            }
+                        }
                         .tag(index)
                     }
                 }
@@ -277,7 +300,6 @@ struct GalleryCardView: View {
                 .allowsHitTesting(lr.action != .warnMedia || gallery.labelRevealed)
 
                 pageIndicator(photos: photos, hasPortrait: hasPortrait)
-                altTextOverlay(photos: photos)
                 altButton(photos: photos)
 
                 // Double-tap heart animations
@@ -340,26 +362,6 @@ struct GalleryCardView: View {
                 }
             }
             .padding(.vertical, 8)
-        }
-    }
-
-    @ViewBuilder
-    private func altTextOverlay(photos: [GrainPhoto]) -> some View {
-        if showingAlt, let alt = photos[currentPage].alt, !alt.isEmpty {
-            Color.black.opacity(0.6)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .onTapGesture {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        showingAlt = false
-                    }
-                }
-            Text(alt)
-                .font(.subheadline)
-                .foregroundStyle(.white)
-                .multilineTextAlignment(.center)
-                .padding(20)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .allowsHitTesting(false)
         }
     }
 
