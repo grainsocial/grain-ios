@@ -38,7 +38,7 @@ struct ReorderRecognizer: UIGestureRecognizerRepresentable {
     }
 
     func makeCoordinator(converter _: CoordinateSpaceConverter) -> Coordinator {
-        Coordinator()
+        Coordinator(onChange: onChange)
     }
 
     func makeUIGestureRecognizer(context: Context) -> UILongPressGestureRecognizer {
@@ -59,8 +59,9 @@ struct ReorderRecognizer: UIGestureRecognizerRepresentable {
         return recognizer
     }
 
-    func updateUIGestureRecognizer(_ recognizer: UILongPressGestureRecognizer, context _: Context) {
+    func updateUIGestureRecognizer(_ recognizer: UILongPressGestureRecognizer, context: Context) {
         recognizer.minimumPressDuration = minimumPressDuration
+        context.coordinator.onChange = onChange
     }
 
     func handleUIGestureRecognizerAction(_ recognizer: UILongPressGestureRecognizer, context: Context) {
@@ -70,19 +71,19 @@ struct ReorderRecognizer: UIGestureRecognizerRepresentable {
         switch recognizer.state {
         case .began:
             coordinator.startLocation = location
-            onChange(.began, .zero)
+            coordinator.onChange(.began, .zero)
         case .changed:
             guard let start = coordinator.startLocation else { return }
             let translation = CGSize(
                 width: location.x - start.x,
                 height: location.y - start.y
             )
-            onChange(.changed, translation)
+            coordinator.onChange(.changed, translation)
         case .ended:
-            onChange(.ended, .zero)
+            coordinator.onChange(.ended, .zero)
             coordinator.startLocation = nil
         case .cancelled, .failed:
-            onChange(.cancelled, .zero)
+            coordinator.onChange(.cancelled, .zero)
             coordinator.startLocation = nil
         default:
             break
@@ -92,6 +93,11 @@ struct ReorderRecognizer: UIGestureRecognizerRepresentable {
     @MainActor
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
         var startLocation: CGPoint?
+        var onChange: (Phase, CGSize) -> Void
+
+        init(onChange: @escaping (Phase, CGSize) -> Void) {
+            self.onChange = onChange
+        }
 
         /// Allow scroll views and SwiftUI tap recognizers to recognize alongside us.
         /// Without this, holding-then-dragging on a cell would either eat the tap or

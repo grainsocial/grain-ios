@@ -20,14 +20,11 @@ struct ScrollPanLocker: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: RecognizerFinderView, context _: Context) {
-        let disabled = isDisabled
-        DispatchQueue.main.async {
-            guard let scrollView = uiView.enclosingScrollView() else { return }
-            // Toggling isEnabled on the pan recognizer immediately cancels any
-            // in-flight drag and blocks new user pans, but leaves programmatic
-            // setContentOffset untouched.
-            scrollView.panGestureRecognizer.isEnabled = !disabled
-        }
+        guard let scrollView = uiView.enclosingScrollView() else { return }
+        // Toggling isEnabled on the pan recognizer immediately cancels any
+        // in-flight drag and blocks new user pans, but leaves programmatic
+        // setContentOffset untouched.
+        scrollView.panGestureRecognizer.isEnabled = !isDisabled
     }
 
     final class RecognizerFinderView: UIView {
@@ -61,11 +58,8 @@ struct InteractivePopLocker: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: ResponderFinderView, context _: Context) {
-        let disabled = isDisabled
-        DispatchQueue.main.async {
-            guard let nav = uiView.enclosingNavigationController() else { return }
-            nav.interactivePopGestureRecognizer?.isEnabled = !disabled
-        }
+        guard let nav = uiView.enclosingNavigationController() else { return }
+        nav.interactivePopGestureRecognizer?.isEnabled = !isDisabled
     }
 
     final class ResponderFinderView: UIView {

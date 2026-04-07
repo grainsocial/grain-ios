@@ -17,12 +17,18 @@ struct ReorderablePhotoGrid: View {
     /// Passed down so strip and grid renderings of the same photo share geometry
     /// IDs — prep for the future strip↔grid transition.
     var matchedNamespace: Namespace.ID?
+    /// True for the duration of the strip↔grid mode swap. Currently unused
+    /// at the cell level (X buttons stay visible during the morph so they
+    /// can ride the matched-geometry transition with the cell, per user
+    /// feedback that the disappear/reappear was jarring). Kept on the API
+    /// for the editor's convenience and in case future work needs it back.
+    var isAnimatingMode: Bool = false
 
     @State private var draggedID: UUID?
     @State private var dragStartIndex: Int?
     @State private var dragCurrentIndex: Int?
     @State private var dragOffset: CGSize = .zero
-    @State private var containerWidth: CGFloat = 0
+    @State private var containerWidth: CGFloat = 320
 
     private let columnCount: Int = 3
     /// Bumped to give the X button overflow room. Each cell's X is offset (14, -14)
@@ -37,42 +43,21 @@ struct ReorderablePhotoGrid: View {
         )
     }
 
-    private var cellWidth: CGFloat {
+    /// Side length of each grid cell. With the new mask architecture, every
+    /// grid cell is a uniform square of column width — the photo letterboxes
+    /// inside the square at its natural aspect, with the mask sized to fully
+    /// contain the photo. Uniform squares simplify drag math (no more
+    /// per-row averaging) and remove a class of jitter that variable-height
+    /// LazyVGrid rows used to introduce when items reordered across rows.
+    private var cellSide: CGFloat {
         let total = max(0, containerWidth - outerPadding * 2 - spacing * CGFloat(columnCount - 1))
         return total / CGFloat(columnCount)
     }
 
-    /// Each cell sizes itself to its photo's natural aspect at column width, so
-    /// rows have variable heights. For the drag-stride calculation we need a
-    /// single "how far is the next row?" number — we use the average actual row
-    /// height (sum of each row's max cell height, divided by row count). Close
-    /// enough for reorder snapping without per-row hit-testing state. Not exact
-    /// for heterogeneous galleries; good enough to feel right until we iterate.
-    private var averageRowHeight: CGFloat {
-        guard cellWidth > 0, !items.isEmpty else { return cellWidth }
-        var rowHeights: [CGFloat] = []
-        var i = 0
-        while i < items.count {
-            let rowEnd = min(i + columnCount, items.count)
-            var rowMax: CGFloat = 0
-            for j in i ..< rowEnd {
-                let w = items[j].thumbnail.size.width
-                let h = items[j].thumbnail.size.height
-                guard h > 0, w > 0 else { continue }
-                let cellH = cellWidth * h / w
-                rowMax = max(rowMax, cellH)
-            }
-            if rowMax > 0 {
-                rowHeights.append(rowMax)
-            }
-            i = rowEnd
-        }
-        guard !rowHeights.isEmpty else { return cellWidth }
-        return rowHeights.reduce(0, +) / CGFloat(rowHeights.count)
-    }
-
+    /// Stride between adjacent slots: one cell side plus the inter-cell
+    /// spacing. Same value for both axes since cells are uniform squares.
     private var stride: CGSize {
-        CGSize(width: cellWidth + spacing, height: averageRowHeight + spacing)
+        CGSize(width: cellSide + spacing, height: cellSide + spacing)
     }
 
     var body: some View {
@@ -84,12 +69,13 @@ struct ReorderablePhotoGrid: View {
                 let id = item.id
                 PhotoThumbnailCell(
                     item: $item,
-                    mode: .grid,
+                    geometry: CellGeometry(
+                        mode: .reorder,
+                        maskSide: cellSide,
+                        photoAspect: aspect(of: item)
+                    ),
                     isSelected: selectedPhotoID == id,
                     isDragging: draggedID == id,
-                    // All Xs always visible — z-order on the dragged cell handles
-                    // the "X is below the picked-up photo" effect via covering.
-                    hideDelete: false,
                     matchedNamespace: matchedNamespace,
                     onTap: {
                         guard draggedID != id else { return }
@@ -98,9 +84,16 @@ struct ReorderablePhotoGrid: View {
                     onDelete: { handleDelete(itemID: id) }
                 )
                 .id(id)
+                // .zIndex BEFORE the offset/geometryGroup so the picked-up
+                // cell wins z-order against ALL other cells (including those
+                // drawn after it in the LazyVGrid's row-order pass), not just
+                // siblings within its current row. The big number is
+                // intentional — LazyVGrid's row-order draw can stack later
+                // rows on top, and `.zIndex(1)` was getting beaten by a few
+                // implicit row-level stacks.
+                .zIndex(draggedID == id ? 1000 : 0)
                 .offset(slotShift(for: item))
                 .geometryGroup()
-                .zIndex(draggedID == id ? 1 : 0)
                 // UIKit-backed long-press-drag (see ReorderRecognizer). The
                 // SwiftUI .simultaneousGesture(LongPress.sequenced(Drag)) we used
                 // before silently broke vertical Form scroll AND inner taps on
@@ -113,14 +106,9 @@ struct ReorderablePhotoGrid: View {
             }
         }
         .padding(.horizontal, outerPadding)
-        .padding(.vertical, 12)
-        .background(
-            GeometryReader { geo in
-                Color.clear
-                    .onAppear { containerWidth = geo.size.width }
-                    .onChange(of: geo.size.width) { _, newValue in containerWidth = newValue }
-            }
-        )
+        .padding(.top, 22)
+        .padding(.bottom, 12)
+        .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { containerWidth = $0 }
     }
 
     /// Per-cell visual offset during a drag. The dragged cell follows the finger;
@@ -191,8 +179,8 @@ struct ReorderablePhotoGrid: View {
         dragOffset = translation
 
         // Compute the proposed target index from the finger's translation in row/col
-        // units. Each (cellWidth + spacing) is one column step; each
-        // (cellHeight + spacing) is one row step.
+        // units. Each (cellSide + spacing) is one column step; with uniform
+        // square cells the row stride is the same value.
         let colDelta = Int((dragOffset.width / stride.width).rounded())
         let rowDelta = Int((dragOffset.height / stride.height).rounded())
 
@@ -220,19 +208,22 @@ struct ReorderablePhotoGrid: View {
             return
         }
 
-        if start != current {
-            withAnimation(.snappy) {
+        withAnimation(.snappy) {
+            if start != current {
                 items.move(
                     fromOffsets: IndexSet(integer: start),
                     toOffset: current > start ? current + 1 : current
                 )
             }
-        }
-
-        withAnimation(.snappy) {
             dragOffset = .zero
+            dragStartIndex = nil
+            dragCurrentIndex = nil
+            isReordering = false
+        } completion: {
+            // Defer z-index reset so the picked-up cell stays on top for the
+            // full snap-back animation instead of dipping behind siblings.
+            draggedID = nil
         }
-        resetDragState()
     }
 
     private func resetDragState() {
@@ -240,6 +231,15 @@ struct ReorderablePhotoGrid: View {
         dragStartIndex = nil
         dragCurrentIndex = nil
         isReordering = false
+    }
+
+    /// Photo's natural aspect (w/h) used to build CellGeometry. Mirrors the
+    /// `naturalAspect` calc in PhotoStrip.
+    private func aspect(of item: PhotoItem) -> CGFloat {
+        let w = item.thumbnail.size.width
+        let h = item.thumbnail.size.height
+        guard h > 0 else { return 1 }
+        return w / h
     }
 
     private func handleDelete(itemID: UUID) {
@@ -254,7 +254,9 @@ struct ReorderablePhotoGrid: View {
                 selectedPhotoID = nil
             }
         }
-        items.removeAll { $0.id == itemID }
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            items.removeAll { $0.id == itemID }
+        }
     }
 }
 

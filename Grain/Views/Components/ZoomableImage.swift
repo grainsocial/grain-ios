@@ -178,6 +178,7 @@ struct ZoomableImage: View {
     @Environment(ImageZoomState.self) private var zoomState: ImageZoomState?
 
     @State private var snapBackTask: Task<Void, Never>?
+    @State private var resetTask: Task<Void, Never>?
     /// Per-instance flag flipped on in `onBegan` and off in `resetZoom`. We use this
     /// instead of comparing `zoomState.localImage === source` because the rendered
     /// image instance can change mid-lifetime (e.g. PhotoEditor's preview cache
@@ -252,6 +253,10 @@ struct ZoomableImage: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onChange(of: sourceID) { resetZoom() }
+        .onDisappear {
+            snapBackTask?.cancel()
+            resetTask?.cancel()
+        }
     }
 
     @ViewBuilder
@@ -306,8 +311,10 @@ struct ZoomableImage: View {
             zoomState.scale = 1
             zoomState.offset = .zero
         }
-        Task { @MainActor in
+        resetTask?.cancel()
+        resetTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(120))
+            guard !Task.isCancelled else { return }
             zoomState.showOverlay = false
             isZoomingMe = false
         }
