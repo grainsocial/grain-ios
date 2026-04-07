@@ -58,6 +58,7 @@ struct CreateGalleryView: View {
                 }
                 errorSection
             }
+            .animation(.smooth, value: selectedPhotoID)
             // Lock the Form's vertical scroll while the zoom overlay is up so a
             // pinch that drifts vertically can't scroll the page underneath the
             // overlay. Also stays locked during reorder, same as before.

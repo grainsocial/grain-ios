@@ -268,12 +268,16 @@ struct PhotoEditor: View {
             Section {
                 VStack(spacing: 0) {
                     photoCarousel
-                    exifInfo(for: items[idx])
-                        .padding(.horizontal, 12)
-                        .padding(.top, 8)
-                        .padding(.bottom, 12)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if items[idx].exifSummary != nil {
+                        exifInfo(for: items[idx])
+                            .padding(.horizontal, 12)
+                            .padding(.top, 8)
+                            .padding(.bottom, 12)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                    }
                 }
+                .animation(.smooth, value: selectedPhotoID)
                 .background(Color.black)
                 .listRowInsets(EdgeInsets())
                 .listRowSeparator(.hidden)

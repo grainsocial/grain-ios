@@ -51,7 +51,6 @@ targets:
       configs:
         Debug:
           CODE_SIGN_ENTITLEMENTS: Grain/Grain-Debug.entitlements
-          DEBUG_INFORMATION_FORMAT: dwarf-with-dsym
     dependencies:
       - package: Nuke
         product: Nuke

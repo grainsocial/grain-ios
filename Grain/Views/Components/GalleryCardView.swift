@@ -431,7 +431,7 @@ struct GalleryCardView: View {
                         .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isFavorited)
                     ZStack {
                         let count = gallery.favCount ?? 0
-                        Text(String(repeating: "8", count: max(1, "\(count)".count)))
+                        Text("\(count)".digitWidthProxy)
                             .hidden()
                         Text("\(count)")
                     }
