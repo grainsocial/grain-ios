@@ -5,7 +5,6 @@ enum ProfileViewMode: String, CaseIterable {
     case grid, favorites, stories
 }
 
-
 struct ProfileView: View {
     @Namespace private var viewModeNS
     @Namespace private var galleryZoomNS
@@ -229,24 +228,24 @@ struct ProfileView: View {
                     .highPriorityGesture(
                         did == auth.userDID ?
                             DragGesture(minimumDistance: 30, coordinateSpace: .local)
-                                .onEnded { value in
-                                    let h = value.translation.width
-                                    let v = value.translation.height
-                                    guard abs(h) > abs(v) else { return }
-                                    let modes: [ProfileViewMode] = [.grid, .favorites, .stories]
-                                    guard let currentIdx = modes.firstIndex(of: viewMode) else { return }
-                                    if h < 0, currentIdx < modes.count - 1 {
-                                        let next = modes[currentIdx + 1]
-                                        withAnimation(.easeInOut(duration: 0.2)) { viewMode = next }
-                                        if next == .stories {
-                                            Task { await viewModel.loadStoryArchive(did: did, auth: auth.authContext()) }
-                                        } else if next == .favorites {
-                                            Task { await viewModel.loadFavorites(did: did, auth: auth.authContext()) }
-                                        }
-                                    } else if h > 0, currentIdx > 0 {
-                                        withAnimation(.easeInOut(duration: 0.2)) { viewMode = modes[currentIdx - 1] }
+                            .onEnded { value in
+                                let h = value.translation.width
+                                let v = value.translation.height
+                                guard abs(h) > abs(v) else { return }
+                                let modes: [ProfileViewMode] = [.grid, .favorites, .stories]
+                                guard let currentIdx = modes.firstIndex(of: viewMode) else { return }
+                                if h < 0, currentIdx < modes.count - 1 {
+                                    let next = modes[currentIdx + 1]
+                                    withAnimation(.easeInOut(duration: 0.2)) { viewMode = next }
+                                    if next == .stories {
+                                        Task { await viewModel.loadStoryArchive(did: did, auth: auth.authContext()) }
+                                    } else if next == .favorites {
+                                        Task { await viewModel.loadFavorites(did: did, auth: auth.authContext()) }
                                     }
+                                } else if h > 0, currentIdx > 0 {
+                                    withAnimation(.easeInOut(duration: 0.2)) { viewMode = modes[currentIdx - 1] }
                                 }
+                            }
                             : nil
                     )
                 }
@@ -491,6 +490,7 @@ struct ProfileView: View {
                                 }
                             }
                             .clipped()
+                            .contentShape(Rectangle())
                             .overlay {
                                 let lr = resolveLabels(gallery.labels, definitions: labelDefsCache.definitions)
                                 if lr.action >= .warnMedia {
