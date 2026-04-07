@@ -112,7 +112,7 @@ final class ViewedStoryStorage {
     private func scheduleSave() {
         saveTask?.cancel()
         saveTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(1))
+            try? await Task.sleep(for: .seconds(0.5))
             guard !Task.isCancelled else { return }
             self?.save()
         }
