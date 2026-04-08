@@ -554,8 +554,7 @@ struct StoryViewer: View {
     }
 
     private func isFullsizeCached(_ story: GrainStory?) -> Bool {
-        guard let url = story.flatMap({ URL(string: $0.fullsize) }) else { return false }
-        return ImagePipeline.shared.cache.cachedImage(for: ImageRequest(url: url)) != nil
+        storyFullsizeCached(story)
     }
 
     private func goToNext() {
