@@ -242,7 +242,7 @@ enum BlueskyPost {
         }
 
         // Hashtags (same regex as web)
-        let hashtagPattern = try! NSRegularExpression(pattern: #"#([a-zA-Z][a-zA-Z0-9_]*)"#)
+        let hashtagPattern = try! NSRegularExpression(pattern: #"#(\p{L}[\p{L}\p{N}_]*)"#)
         for match in hashtagPattern.matches(in: text, range: NSRange(location: 0, length: nsText.length)) {
             guard let fullRange = Range(match.range, in: text),
                   let tagRange = Range(match.range(at: 1), in: text) else { continue }

@@ -117,7 +117,7 @@ struct RichTextView: View {
     private func segmentsFromRegex(text: String) -> [Segment] {
         let urlPattern = #"https?://[^\s<>\[\]()]+"#
         let mentionPattern = #"@([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?"#
-        let hashtagPattern = #"#([a-zA-Z][a-zA-Z0-9_]*)"#
+        let hashtagPattern = #"#(\p{L}[\p{L}\p{N}_]*)"#
 
         struct Match {
             let range: Range<String.Index>
