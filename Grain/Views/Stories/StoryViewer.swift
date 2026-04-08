@@ -24,7 +24,7 @@ private final class StoryTimer {
                 } catch { return }
                 guard !Task.isCancelled else { return }
                 progress = CGFloat(tick) / CGFloat(totalTicks)
-                if !quarterFired, progress >= 0.25 {
+                if !quarterFired, progress >= 0.01 {
                     quarterFired = true
                     onQuarter?()
                 }
