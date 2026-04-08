@@ -59,14 +59,8 @@ private struct CustomFullScreenCoverModifier<PresentedView: View>: ViewModifier 
 }
 
 #Preview {
-    @Previewable @State var show = false
+    // Cover itself can't render in Canvas; preview the trigger only.
     VStack {
-        Button("Show Cover") { show = true }
-    }
-    .customFullScreenCover(isPresented: $show) {
-        ZStack {
-            Color.blue.ignoresSafeArea()
-            Text("Custom Cover").foregroundStyle(.white)
-        }
+        Button("Show Cover") {}
     }
 }

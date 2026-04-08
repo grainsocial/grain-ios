@@ -300,6 +300,7 @@ struct ReorderablePhotoGrid: View {
             containerWidth: 393
         )
     }
+    .scrollDisabled(reordering)
     .onAppear { selected = state.first?.id }
     .preferredColorScheme(.dark)
 }

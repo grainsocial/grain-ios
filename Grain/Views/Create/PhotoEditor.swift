@@ -472,45 +472,43 @@ struct PhotoEditor: View {
             // critical detail is that `MatchedPhotoModifier` is applied to
             // the OUTER cell frame (not the inner image), so the cell's
             // POSITION is what gets paired, not just the inner image bounds.
-            Group {
-                if mode == .preview {
-                    // No .transition — matched-geometry drives the morph.
-                    PhotoStrip(
-                        items: $items,
-                        selectedPhotoID: $selectedPhotoID,
-                        matchedNamespace: photoNamespace,
-                        isAnimatingMode: isAnimatingMode,
-                        sendExif: sendExif
-                    )
-                } else if mode == .reorder {
-                    // No .transition — matched-geometry drives the morph.
-                    ReorderablePhotoGrid(
-                        items: $items,
-                        selectedPhotoID: $selectedPhotoID,
-                        isReordering: $isReordering,
-                        matchedNamespace: photoNamespace,
-                        containerWidth: gridContainerWidth,
-                        isAnimatingMode: isAnimatingMode,
-                        sendExif: sendExif
-                    )
-                } else {
-                    // Captions has no matched-geometry pairing. No transition
-                    // here — a .transition(.opacity) keeps captionsList in the
-                    // same Form row as the incoming strip/grid during its exit
-                    // animation. Two views of wildly different heights in the
-                    // same row causes UICollectionView layout recursion (depth
-                    // 100 assertion). Hard swap is correct: strip↔grid uses
-                    // matched-geometry, not a transition, for the same reason.
-                    captionsList
+            // Captions rows are placed directly in the Section (not inside the
+            // Group below) so each ForEach item becomes its own independent list
+            // row and `.swipeActions` fires per-item, not for the whole group.
+            if mode == .captions {
+                captionsList
+            } else {
+                Group {
+                    if mode == .preview {
+                        // No .transition — matched-geometry drives the morph.
+                        PhotoStrip(
+                            items: $items,
+                            selectedPhotoID: $selectedPhotoID,
+                            matchedNamespace: photoNamespace,
+                            isAnimatingMode: isAnimatingMode,
+                            sendExif: sendExif
+                        )
+                    } else {
+                        // No .transition — matched-geometry drives the morph.
+                        ReorderablePhotoGrid(
+                            items: $items,
+                            selectedPhotoID: $selectedPhotoID,
+                            isReordering: $isReordering,
+                            matchedNamespace: photoNamespace,
+                            containerWidth: gridContainerWidth,
+                            isAnimatingMode: isAnimatingMode,
+                            sendExif: sendExif
+                        )
+                    }
                 }
-            }
-            .listRowInsets(EdgeInsets())
-            .listRowSeparator(.hidden)
-            .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { newWidth in
-                guard newWidth > 0 else { return }
-                var t = Transaction()
-                t.animation = nil
-                withTransaction(t) { gridContainerWidth = newWidth }
+                .listRowInsets(EdgeInsets())
+                .listRowSeparator(.hidden)
+                .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { newWidth in
+                    guard newWidth > 0 else { return }
+                    var t = Transaction()
+                    t.animation = nil
+                    withTransaction(t) { gridContainerWidth = newWidth }
+                }
             }
         } header: {
             Picker("Mode", selection: modeBinding) {
@@ -561,41 +559,47 @@ struct PhotoEditor: View {
 
     // MARK: - Captions list
 
-    /// Scrollable list of photo rows shown in `.captions` mode. Each row has a
-    /// small square thumbnail on the left and an inline alt-text TextField on
-    /// the right, so the user can caption every photo without tapping around.
+    /// One list row per photo, shown in `.captions` mode. Each row has a small
+    /// square thumbnail on the left, an inline alt-text TextField, and an EXIF
+    /// chip. Placed directly in the Section (not inside a Group row) so each
+    /// item is an independent list row and `.swipeActions` fires per-item.
     private var captionsList: some View {
-        VStack(spacing: 0) {
-            ForEach($items) { $item in
-                HStack(alignment: .top, spacing: 12) {
-                    let geo = CellGeometry(mode: .captions, maskSide: 60, photoAspect: item.naturalAspect)
-                    Image(uiImage: item.thumbnail)
-                        .resizable()
-                        .frame(width: geo.photoSize.width, height: geo.photoSize.height)
-                        .frame(width: geo.maskSide, height: geo.maskSide)
-                        .clipped()
-                        .cornerRadius(geo.maskCornerRadius)
+        ForEach($items) { $item in
+            let exifState: ExifState = {
+                guard item.exifSummary != nil else { return .absent }
+                return sendExif ? .active : .inactive
+            }()
 
-                    VStack(alignment: .leading, spacing: 4) {
-                        TextField(
-                            "Add a description for accessibility",
-                            text: $item.alt,
-                            axis: .vertical
-                        )
-                        .font(.subheadline)
-                        .lineLimit(2 ... 4)
+            HStack(alignment: .top, spacing: 12) {
+                Image(uiImage: item.thumbnail)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 60, height: 60)
+                    .clipped()
+                    .cornerRadius(8)
+                    .modifier(MatchedPhotoModifier(id: item.id, namespace: photoNamespace))
 
-                        if sendExif {
-                            ExifInfoView(exif: item.exifSummary?.displayData)
-                                .transaction { $0.animation = nil }
-                        }
-                    }
+                VStack(alignment: .leading, spacing: 6) {
+                    TextField(
+                        "Add a description for accessibility",
+                        text: $item.alt,
+                        axis: .vertical
+                    )
+                    .font(.subheadline)
+                    .lineLimit(2 ... 4)
+
+                    ExifChip(state: exifState, cameraName: item.exifSummary?.camera)
                 }
-                .padding(.vertical, 10)
-                .padding(.horizontal, 20)
-
-                if item.id != items.last?.id {
-                    Divider().padding(.leading, 92)
+            }
+            .padding(.vertical, 10)
+            .listRowBackground(Color(.systemBackground))
+            .swipeActions(edge: .trailing) {
+                Button(role: .destructive) {
+                    if let index = items.firstIndex(where: { $0.id == item.id }) {
+                        items.remove(at: index)
+                    }
+                } label: {
+                    Image(systemName: "xmark")
                 }
             }
         }
