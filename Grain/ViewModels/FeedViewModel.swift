@@ -9,6 +9,7 @@ final class FeedViewModel {
 
     private var cursor: String?
     private var hasMore = true
+    private var loadTask: Task<Void, Never>?
     private let client: XRPCClient
     private let feedName: String
     private let actor: String?
@@ -44,28 +45,34 @@ final class FeedViewModel {
     }
 
     func loadInitial(auth: AuthContext? = nil) async {
-        guard !isLoading else { return }
+        loadTask?.cancel()
         isLoading = true
         error = nil
         cursor = nil
         hasMore = true
 
-        do {
-            let response = try await client.getFeed(
-                feed: feedName,
-                actor: actor,
-                camera: camera,
-                location: location,
-                tag: tag,
-                auth: auth
-            )
-            galleries = response.items ?? []
-            cursor = response.cursor
-            hasMore = response.cursor != nil
-        } catch {
-            self.error = error
+        let task = Task {
+            do {
+                let response = try await client.getFeed(
+                    feed: feedName,
+                    actor: actor,
+                    camera: camera,
+                    location: location,
+                    tag: tag,
+                    auth: auth
+                )
+                guard !Task.isCancelled else { return }
+                galleries = response.items ?? []
+                cursor = response.cursor
+                hasMore = response.cursor != nil
+            } catch {
+                guard !Task.isCancelled else { return }
+                self.error = error
+            }
+            isLoading = false
         }
-        isLoading = false
+        loadTask = task
+        await task.value
     }
 
     func loadMore(auth: AuthContext? = nil) async {
