@@ -52,7 +52,10 @@ struct StoryStripView: View {
                         onCreateTap()
                     }
                 }
-                .onLongPressGesture { onCreateTap() }
+                .onLongPressGesture {
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    onCreateTap()
+                }
 
                 ForEach(sorted, id: \.id) { author in
                     let isViewed = viewedStories.hasViewedAll(authorDid: author.profile.did, latestAt: author.latestAt)

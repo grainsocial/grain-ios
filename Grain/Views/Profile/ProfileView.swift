@@ -88,6 +88,7 @@ struct ProfileView: View {
                         }
                         .onLongPressGesture(minimumDuration: 0.5) {
                             if did == auth.userDID {
+                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                                 showStoryCreate = true
                             }
                         }
