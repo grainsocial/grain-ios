@@ -439,6 +439,14 @@ struct PhotoItem: Identifiable {
     var alt: String = ""
     var exifSummary: ExifSummary?
 
+    /// Thumbnail's natural width-to-height ratio. Computed once from `thumbnail.size`
+    /// and used everywhere a cell needs aspect geometry — single source of truth.
+    var naturalAspect: CGFloat {
+        let h = thumbnail.size.height
+        guard h > 0 else { return 1 }
+        return thumbnail.size.width / h
+    }
+
     static func makeThumbnail(from image: UIImage, maxSize: CGFloat = 150) -> UIImage {
         let scale = min(maxSize / image.size.width, maxSize / image.size.height, 1)
         let newSize = CGSize(width: image.size.width * scale, height: image.size.height * scale)

@@ -34,6 +34,12 @@ struct ReorderablePhotoGrid: View {
     @State private var dragStartIndex: Int?
     @State private var dragCurrentIndex: Int?
     @State private var dragOffset: CGSize = .zero
+    /// Pre-allocated haptic generators. Stored as @State so they survive across
+    /// renders (View structs are recreated each cycle; a plain `let` would allocate
+    /// a new generator per render). `.prepare()` in beginDrag pre-warms the Taptic
+    /// Engine so impactOccurred() fires with minimal latency.
+    @State private var impactGenerator = UIImpactFeedbackGenerator(style: .medium)
+    @State private var selectionGenerator = UISelectionFeedbackGenerator()
 
     private let columnCount: Int = 3
     /// Bumped to give the X button overflow room. Each cell's X is offset (14, -14)
@@ -81,17 +87,32 @@ struct ReorderablePhotoGrid: View {
                     geometry: CellGeometry(
                         mode: .reorder,
                         maskSide: cellSide,
-                        photoAspect: aspect(of: item)
+                        photoAspect: item.naturalAspect
                     ),
-                    isSelected: selectedPhotoID == id,
+                    isSelected: false,
                     isDragging: draggedID == id,
                     exifState: exifState,
                     cameraName: item.exifSummary?.camera,
-                    matchedNamespace: matchedNamespace,
-                    onTap: {
-                        guard draggedID != id else { return }
-                        withAnimation(.snappy) { selectedPhotoID = id }
-                    },
+                    // matchedNamespace intentionally nil here — applied AFTER
+                    // geometryGroup below. Apple docs state that
+                    // matchedGeometryEffect inside a geometryGroup reports
+                    // position relative to the group's local space, not global
+                    // screen space. With multiple cells sharing a row, each
+                    // cell is at (0,0) within its own group, so the namespace
+                    // sees the same local origin for every cell in a row —
+                    // all appearing to come from the last-rendered cell's
+                    // position (upper-right of row 0). Moving the modifier
+                    // outside the group lets the namespace capture each cell's
+                    // true global position.
+                    matchedNamespace: nil,
+                    // Selection is read-only in reorder mode. Taps do nothing
+                    // so that selectedPhotoID stays frozen while the grid is
+                    // visible. When the user switches back to strip, the strip
+                    // already knows its exact scroll target (the same photo
+                    // that was selected on entry), so matched-geometry can
+                    // capture the final destination frames before any scroll
+                    // occurs — preventing the mid-morph position shift.
+                    onTap: {},
                     onDelete: { handleDelete(itemID: id) }
                 )
                 .id(id)
@@ -105,6 +126,10 @@ struct ReorderablePhotoGrid: View {
                 .zIndex(draggedID == id ? 1000 : 0)
                 .offset(slotShift(for: item))
                 .geometryGroup()
+                // matchedGeometryEffect OUTSIDE geometryGroup so the namespace
+                // captures each cell's global screen position, not the
+                // group-local (0,0) that geometryGroup would otherwise report.
+                .modifier(MatchedPhotoModifier(id: id, namespace: matchedNamespace))
                 // UIKit-backed long-press-drag (see ReorderRecognizer). The
                 // SwiftUI .simultaneousGesture(LongPress.sequenced(Drag)) we used
                 // before silently broke vertical Form scroll AND inner taps on
@@ -181,7 +206,9 @@ struct ReorderablePhotoGrid: View {
         dragStartIndex = idx
         dragCurrentIndex = idx
         isReordering = true
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        impactGenerator.prepare()
+        selectionGenerator.prepare()
+        impactGenerator.impactOccurred()
     }
 
     private func handleDragChanged(translation: CGSize) {
@@ -206,7 +233,7 @@ struct ReorderablePhotoGrid: View {
             withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) {
                 dragCurrentIndex = proposed
             }
-            UISelectionFeedbackGenerator().selectionChanged()
+            selectionGenerator.selectionChanged()
         }
     }
 
@@ -243,15 +270,6 @@ struct ReorderablePhotoGrid: View {
         isReordering = false
     }
 
-    /// Photo's natural aspect (w/h) used to build CellGeometry. Mirrors the
-    /// `naturalAspect` calc in PhotoStrip.
-    private func aspect(of item: PhotoItem) -> CGFloat {
-        let w = item.thumbnail.size.width
-        let h = item.thumbnail.size.height
-        guard h > 0 else { return 1 }
-        return w / h
-    }
-
     private func handleDelete(itemID: UUID) {
         if selectedPhotoID == itemID,
            let removedIdx = items.firstIndex(where: { $0.id == itemID })
@@ -279,7 +297,7 @@ struct ReorderablePhotoGrid: View {
             items: $state,
             selectedPhotoID: $selected,
             isReordering: $reordering,
-            containerWidth: UIScreen.main.bounds.width
+            containerWidth: 393
         )
     }
     .onAppear { selected = state.first?.id }

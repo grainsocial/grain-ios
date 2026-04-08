@@ -142,18 +142,11 @@ struct PhotoCarouselView: View {
         return items.firstIndex(where: { $0.id == id })
     }
 
-    private func ratio(for item: PhotoItem) -> CGFloat {
-        let w = item.thumbnail.size.width
-        let h = item.thumbnail.size.height
-        guard h > 0 else { return 1 }
-        return w / h
-    }
-
     var body: some View {
         if items.isEmpty {
             EmptyView()
         } else {
-            let ratios = items.map(ratio(for:))
+            let ratios = items.map(\.naturalAspect)
             let hasMixedRatios = Set(ratios.map { Int($0 * 100) }).count > 1
             let safeIdx = min(max(selectedIndex ?? 0, 0), items.count - 1)
             let carouselRatio: CGFloat = hasMixedRatios
@@ -169,7 +162,7 @@ struct PhotoCarouselView: View {
                             ZStack {
                                 ZoomableImage(
                                     localImage: item.carouselPreview,
-                                    aspectRatio: ratio(for: item),
+                                    aspectRatio: item.naturalAspect,
                                     // Pass the hi-res prefetched image for zoom if ready;
                                     // ZoomableImage falls back to carouselPreview otherwise.
                                     zoomImage: cacheStore.previewCache[item.id]
@@ -243,7 +236,7 @@ struct PhotoCarouselView: View {
     private var pageIndicator: some View {
         if items.count > 1 {
             let current = selectedIndex ?? 0
-            let ratios = items.map(ratio(for:))
+            let ratios = items.map(\.naturalAspect)
             let hasPortrait = ratios.contains { $0 < 1 }
             HStack(spacing: 5) {
                 let total = items.count
@@ -395,7 +388,7 @@ struct PhotoEditor: View {
     /// strip/grid always occupies this row, so its width is known before the
     /// grid mounts. Passing it in means ReorderablePhotoGrid has the correct
     /// cellSide from frame zero — no mid-animation onGeometryChange correction.
-    @State private var gridContainerWidth: CGFloat = UIScreen.main.bounds.width
+    @State private var gridContainerWidth: CGFloat = 0
     /// Shared namespace for the strip↔grid matched-geometry transition. The
     /// namespace itself is declared once at the editor level and passed to both
     /// PhotoThumbnailCell callsites so their photo views share stable geometry IDs
@@ -575,12 +568,7 @@ struct PhotoEditor: View {
         VStack(spacing: 0) {
             ForEach($items) { $item in
                 HStack(alignment: .top, spacing: 12) {
-                    let aspect: CGFloat = {
-                        let w = item.thumbnail.size.width
-                        let h = item.thumbnail.size.height
-                        return h > 0 ? w / h : 1
-                    }()
-                    let geo = CellGeometry(mode: .captions, maskSide: 60, photoAspect: aspect)
+                    let geo = CellGeometry(mode: .captions, maskSide: 60, photoAspect: item.naturalAspect)
                     Image(uiImage: item.thumbnail)
                         .resizable()
                         .frame(width: geo.photoSize.width, height: geo.photoSize.height)
