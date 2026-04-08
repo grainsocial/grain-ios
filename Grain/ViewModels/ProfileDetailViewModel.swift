@@ -6,12 +6,20 @@ final class ProfileDetailViewModel {
     var profile: GrainProfileDetailed?
     var galleries: [GrainGallery] = []
     var stories: [GrainStory] = []
+    var archivedStories: [GrainStory] = []
+    var favoriteGalleries: [GrainGallery] = []
     var knownFollowers: [FollowerItem] = []
     var isLoading = false
     var error: Error?
 
     private var galleryCursor: String?
     private var hasMoreGalleries = true
+    private var archiveCursor: String?
+    private var hasMoreArchive = true
+    private var archiveLoaded = false
+    private var favoritesCursor: String?
+    private var hasMoreFavorites = true
+    private var favoritesLoaded = false
     private let client: XRPCClient
 
     init(client: XRPCClient) {
@@ -60,6 +68,52 @@ final class ProfileDetailViewModel {
         } catch {
             self.error = error
         }
+        isLoading = false
+    }
+
+    func loadStoryArchive(did: String, auth: AuthContext? = nil) async {
+        guard !archiveLoaded else { return }
+        archiveLoaded = true
+        do {
+            let response = try await client.getStoryArchive(actor: did, auth: auth)
+            archivedStories = response.stories
+            archiveCursor = response.cursor
+            hasMoreArchive = response.cursor != nil
+        } catch {}
+    }
+
+    func loadMoreArchive(did: String, auth: AuthContext? = nil) async {
+        guard !isLoading, hasMoreArchive, let cursor = archiveCursor else { return }
+        isLoading = true
+        do {
+            let response = try await client.getStoryArchive(actor: did, cursor: cursor, auth: auth)
+            archivedStories.append(contentsOf: response.stories)
+            archiveCursor = response.cursor
+            hasMoreArchive = response.cursor != nil
+        } catch {}
+        isLoading = false
+    }
+
+    func loadFavorites(did: String, auth: AuthContext? = nil) async {
+        guard !favoritesLoaded else { return }
+        favoritesLoaded = true
+        do {
+            let response = try await client.getActorFavorites(actor: did, auth: auth)
+            favoriteGalleries = response.items ?? []
+            favoritesCursor = response.cursor
+            hasMoreFavorites = response.cursor != nil
+        } catch {}
+    }
+
+    func loadMoreFavorites(did: String, auth: AuthContext? = nil) async {
+        guard !isLoading, hasMoreFavorites, let cursor = favoritesCursor else { return }
+        isLoading = true
+        do {
+            let response = try await client.getActorFavorites(actor: did, cursor: cursor, auth: auth)
+            favoriteGalleries.append(contentsOf: response.items ?? [])
+            favoritesCursor = response.cursor
+            hasMoreFavorites = response.cursor != nil
+        } catch {}
         isLoading = false
     }
 
