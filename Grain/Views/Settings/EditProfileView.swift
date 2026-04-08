@@ -284,6 +284,6 @@ struct EditProfileView: View {
 }
 
 #Preview {
-    EditProfileView(client: XRPCClient(baseURL: AuthManager.serverURL))
-        .environment(AuthManager())
+    EditProfileView(client: .preview)
+        .previewEnvironments()
 }

@@ -72,4 +72,6 @@ struct CaptionsListPrototype: View {
         items[i].exifSummary = mockExif
     }
     return CaptionsListPrototype(items: items)
+        .preferredColorScheme(.dark)
+        .frame(maxHeight: .infinity, alignment: .top)
 }

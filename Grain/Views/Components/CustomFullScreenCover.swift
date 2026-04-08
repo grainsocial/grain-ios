@@ -59,8 +59,39 @@ private struct CustomFullScreenCoverModifier<PresentedView: View>: ViewModifier 
 }
 
 #Preview {
-    // Cover itself can't render in Canvas; preview the trigger only.
-    VStack {
-        Button("Show Cover") {}
+    // Show a live trigger + cover so both states render in the canvas.
+    // isPresented starts true so the covered content is visible immediately.
+    @Previewable @State var isPresented = true
+
+    ZStack {
+        Color(.systemBackground).ignoresSafeArea()
+
+        VStack(spacing: 24) {
+            Text("Background content")
+                .font(.title2)
+                .foregroundStyle(.primary)
+
+            Button(isPresented ? "Dismiss Cover" : "Show Cover") {
+                isPresented.toggle()
+            }
+            .buttonStyle(.borderedProminent)
+        }
     }
+    .customFullScreenCover(isPresented: $isPresented) {
+        ZStack {
+            Color.indigo.opacity(0.92).ignoresSafeArea()
+            VStack(spacing: 16) {
+                Image(systemName: "photo.stack")
+                    .font(.system(size: 56))
+                    .foregroundStyle(.white)
+                Text("Full-screen cover content")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                Button("Dismiss") { isPresented = false }
+                    .buttonStyle(.bordered)
+                    .tint(.white)
+            }
+        }
+    }
+    .preferredColorScheme(.dark)
 }

@@ -96,4 +96,5 @@ struct ExpandableDescriptionView: View {
         )
     }
     .padding()
+    .preferredColorScheme(.dark)
 }

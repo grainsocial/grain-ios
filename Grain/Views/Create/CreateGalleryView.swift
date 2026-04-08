@@ -5,6 +5,40 @@ import PhotosUI
 import SwiftUI
 
 private let logger = Logger(subsystem: "social.grain.grain", category: "Create")
+private let createSignposter = OSSignposter(subsystem: "social.grain.grain", category: "PhotoLoading.TaskGroup")
+
+/// Limits concurrent photo-load tasks to avoid overwhelming the Swift cooperative thread pool.
+private actor LoadThrottle {
+    private let maxConcurrent: Int
+    private var active = 0
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    init(maxConcurrent: Int) {
+        self.maxConcurrent = maxConcurrent
+    }
+
+    func acquire(spid: OSSignpostID) async {
+        if active < maxConcurrent {
+            active += 1
+            createSignposter.emitEvent("ThrottleAcquired", id: spid, "active=\(active),waiters=0")
+        } else {
+            let waitState = createSignposter.beginInterval("ThrottleWait", id: spid, "active=\(active),waiters=\(waiters.count)")
+            await withCheckedContinuation { self.waiters.append($0) }
+            createSignposter.endInterval("ThrottleWait", waitState, "active=\(active)")
+        }
+    }
+
+    func release(spid: OSSignpostID) {
+        if let next = waiters.first {
+            waiters.removeFirst()
+            next.resume()
+            createSignposter.emitEvent("ThrottleHandoff", id: spid, "active=\(active),waiters=\(waiters.count)")
+        } else {
+            active -= 1
+            createSignposter.emitEvent("ThrottleReleased", id: spid, "active=\(active)")
+        }
+    }
+}
 
 struct CreateGalleryView: View {
     @Environment(AuthManager.self) private var auth
@@ -21,6 +55,7 @@ struct CreateGalleryView: View {
     @State private var postToBluesky = false
     @State private var selectedLabels: Set<String> = []
     @State private var selectedPhotoID: UUID?
+    @State private var photoLoadTask: Task<Void, Never>?
     @State private var photoLocationResult: NominatimResult?
     @State private var sendExif = true
     @State private var includeLocation = true
@@ -70,8 +105,11 @@ struct CreateGalleryView: View {
             }
         }
         .onChange(of: selectedPhotos) {
-            Task {
+            createSignposter.emitEvent("TaskSpawned", "source=selectedPhotos,count=\(selectedPhotos.count)")
+            photoLoadTask?.cancel()
+            photoLoadTask = Task {
                 await loadPickerPhotos()
+                guard !Task.isCancelled else { return }
                 if let id = selectedPhotoID, !photoItems.contains(where: { $0.id == id }) {
                     selectedPhotoID = photoItems.first?.id
                 } else if selectedPhotoID == nil {
@@ -83,6 +121,7 @@ struct CreateGalleryView: View {
         // Re-derive the suggested location whenever the *first* photo changes
         // (reorder, removal, etc.) so "Use first photo location" stays accurate.
         .onChange(of: photoItems.first?.id) {
+            createSignposter.emitEvent("TaskSpawned", "source=firstPhotoChange,itemCount=\(photoItems.count)")
             Task { await detectLocation() }
         }
         .fullScreenCover(isPresented: $showCamera) {
@@ -256,16 +295,27 @@ struct CreateGalleryView: View {
         // Load all new items concurrently, preserving selection order.
         // Capture screen width here (main actor) before task bodies run on
         // background threads where UIScreen.main is unavailable.
+        let batchState = createSignposter.beginInterval("LoadPickerBatch", id: createSignposter.makeSignpostID(), "count=\(newSelections.count)")
         let carouselWidth = UIScreen.main.bounds.width
         var loaded: [(index: Int, item: PhotoItem)] = []
+        let throttle = LoadThrottle(maxConcurrent: 8)
         await withTaskGroup(of: (Int, PhotoItem?).self) { group in
             for (index, pickerItem) in newSelections.enumerated() {
+                let spid = createSignposter.makeSignpostID()
                 group.addTask {
+                    await throttle.acquire(spid: spid)
+                    defer { Task { await throttle.release(spid: spid) } }
+                    let state = createSignposter.beginInterval("LoadPhoto", id: spid, "index=\(index)")
                     guard let data = try? await pickerItem.loadTransferable(type: Data.self),
-                          let image = UIImage(data: data) else { return (index, nil) }
+                          let image = UIImage(data: data)
+                    else {
+                        createSignposter.endInterval("LoadPhoto", state, "result=nil")
+                        return (index, nil)
+                    }
                     let thumb = PhotoItem.makeThumbnail(from: image)
                     let carousel = PhotoItem.makeCarouselPreview(from: image, width: carouselWidth)
                     let exif = makeExifSummary(from: data)
+                    createSignposter.endInterval("LoadPhoto", state, "result=ok")
                     return (index, PhotoItem(thumbnail: thumb, carouselPreview: carousel, source: .picker(pickerItem), exifSummary: exif))
                 }
             }
@@ -273,10 +323,9 @@ struct CreateGalleryView: View {
                 if let item { loaded.append((index, item)) }
             }
         }
+        createSignposter.endInterval("LoadPickerBatch", batchState, "loaded=\(loaded.count)")
 
-        for (_, item) in loaded.sorted(by: { $0.index < $1.index }) {
-            photoItems.append(item)
-        }
+        photoItems += loaded.sorted(by: { $0.index < $1.index }).map(\.item)
     }
 
     private func detectLocation() async {
@@ -284,6 +333,7 @@ struct CreateGalleryView: View {
         photoLocationResult = nil
         guard let first = photoItems.first else { return }
 
+        let state = createSignposter.beginInterval("DetectLocation", id: createSignposter.makeSignpostID())
         var gps: (latitude: Double, longitude: Double)?
         switch first.source {
         case let .picker(pickerItem):
@@ -291,10 +341,14 @@ struct CreateGalleryView: View {
                 gps = ImageProcessing.extractGPS(from: data)
             }
         case .camera:
+            createSignposter.endInterval("DetectLocation", state, "source=camera,skipped")
             return
         }
 
-        guard let gps else { return }
+        guard let gps else {
+            createSignposter.endInterval("DetectLocation", state, "result=noGPS")
+            return
+        }
 
         if let result = await LocationServices.reverseGeocode(latitude: gps.latitude, longitude: gps.longitude) {
             photoLocationResult = result
@@ -302,6 +356,7 @@ struct CreateGalleryView: View {
                 selectLocation(result)
             }
         }
+        createSignposter.endInterval("DetectLocation", state, "result=ok")
     }
 
     private func selectLocation(_ result: NominatimResult) {
@@ -725,8 +780,7 @@ private func extractGalleryExif(from data: Data) -> [String: AnyCodable]? {
     NavigationStack {
         CreateGalleryViewPreview(photoItems: $photos, selectedPhotoID: $selectedID)
     }
-    .environment(AuthManager())
-    .environment(LabelDefinitionsCache())
+    .previewEnvironments()
     .onAppear { selectedID = photos.first?.id }
 }
 

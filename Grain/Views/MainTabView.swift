@@ -128,9 +128,6 @@ struct MainTabView: View {
 
 #Preview {
     MainTabView(pendingDeepLink: .constant(nil))
-        .environment(AuthManager())
+        .previewEnvironments()
         .environment(PushManager())
-        .environment(StoryStatusCache())
-        .environment(ViewedStoryStorage())
-        .environment(LabelDefinitionsCache())
 }

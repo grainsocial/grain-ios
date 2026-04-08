@@ -111,9 +111,9 @@ struct ReportView: View {
 
 #Preview {
     ReportView(
-        client: XRPCClient(baseURL: AuthManager.serverURL),
+        client: .preview,
         subjectUri: "at://did:plc:preview/social.grain.gallery/r1",
         subjectCid: "cid"
     )
-    .environment(AuthManager())
+    .previewEnvironments()
 }

@@ -114,6 +114,6 @@ struct SettingsView: View {
 }
 
 #Preview {
-    SettingsView(client: XRPCClient(baseURL: AuthManager.serverURL))
-        .environment(AuthManager())
+    SettingsView(client: .preview)
+        .previewEnvironments()
 }

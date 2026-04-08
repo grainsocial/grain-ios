@@ -1,5 +1,9 @@
+import os
 import SwiftUI
 import UIKit
+
+private let photoLoadingSignposter = OSSignposter(subsystem: "social.grain.grain", category: "PhotoLoading.Preview")
+private let morphSignposter = OSSignposter(subsystem: "social.grain.grain", category: "Animation.Morph")
 
 // MARK: - Preview cache store
 
@@ -48,6 +52,7 @@ final class PreviewCacheStore {
     func prefetchPreviewsAroundSelection(items: [PhotoItem], selectedPhotoID: UUID?) {
         guard let id = selectedPhotoID,
               let centerIdx = items.firstIndex(where: { $0.id == id }) else { return }
+        let state = photoLoadingSignposter.beginInterval("PrefetchWindow", id: photoLoadingSignposter.makeSignpostID(), "center=\(centerIdx),total=\(items.count)")
         // ±2 window. At 1500pt max dimension a decoded preview can be ~50 MB;
         // loading all photos would be ~1 GB. byPreparingForDisplay() in
         // loadPreviewImage ensures each hi-res image is decompressed before the
@@ -57,6 +62,7 @@ final class PreviewCacheStore {
             guard items.indices.contains(idx) else { continue }
             loadPreviewIfNeeded(for: items[idx], items: items)
         }
+        photoLoadingSignposter.endInterval("PrefetchWindow", state)
     }
 
     /// Load a higher-resolution preview image for `item` into `previewCache` unless
@@ -70,7 +76,10 @@ final class PreviewCacheStore {
         let id = item.id
         let source = item.source
         let task = Task {
+            let spid = photoLoadingSignposter.makeSignpostID()
+            let previewState = photoLoadingSignposter.beginInterval("LoadPreview", id: spid)
             let image = await Self.loadPreviewImage(source: source, maxDimension: previewMaxDimension)
+            photoLoadingSignposter.endInterval("LoadPreview", previewState, "success=\(image != nil)")
             await MainActor.run {
                 prefetchTasks.removeValue(forKey: id)
                 loadingPreviewIDs.remove(id)
@@ -99,16 +108,32 @@ final class PreviewCacheStore {
     private static func loadPreviewImage(source: PhotoSource, maxDimension: CGFloat) async -> UIImage? {
         switch source {
         case let .picker(pickerItem):
+            let transferState = photoLoadingSignposter.beginInterval("LoadTransferable", id: photoLoadingSignposter.makeSignpostID())
             guard let data = try? await pickerItem.loadTransferable(type: Data.self),
-                  let image = UIImage(data: data) else { return nil }
+                  let image = UIImage(data: data)
+            else {
+                photoLoadingSignposter.endInterval("LoadTransferable", transferState, "result=nil")
+                return nil
+            }
+            photoLoadingSignposter.endInterval("LoadTransferable", transferState, "bytes=\(data.count)")
+            let thumbState = photoLoadingSignposter.beginInterval("MakeThumbnail", id: photoLoadingSignposter.makeSignpostID())
             let resized = PhotoItem.makeThumbnail(from: image, maxSize: maxDimension)
+            photoLoadingSignposter.endInterval("MakeThumbnail", thumbState)
             // Pre-decode so the bitmap is ready before the carousel draws it.
             // byPreparingForDisplay() decompresses on a background thread; fall
             // back to the undecompressed image if it returns nil.
-            return await resized.byPreparingForDisplay() ?? resized
+            let decodeState = photoLoadingSignposter.beginInterval("Decompress", id: photoLoadingSignposter.makeSignpostID())
+            let result = await resized.byPreparingForDisplay() ?? resized
+            photoLoadingSignposter.endInterval("Decompress", decodeState)
+            return result
         case let .camera(image, _):
+            let thumbState = photoLoadingSignposter.beginInterval("MakeThumbnail", id: photoLoadingSignposter.makeSignpostID())
             let resized = PhotoItem.makeThumbnail(from: image, maxSize: maxDimension)
-            return await resized.byPreparingForDisplay() ?? resized
+            photoLoadingSignposter.endInterval("MakeThumbnail", thumbState)
+            let decodeState = photoLoadingSignposter.beginInterval("Decompress", id: photoLoadingSignposter.makeSignpostID())
+            let result = await resized.byPreparingForDisplay() ?? resized
+            photoLoadingSignposter.endInterval("Decompress", decodeState)
+            return result
         }
     }
 }
@@ -384,6 +409,12 @@ struct PhotoEditor: View {
     ///     to .preview).
     /// Both settle simultaneously when the animation completes.
     @State private var isAnimatingMode = false
+    /// Monotonically increasing counter. Each animation increments this before
+    /// scheduling its safety-net Task. The safety net captures the generation at
+    /// creation time and exits early if a newer animation has started since —
+    /// preventing a stale safety net from clearing `isAnimatingMode` mid-flight
+    /// in a subsequent animation.
+    @State private var morphGeneration = 0
     /// Pre-measured width of the photos section row. The Group containing
     /// strip/grid always occupies this row, so its width is known before the
     /// grid mounts. Passing it in means ReorderablePhotoGrid has the correct
@@ -414,18 +445,85 @@ struct PhotoEditor: View {
         Binding(
             get: { mode },
             set: { newMode in
-                guard newMode != mode, !isAnimatingMode else { return }
+                guard newMode != mode, !isAnimatingMode else {
+                    morphSignposter.emitEvent("MorphGateBlocked", "animating=\(isAnimatingMode),sameMode=\(newMode == mode)")
+                    return
+                }
 
-                // Captions ↔ strip/grid involves a dramatic height change in the
-                // Form row (a short strip vs. a very tall captions list). Animating
-                // that height change inside withAnimation(.smooth) puts UIKit's
-                // UICollectionViewCompositionalLayout into a recursive layout loop
-                // (depth 100, assertion crash). Instant swap avoids this entirely.
-                // Strip ↔ grid stays animated so matched-geometry can morph cells.
+                // Captions ↔ anything involves a dramatic row-count change in the
+                // Form (1 row → N rows or vice versa). Animating that inside
+                // withAnimation(.smooth) puts UICollectionViewCompositionalLayout
+                // into a recursive layout loop (depth 100 assertion crash).
+                // Instant swap with animation stripped from the transaction avoids
+                // this entirely. Strip ↔ reorder stays animated for matched-geometry.
                 let involvesCaption = newMode == .captions || mode == .captions
                 if involvesCaption {
-                    mode = newMode
+                    morphSignposter.emitEvent("MorphCaptionsFastPath", "from=\(mode.label),to=\(newMode.label)")
+                    var t = Transaction()
+                    t.animation = nil
+                    withTransaction(t) { mode = newMode }
+                    return
+                }
+
+                morphGeneration += 1
+                let gen = morphGeneration
+                let morphSpid = morphSignposter.makeSignpostID()
+                let morphState = morphSignposter.beginInterval("MorphAnimation", id: morphSpid, "from=\(mode.label),to=\(newMode.label)")
+
+                /// Reusable safety-net that forces isAnimatingMode back down if
+                /// withAnimation's completion is silently dropped (known iOS
+                /// 17/18 issue when a concurrent transaction replaces the
+                /// animation mid-flight). Generation check prevents a stale
+                /// safety net from a completed animation from clearing
+                /// isAnimatingMode while a newer animation is in-flight.
+                @Sendable func scheduleSafetyNet() {
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .seconds(1.5))
+                        guard isAnimatingMode, morphGeneration == gen else {
+                            morphSignposter.emitEvent("MorphSafetyNetStale", id: morphSpid, "gen=\(gen),current=\(morphGeneration)")
+                            return
+                        }
+                        morphSignposter.endInterval("MorphAnimation", morphState, "path=safetyNet")
+                        isAnimatingMode = false
+                    }
+                }
+
+                if mode == .preview {
+                    // Any transition OUT of preview mode (→reorder OR →captions).
+                    // Pre-flag isAnimatingMode OUTSIDE withAnimation so the strip's
+                    // onChange fires synchronously and scrolls its content to
+                    // offset 0. Then yield one runloop frame before starting
+                    // withAnimation so the strip's layout has time to settle at
+                    // the reset position BEFORE matched-geometry snapshots the
+                    // morph source frames. Without this delay the snapshot and
+                    // the scroll reset happen in the same transaction and
+                    // matched-geometry captures source positions at the OLD
+                    // scroll offset — items 1-3 then morph from off-screen-left
+                    // (negative x, "bottom-left").
+                    isAnimatingMode = true
+                    Task { @MainActor in
+                        // ~5 frames of headroom. SwiftUI needs a render pass
+                        // to apply the scrollID change to UIScrollView's
+                        // contentOffset, plus any layout settle that
+                        // cascades. 80ms is well under tap-response threshold.
+                        try? await Task.sleep(nanoseconds: 80_000_000)
+                        withAnimation(.smooth) {
+                            mode = newMode
+                        } completion: {
+                            morphSignposter.endInterval("MorphAnimation", morphState, "path=completion")
+                            isAnimatingMode = false
+                        }
+                        scheduleSafetyNet()
+                    }
                 } else {
+                    // Transitions that don't unmount the strip:
+                    //   reorder → preview, captions → preview,
+                    //   reorder ↔ captions
+                    // The strip (when it's the destination) mounts fresh — its
+                    // init leaves scrollID as nil, which lets ScrollView default
+                    // to offset 0 on the first layout pass. That already puts
+                    // items 1-3 at correct positive-x positions for matched-
+                    // geometry destination capture, so no pre-delay is needed.
                     withAnimation(.smooth) {
                         isAnimatingMode = true
                         mode = newMode
@@ -436,13 +534,10 @@ struct PhotoEditor: View {
                         // (both PhotoStrip and ReorderablePhotoGrid receive a new param
                         // value), causing SwiftUI to re-interpolate cell positions that
                         // are already at rest, which produces the post-morph wobble.
+                        morphSignposter.endInterval("MorphAnimation", morphState, "path=completion")
                         isAnimatingMode = false
                     }
-                    Task { @MainActor in
-                        try? await Task.sleep(for: .seconds(1.5))
-                        guard isAnimatingMode else { return }
-                        isAnimatingMode = false
-                    }
+                    scheduleSafetyNet()
                 }
             }
         )
@@ -452,63 +547,72 @@ struct PhotoEditor: View {
         // MARK: Photos section (strip OR grid)
 
         Section {
-            // Plain if/else swap (NOT a ZStack with both subtrees mounted).
+            // Plain if/else/else swap (NOT a ZStack with all subtrees mounted).
             // Only one layout is in the view tree at a time, which means:
             //
             //   1. The Section's natural height is the active layout's height,
             //      so the strip section actually expands DOWN into the grid
-            //      when mode flips inside withAnimation (and shrinks back).
+            //      (or captions list) when mode flips inside withAnimation.
             //   2. matched-geometry can't have two simultaneous sources for
             //      the same id, so no isActive plumbing is needed.
-            //   3. The inactive layout doesn't run a layout pass each frame,
+            //   3. The inactive layouts don't run a layout pass each frame,
             //      which removes the background work that was stuttering the
             //      strip's auto-scroll on tap.
             //
+            // Critically, all three modes render as a SINGLE list row in the
+            // Section. Earlier the captions list was placed directly in the
+            // Section as a ForEach of independent rows so `.swipeActions`
+            // could fire per-item — but that made the Section's row count
+            // flip between 1 and N inside `withAnimation`, which sent UIKit's
+            // UICollectionViewCompositionalLayout into a recursive layout-loop
+            // assertion. Keeping the row count constant at 1 sidesteps that
+            // crash and lets matched-geometry morph cleanly across all three
+            // modes. The cost is that captions rows can't use list-row-level
+            // modifiers like `.swipeActions` or `.listRowBackground`.
+            //
             // matched-geometry still pairs the cells across the swap because
-            // both layouts use the same `photoNamespace` and the same
+            // all three layouts use the same `photoNamespace` and the same
             // `item.id` per cell, and the swap is wrapped in withAnimation —
             // SwiftUI snapshots the source's bounds at unmount and animates
             // the destination from those bounds to its natural bounds. The
             // critical detail is that `MatchedPhotoModifier` is applied to
             // the OUTER cell frame (not the inner image), so the cell's
             // POSITION is what gets paired, not just the inner image bounds.
-            // Captions rows are placed directly in the Section (not inside the
-            // Group below) so each ForEach item becomes its own independent list
-            // row and `.swipeActions` fires per-item, not for the whole group.
-            if mode == .captions {
-                captionsList
-            } else {
-                Group {
-                    if mode == .preview {
-                        // No .transition — matched-geometry drives the morph.
-                        PhotoStrip(
-                            items: $items,
-                            selectedPhotoID: $selectedPhotoID,
-                            matchedNamespace: photoNamespace,
-                            isAnimatingMode: isAnimatingMode,
-                            sendExif: sendExif
-                        )
-                    } else {
-                        // No .transition — matched-geometry drives the morph.
-                        ReorderablePhotoGrid(
-                            items: $items,
-                            selectedPhotoID: $selectedPhotoID,
-                            isReordering: $isReordering,
-                            matchedNamespace: photoNamespace,
-                            containerWidth: gridContainerWidth,
-                            isAnimatingMode: isAnimatingMode,
-                            sendExif: sendExif
-                        )
-                    }
+            Group {
+                if mode == .preview {
+                    // No .transition — matched-geometry drives the morph.
+                    PhotoStrip(
+                        items: $items,
+                        selectedPhotoID: $selectedPhotoID,
+                        matchedNamespace: photoNamespace,
+                        isAnimatingMode: isAnimatingMode,
+                        sendExif: sendExif
+                    )
+                } else if mode == .reorder {
+                    // No .transition — matched-geometry drives the morph.
+                    ReorderablePhotoGrid(
+                        items: $items,
+                        selectedPhotoID: $selectedPhotoID,
+                        isReordering: $isReordering,
+                        matchedNamespace: photoNamespace,
+                        containerWidth: gridContainerWidth,
+                        isAnimatingMode: isAnimatingMode,
+                        sendExif: sendExif
+                    )
+                } else {
+                    // No .transition — matched-geometry drives the morph of
+                    // each row's thumbnail from its strip/grid position into
+                    // its captions row position.
+                    captionsList
                 }
-                .listRowInsets(EdgeInsets())
-                .listRowSeparator(.hidden)
-                .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { newWidth in
-                    guard newWidth > 0 else { return }
-                    var t = Transaction()
-                    t.animation = nil
-                    withTransaction(t) { gridContainerWidth = newWidth }
-                }
+            }
+            .listRowInsets(EdgeInsets())
+            .listRowSeparator(.hidden)
+            .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { newWidth in
+                guard newWidth > 0 else { return }
+                var t = Transaction()
+                t.animation = nil
+                withTransaction(t) { gridContainerWidth = newWidth }
             }
         } header: {
             Picker("Mode", selection: modeBinding) {
@@ -559,50 +663,58 @@ struct PhotoEditor: View {
 
     // MARK: - Captions list
 
-    /// One list row per photo, shown in `.captions` mode. Each row has a small
-    /// square thumbnail on the left, an inline alt-text TextField, and an EXIF
-    /// chip. Placed directly in the Section (not inside a Group row) so each
-    /// item is an independent list row and `.swipeActions` fires per-item.
+    /// Vertical stack of photo rows, shown in `.captions` mode. The whole list
+    /// is one single Form row — not N independent rows — so the photos Section
+    /// keeps a constant row count of 1 across all three modes. See the comment
+    /// in `body` for why that matters (compositional-layout recursion).
+    ///
+    /// One consequence of being a single row: list-row-level modifiers like
+    /// `.swipeActions` and `.listRowBackground` no longer apply per-item.
+    /// Delete is handled inline per row instead.
     private var captionsList: some View {
-        ForEach($items) { $item in
-            let exifState: ExifState = {
-                guard item.exifSummary != nil else { return .absent }
-                return sendExif ? .active : .inactive
-            }()
+        VStack(spacing: 0) {
+            ForEach($items) { $item in
+                let exifState: ExifState = {
+                    guard item.exifSummary != nil else { return .absent }
+                    return sendExif ? .active : .inactive
+                }()
 
-            HStack(alignment: .top, spacing: 12) {
-                Image(uiImage: item.thumbnail)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 60, height: 60)
-                    .clipped()
-                    .cornerRadius(8)
-                    .modifier(MatchedPhotoModifier(id: item.id, namespace: photoNamespace))
+                HStack(alignment: .top, spacing: 12) {
+                    Image(uiImage: item.thumbnail)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 60, height: 60)
+                        .clipped()
+                        .cornerRadius(8)
+                        .modifier(MatchedPhotoModifier(id: item.id, namespace: photoNamespace))
 
-                VStack(alignment: .leading, spacing: 6) {
-                    TextField(
-                        "Add a description for accessibility",
-                        text: $item.alt,
-                        axis: .vertical
-                    )
-                    .font(.subheadline)
-                    .lineLimit(2 ... 4)
+                    VStack(alignment: .leading, spacing: 6) {
+                        TextField(
+                            "Add a description for accessibility",
+                            text: $item.alt,
+                            axis: .vertical
+                        )
+                        .font(.subheadline)
+                        .lineLimit(2 ... 4)
 
-                    ExifChip(state: exifState, cameraName: item.exifSummary?.camera)
-                }
-            }
-            .padding(.vertical, 10)
-            .listRowBackground(Color(.systemBackground))
-            .swipeActions(edge: .trailing) {
-                Button(role: .destructive) {
-                    if let index = items.firstIndex(where: { $0.id == item.id }) {
-                        items.remove(at: index)
+                        ExifChip(state: exifState, cameraName: item.exifSummary?.camera)
                     }
-                } label: {
-                    Image(systemName: "xmark")
+
+                    Spacer(minLength: 0)
+
+                    // TODO(human): per-row delete control. The list-level
+                    // `.swipeActions` we used to use doesn't apply here
+                    // because captions is one list row, not N. Add a visible
+                    // delete control that fits the row's visual language.
+                    // Deletion logic to call:
+                    //     if let index = items.firstIndex(where: { $0.id == item.id }) {
+                    //         withAnimation(.smooth) { items.remove(at: index) }
+                    //     }
                 }
+                .padding(.vertical, 10)
             }
         }
+        .padding(.horizontal, 16)
     }
 }
 

@@ -1,4 +1,7 @@
+import os
 import SwiftUI
+
+private let thumbnailSignposter = OSSignposter(subsystem: "social.grain.grain", category: "Animation.Morph")
 
 /// Shared photo cell. Drag is attached externally by the parent (custom SwiftUI
 /// gesture, NOT system .draggable). The pill is a passive ALT indicator with
@@ -185,9 +188,12 @@ struct MatchedPhotoModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         if let namespace {
-            content.matchedGeometryEffect(id: id, in: namespace)
+            content
+                .matchedGeometryEffect(id: id, in: namespace)
+                .onAppear { thumbnailSignposter.emitEvent("MatchedApplied") }
         } else {
             content
+                .onAppear { thumbnailSignposter.emitEvent("MatchedPassthrough") }
         }
     }
 }

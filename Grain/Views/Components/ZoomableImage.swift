@@ -330,8 +330,24 @@ struct ZoomableImage: View {
 }
 
 #Preview {
-    ZoomableImage(url: "", aspectRatio: 4 / 3)
+    // Use a solid color rendered into a UIImage so zoom state is exercisable
+    // without a network dependency. The 4:3 gradient stands in for a real photo.
+    let size = CGSize(width: 400, height: 300)
+    let renderer = UIGraphicsImageRenderer(size: size)
+    let sampleImage = renderer.image { ctx in
+        let colors = [UIColor.systemIndigo.cgColor, UIColor.systemTeal.cgColor]
+        let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                                  colors: colors as CFArray,
+                                  locations: [0, 1])!
+        ctx.cgContext.drawLinearGradient(gradient,
+                                         start: .zero,
+                                         end: CGPoint(x: size.width, y: size.height),
+                                         options: [])
+    }
+
+    ZoomableImage(localImage: sampleImage, aspectRatio: 4 / 3)
         .environment(ImageZoomState())
         .frame(maxWidth: .infinity)
-        .padding()
+        .background(Color.black)
+        .preferredColorScheme(.dark)
 }

@@ -616,15 +616,14 @@ struct GalleryCardView: View {
     ScrollView {
         GalleryCardView(
             gallery: $gallery,
-            client: XRPCClient(baseURL: AuthManager.serverURL)
+            client: .preview
         )
         GalleryCardView(
             gallery: .constant(PreviewData.gallery2),
-            client: XRPCClient(baseURL: AuthManager.serverURL)
+            client: .preview
         )
     }
-    .environment(AuthManager())
-    .environment(StoryStatusCache())
-    .environment(ViewedStoryStorage())
-    .environment(LabelDefinitionsCache())
+    .previewEnvironments()
+    .preferredColorScheme(.dark)
+    .frame(maxHeight: .infinity, alignment: .top)
 }

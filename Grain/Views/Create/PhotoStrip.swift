@@ -1,4 +1,7 @@
+import os
 import SwiftUI
+
+private let stripSignposter = OSSignposter(subsystem: "social.grain.grain", category: "Animation.Strip")
 
 // MARK: - Wallet-style removal transition
 
@@ -110,6 +113,7 @@ struct PhotoStrip: View {
                             // onChange does NOT inherit a parent transaction, so
                             // we can't rely on it for animation — drive the
                             // source directly instead.
+                            stripSignposter.emitEvent("ScrollTap", "scrollWasNil=\(scrollID == nil),animatingMode=\(isAnimatingMode)")
                             withAnimation(.snappy) {
                                 scrollID = id
                                 selectedPhotoID = id
@@ -136,29 +140,53 @@ struct PhotoStrip: View {
         // onAppear + proxy.scrollTo approach, which fired too late (after
         // preference-key propagation) to influence the animation's targets.
         .scrollPosition(id: $scrollID, anchor: .center)
-        .contentMargins(.leading, horizontalPadding - 22, for: .scrollContent)
-        .contentMargins(.trailing, horizontalPadding + 2, for: .scrollContent)
+        .contentMargins(.trailing, horizontalPadding / 8, for: .scrollContent)
         .scrollClipDisabled()
         .frame(height: thumbSize + verticalPadding * 2)
         .onChange(of: isAnimatingMode) { _, animating in
-            // When the strip↔grid morph finishes, scroll to the selected photo.
-            // The strip intentionally mounts at offset 0 (scrollID = nil) so
-            // that photos 1-3 are at correct global positions when matched-
-            // geometry captures destination frames. This deferred scroll is the
-            // second phase: after cells land in their strip positions, the strip
-            // smoothly pans to bring the selected photo into view.
-            guard !animating, let id = selectedPhotoID else { return }
-            withAnimation(.snappy) { scrollID = id }
+            if animating {
+                // Strip is about to unmount into grid mode. FORCE a synchronous
+                // scroll-to-start (no withAnimation) so every cell sits at a
+                // correct POSITIVE-x global position when matched-geometry
+                // captures the morph source frames. Without this, a
+                // user-scrolled strip has items 1-3 at NEGATIVE x coordinates
+                // (still rendered because of scrollClipDisabled), so
+                // matched-geometry snapshots their source positions as
+                // off-screen-left. The morph then visually starts them from
+                // "bottom-left" instead of from the visible strip leading edge.
+                //
+                // Setting scrollID = items.first?.id with anchor .center pins
+                // item 0 at leading (clamped by contentMargins — there's
+                // nothing before it to center against). This is effective
+                // offset 0. PhotoEditor pre-flags isAnimatingMode before the
+                // withAnimation and waits one runloop frame so this scroll
+                // reset is applied to layout BEFORE matched-geometry snapshots.
+                stripSignposter.emitEvent("ScrollPreMorphReset", "items=\(items.count)")
+                scrollID = items.first?.id
+            } else {
+                // Morph done. Scroll to the selected photo so it's centered
+                // in the strip for continued interaction.
+                guard let id = selectedPhotoID else { return }
+                let state = stripSignposter.beginInterval("ScrollPostMorph", id: stripSignposter.makeSignpostID(), "scrollWasNil=\(scrollID == nil),animatingMode=\(animating)")
+                withAnimation(.snappy) { scrollID = id }
+                stripSignposter.endInterval("ScrollPostMorph", state)
+            }
         }
         .onChange(of: selectedPhotoID) { _, newID in
             // Skip during mode transitions — the TabView inside the carousel
             // can briefly reset selectedPhotoID on mount, which would fire a
             // spurious scroll-to-center mid-morph.
             guard !isAnimatingMode else { return }
-            // No animation — this path is the carousel-swipe fallback only.
-            // Tap and delete drive scrollID directly with .snappy so they
-            // don't land here needing animation. Instant scroll on swipe
-            // avoids a spring conflicting with TabView's page-settle.
+            // Skip if scrollID already matches — tap and delete drive scrollID
+            // directly with .snappy before this onChange fires. Setting the
+            // same value here without animation cancels the in-flight spring
+            // even though @State does value equality: scrollPosition(id:)'s
+            // Binding.set flushes to UIScrollView regardless, resetting the
+            // animation to an instant jump.
+            guard scrollID != newID else { return }
+            // Carousel-swipe fallback: no animation so the strip snaps
+            // instantly as the page settles (spring-on-spring feels wrong).
+            stripSignposter.emitEvent("ScrollCarouselFallback", "newIDNil=\(newID == nil),animatingMode=\(isAnimatingMode)")
             scrollID = newID
         }
     }
@@ -169,6 +197,8 @@ struct PhotoStrip: View {
     /// to next, fall back to nil. When deleting a non-selected photo: leave
     /// selection unchanged.
     private func handleDelete(itemID: UUID) {
+        let prevScrollID = scrollID
+        let state = stripSignposter.beginInterval("ScrollDelete", id: stripSignposter.makeSignpostID(), "isSelected=\(selectedPhotoID == itemID),animatingMode=\(isAnimatingMode)")
         if selectedPhotoID == itemID,
            let removedIdx = items.firstIndex(where: { $0.id == itemID })
         {
@@ -183,14 +213,16 @@ struct PhotoStrip: View {
         withAnimation(.smooth) {
             items.removeAll { $0.id == itemID }
         }
+        stripSignposter.endInterval("ScrollDelete", state, "scrollChanged=\(scrollID != prevScrollID)")
     }
 }
 
 #Preview {
-    @Previewable @State var state: [PhotoItem] = PreviewData.photoItems
+    @Previewable @State var state: [PhotoItem] = Array(PreviewData.photoItems.prefix(5))
     @Previewable @State var selected: UUID?
     PhotoStrip(items: $state, selectedPhotoID: $selected)
         .padding()
-        .onAppear { selected = state.first?.id }
-        .preferredColorScheme(.dark)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .onAppear { selected = state.last?.id }
+        .grainPreview()
 }

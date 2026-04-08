@@ -238,6 +238,7 @@ struct StoryCreateView: View {
 }
 
 #Preview {
-    StoryCreateView(client: XRPCClient(baseURL: AuthManager.serverURL))
-        .environment(AuthManager())
+    StoryCreateView(client: .preview)
+        .previewEnvironments()
+        .preferredColorScheme(.dark)
 }

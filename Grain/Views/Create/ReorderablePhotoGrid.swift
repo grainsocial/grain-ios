@@ -42,9 +42,7 @@ struct ReorderablePhotoGrid: View {
     @State private var selectionGenerator = UISelectionFeedbackGenerator()
 
     private let columnCount: Int = 3
-    /// Bumped to give the X button overflow room. Each cell's X is offset (14, -14)
-    /// outside the cell — the spacing here makes that overflow visible.
-    private let spacing: CGFloat = 28
+    private let spacing: CGFloat = 4
     private let outerPadding: CGFloat = 16
 
     private var columns: [GridItem] {
@@ -91,6 +89,7 @@ struct ReorderablePhotoGrid: View {
                     ),
                     isSelected: false,
                     isDragging: draggedID == id,
+                    hideDelete: true,
                     exifState: exifState,
                     cameraName: item.exifSummary?.camera,
                     // matchedNamespace intentionally nil here — applied AFTER
@@ -292,15 +291,18 @@ struct ReorderablePhotoGrid: View {
     @Previewable @State var state: [PhotoItem] = PreviewData.photoItems
     @Previewable @State var selected: UUID?
     @Previewable @State var reordering = false
-    ScrollView {
-        ReorderablePhotoGrid(
-            items: $state,
-            selectedPhotoID: $selected,
-            isReordering: $reordering,
-            containerWidth: 393
-        )
+    GeometryReader { geo in
+        ScrollView {
+            ReorderablePhotoGrid(
+                items: $state,
+                selectedPhotoID: $selected,
+                isReordering: $reordering,
+                containerWidth: geo.size.width
+            )
+        }
+        .scrollDisabled(reordering)
     }
-    .scrollDisabled(reordering)
     .onAppear { selected = state.first?.id }
     .preferredColorScheme(.dark)
+    .frame(maxHeight: .infinity, alignment: .top)
 }

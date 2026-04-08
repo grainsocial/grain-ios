@@ -49,10 +49,34 @@ struct AvatarView: View {
 }
 
 #Preview {
-    HStack(spacing: 20) {
-        AvatarView(url: nil)
-        AvatarView(url: nil, size: 48)
-        AvatarView(url: nil, size: 80)
+    VStack(spacing: 24) {
+        // Fallback state — no URL, all three canonical sizes side by side
+        VStack(spacing: 8) {
+            Text("Fallback (nil URL)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack(spacing: 20) {
+                AvatarView(url: nil, size: 32)
+                AvatarView(url: nil, size: 48)
+                AvatarView(url: nil, size: 80)
+            }
+        }
+
+        Divider()
+
+        // Bad URL — exercises the loading-failed → fallback path
+        VStack(spacing: 8) {
+            Text("Bad URL (load failure fallback)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack(spacing: 20) {
+                AvatarView(url: "https://invalid.example/avatar.jpg", size: 32)
+                AvatarView(url: "https://invalid.example/avatar.jpg", size: 48)
+                AvatarView(url: "https://invalid.example/avatar.jpg", size: 80)
+            }
+        }
     }
     .padding()
+    .background(Color(.systemBackground))
+    .preferredColorScheme(.dark)
 }
