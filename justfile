@@ -21,11 +21,11 @@ generate:
 
 # Build for simulator (production API — matches Xcode Run)
 build:
-    set -o pipefail && xcodebuild build -scheme Grain -destination 'generic/platform=iOS Simulator' PRODUCT_BUNDLE_IDENTIFIER={{bundle_id}} {{sim_sign}} 2>&1 | xcbeautify
+    set -o pipefail && xcodebuild build -scheme Grain -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max' PRODUCT_BUNDLE_IDENTIFIER={{bundle_id}} {{sim_sign}} 2>&1 | xcbeautify
 
 # Build for simulator (local/dev API — overrides default PRODUCTION_API flag)
 build-local:
-    set -o pipefail && xcodebuild build -scheme Grain -destination 'generic/platform=iOS Simulator' PRODUCT_BUNDLE_IDENTIFIER={{bundle_id}} SWIFT_ACTIVE_COMPILATION_CONDITIONS='DEBUG' {{sim_sign}} 2>&1 | xcbeautify
+    set -o pipefail && xcodebuild build -scheme Grain -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max' PRODUCT_BUNDLE_IDENTIFIER={{bundle_id}} SWIFT_ACTIVE_COMPILATION_CONDITIONS='DEBUG' {{sim_sign}} 2>&1 | xcbeautify
 
 # Build + install + launch on simulator (local/dev API)
 sim-local: build-local
@@ -40,11 +40,15 @@ sim-local: build-local
 sim:
     #!/usr/bin/env bash
     set -euo pipefail
-    set -o pipefail && xcodebuild build -scheme Grain -destination 'generic/platform=iOS Simulator' PRODUCT_BUNDLE_IDENTIFIER={{bundle_id}} {{sim_sign}} 2>&1 | xcbeautify
+    set -o pipefail && xcodebuild build -scheme Grain -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max' PRODUCT_BUNDLE_IDENTIFIER={{bundle_id}} {{sim_sign}} 2>&1 | xcbeautify
     APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData/Grain-*/Build/Products/Debug-iphonesimulator -name "Grain.app" -type d | head -1)
-    xcrun simctl install booted "$APP_PATH"
-    xcrun simctl launch booted {{bundle_id}}
-    echo "Installed and launched on simulator (grain.social)"
+    TARGET="booted"
+    if [ -n "${SIM_UDID:-}" ]; then
+        xcrun simctl list devices | grep -q "${SIM_UDID}.*Booted" && TARGET="$SIM_UDID"
+    fi
+    xcrun simctl install "$TARGET" "$APP_PATH"
+    xcrun simctl launch "$TARGET" {{bundle_id}}
+    echo "Installed and launched on simulator (grain.social) → $TARGET"
 
 # Run tests
 test:
