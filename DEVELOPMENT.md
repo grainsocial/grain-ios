@@ -36,6 +36,15 @@ BUNDLE_NAME=Grain
 
 Then re-run `just generate` before building.
 
+Pass your device UDID directly or via an env var:
+
+```bash
+just device 00000000-0000000000000000   # explicit UDID
+just device $iphonemax                  # via shell env var
+```
+
+Find your device UDID with `xcrun devicectl list devices`.
+
 ## Commands
 
 ```bash
@@ -48,3 +57,5 @@ just format-fix        # Fix formatting in-place
 just lint-fix          # Fix lint violations
 just release           # Bump build, archive, upload to App Store Connect
 ```
+
+> **Note:** The Xcode project is generated from `project.yml` — run `just generate` after adding or removing Swift files, or after pulling changes that touch `project.yml`.
