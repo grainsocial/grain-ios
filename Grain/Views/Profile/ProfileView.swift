@@ -441,7 +441,7 @@ struct ProfileView: View {
         } label: {
             VStack(spacing: 4) {
                 Image(systemName: symbolName)
-                    .font(.system(size: 18))
+                    .font(.system(size: 22))
                     .foregroundStyle(isActive ? .primary : .secondary)
                 Rectangle()
                     .fill(viewMode == mode ? Color("AccentColor") : .clear)
