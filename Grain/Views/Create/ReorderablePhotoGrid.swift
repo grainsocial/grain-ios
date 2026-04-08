@@ -91,7 +91,6 @@ struct ReorderablePhotoGrid: View {
                     isDragging: draggedID == id,
                     hideDelete: true,
                     exifState: exifState,
-                    cameraName: item.exifSummary?.camera,
                     // matchedNamespace intentionally nil here — applied AFTER
                     // geometryGroup below. Apple docs state that
                     // matchedGeometryEffect inside a geometryGroup reports
@@ -303,6 +302,6 @@ struct ReorderablePhotoGrid: View {
         .scrollDisabled(reordering)
     }
     .onAppear { selected = state.first?.id }
-    .preferredColorScheme(.dark)
+    .grainPreview()
     .frame(maxHeight: .infinity, alignment: .top)
 }

@@ -54,7 +54,6 @@ struct PhotoThumbnailCell: View {
     /// `.absent` so existing call sites that don't pass the parameter compile
     /// unchanged and render no chip.
     var exifState: ExifState = .absent
-    var cameraName: String?
     /// Shared namespace for the strip↔grid matched-geometry transition.
     var matchedNamespace: Namespace.ID?
     let onTap: () -> Void
@@ -77,7 +76,7 @@ struct PhotoThumbnailCell: View {
                     altPill.opacity(hideDelete ? 0 : 1)
                 }
                 .overlay(alignment: .bottomLeading) {
-                    ExifChip(state: exifState, cameraName: cameraName, compact: true)
+                    ExifChip(state: exifState)
                         .padding(5)
                         .opacity(hideDelete ? 0 : 1)
                 }
@@ -190,10 +189,74 @@ struct MatchedPhotoModifier: ViewModifier {
         if let namespace {
             content
                 .matchedGeometryEffect(id: id, in: namespace)
+                .modifier(CellGlobalFrameReporter(id: id, passthrough: false))
                 .onAppear { thumbnailSignposter.emitEvent("MatchedApplied") }
         } else {
             content
+                .modifier(CellGlobalFrameReporter(id: id, passthrough: true))
                 .onAppear { thumbnailSignposter.emitEvent("MatchedPassthrough") }
         }
     }
+}
+
+/// Diagnostic modifier that emits a `CellGlobalFrame` signpost whenever the
+/// cell's global frame changes. Correlate these events with `MorphAnimation`
+/// intervals in Instruments (subsystem `social.grain.grain`, category
+/// `Animation.Morph`) to verify that matched-geometry captured stable
+/// destination frames: if a cell's frame keeps changing AFTER the morph
+/// completion signpost fires, something downstream is still moving it.
+///
+/// `.onGeometryChange` samples after layout settles and does NOT participate
+/// in the layout pass, so attaching it is safe — it won't perturb the thing
+/// it's measuring. This is deliberately NOT #if DEBUG-gated: OSSignposter is
+/// production-safe and the events are only materialized when an Instruments
+/// trace is actively recording.
+private struct CellGlobalFrameReporter: ViewModifier {
+    let id: UUID
+    let passthrough: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { frame in
+                thumbnailSignposter.emitEvent(
+                    "CellGlobalFrame",
+                    "id=\(id.uuidString.prefix(8)),x=\(Int(frame.minX.rounded())),y=\(Int(frame.minY.rounded())),w=\(Int(frame.width.rounded())),h=\(Int(frame.height.rounded())),passthrough=\(passthrough ? 1 : 0)"
+                )
+            }
+    }
+}
+
+#Preview {
+    let items = Array(PreviewData.photoItemsWithExif.prefix(3))
+    HStack(spacing: 20) {
+        // Strip/preview mode — selected, EXIF active
+        PhotoThumbnailCell(
+            item: .constant(items[0]),
+            geometry: CellGeometry(mode: .preview, maskSide: 72, photoAspect: items[0].naturalAspect),
+            isSelected: true,
+            exifState: .active,
+            onTap: {},
+            onDelete: {}
+        )
+        // Strip/preview mode — unselected, EXIF inactive
+        PhotoThumbnailCell(
+            item: .constant(items[1]),
+            geometry: CellGeometry(mode: .preview, maskSide: 72, photoAspect: items[1].naturalAspect),
+            isSelected: false,
+            exifState: .inactive,
+            onTap: {},
+            onDelete: {}
+        )
+        // Reorder (grid) mode — larger mask, no EXIF
+        PhotoThumbnailCell(
+            item: .constant(items[2]),
+            geometry: CellGeometry(mode: .reorder, maskSide: 110, photoAspect: items[2].naturalAspect),
+            isSelected: false,
+            exifState: .absent,
+            onTap: {},
+            onDelete: {}
+        )
+    }
+    .padding(30)
+    .grainPreview()
 }

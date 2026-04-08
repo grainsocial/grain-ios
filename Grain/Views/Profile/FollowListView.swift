@@ -290,6 +290,6 @@ struct FollowListItem: Identifiable {
         )
     }
     .previewEnvironments()
-    .preferredColorScheme(.dark)
+    .grainPreview()
     .frame(maxHeight: .infinity, alignment: .top)
 }

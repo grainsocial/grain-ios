@@ -349,5 +349,5 @@ struct ZoomableImage: View {
         .environment(ImageZoomState())
         .frame(maxWidth: .infinity)
         .background(Color.black)
-        .preferredColorScheme(.dark)
+        .grainPreview()
 }

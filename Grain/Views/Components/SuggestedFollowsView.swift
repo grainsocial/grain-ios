@@ -112,5 +112,5 @@ struct SuggestedFollowsView: View {
         suggestions: $suggestions
     )
     .previewEnvironments()
-    .preferredColorScheme(.dark)
+    .grainPreview()
 }

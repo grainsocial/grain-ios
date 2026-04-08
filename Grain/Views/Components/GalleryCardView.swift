@@ -624,6 +624,6 @@ struct GalleryCardView: View {
         )
     }
     .previewEnvironments()
-    .preferredColorScheme(.dark)
+    .grainPreview()
     .frame(maxHeight: .infinity, alignment: .top)
 }

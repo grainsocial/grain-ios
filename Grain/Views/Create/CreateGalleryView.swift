@@ -20,11 +20,14 @@ private actor LoadThrottle {
     func acquire(spid: OSSignpostID) async {
         if active < maxConcurrent {
             active += 1
-            createSignposter.emitEvent("ThrottleAcquired", id: spid, "active=\(active),waiters=0")
+            let a = active
+            createSignposter.emitEvent("ThrottleAcquired", id: spid, "active=\(a),waiters=0")
         } else {
-            let waitState = createSignposter.beginInterval("ThrottleWait", id: spid, "active=\(active),waiters=\(waiters.count)")
+            let a = active, w = waiters.count
+            let waitState = createSignposter.beginInterval("ThrottleWait", id: spid, "active=\(a),waiters=\(w)")
             await withCheckedContinuation { self.waiters.append($0) }
-            createSignposter.endInterval("ThrottleWait", waitState, "active=\(active)")
+            let a2 = active
+            createSignposter.endInterval("ThrottleWait", waitState, "active=\(a2)")
         }
     }
 
@@ -32,10 +35,12 @@ private actor LoadThrottle {
         if let next = waiters.first {
             waiters.removeFirst()
             next.resume()
-            createSignposter.emitEvent("ThrottleHandoff", id: spid, "active=\(active),waiters=\(waiters.count)")
+            let a = active, w = waiters.count
+            createSignposter.emitEvent("ThrottleHandoff", id: spid, "active=\(a),waiters=\(w)")
         } else {
             active -= 1
-            createSignposter.emitEvent("ThrottleReleased", id: spid, "active=\(active)")
+            let a = active
+            createSignposter.emitEvent("ThrottleReleased", id: spid, "active=\(a)")
         }
     }
 }

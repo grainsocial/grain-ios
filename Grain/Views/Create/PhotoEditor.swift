@@ -75,26 +75,33 @@ final class PreviewCacheStore {
         loadingPreviewIDs.insert(item.id)
         let id = item.id
         let source = item.source
-        let task = Task {
+        let maxDim = previewMaxDimension
+        let cacheLimit = previewCacheLimit
+        // Task.detached so MakeThumbnail + Decompress + LoadTransferable run on the
+        // cooperative thread pool instead of the main actor. Task { } in a @MainActor
+        // context inherits main-actor isolation — all async work still runs on the
+        // main thread, which is what was causing the 100–700ms scroll hangs.
+        let task = Task.detached(priority: .utility) { [weak self] in
             let spid = photoLoadingSignposter.makeSignpostID()
             let previewState = photoLoadingSignposter.beginInterval("LoadPreview", id: spid)
-            let image = await Self.loadPreviewImage(source: source, maxDimension: previewMaxDimension)
+            let image = await PreviewCacheStore.loadPreviewImage(source: source, maxDimension: maxDim)
             photoLoadingSignposter.endInterval("LoadPreview", previewState, "success=\(image != nil)")
             await MainActor.run {
-                prefetchTasks.removeValue(forKey: id)
-                loadingPreviewIDs.remove(id)
+                guard let self else { return }
+                self.prefetchTasks.removeValue(forKey: id)
+                self.loadingPreviewIDs.remove(id)
                 guard let image else { return }
                 // Bail if the item was deleted while we were loading.
                 guard items.contains(where: { $0.id == id }) else { return }
                 // Move id to the most-recent slot in the LRU. removeAll-then-append
                 // is correct even if the id was somehow already present (it never
                 // double-counts in the order array).
-                previewCache[id] = image
-                previewCacheOrder.removeAll { $0 == id }
-                previewCacheOrder.append(id)
-                while previewCacheOrder.count > previewCacheLimit {
-                    let evict = previewCacheOrder.removeFirst()
-                    previewCache.removeValue(forKey: evict)
+                self.previewCache[id] = image
+                self.previewCacheOrder.removeAll { $0 == id }
+                self.previewCacheOrder.append(id)
+                while self.previewCacheOrder.count > cacheLimit {
+                    let evict = self.previewCacheOrder.removeFirst()
+                    self.previewCache.removeValue(forKey: evict)
                 }
             }
         }
@@ -105,7 +112,7 @@ final class PreviewCacheStore {
     /// to fetch the original Data via PhotosPicker; for camera items the full UIImage
     /// already lives in the PhotoSource enum. In both cases we downsize to
     /// `maxDimension` so cached previews fit a sane memory budget.
-    private static func loadPreviewImage(source: PhotoSource, maxDimension: CGFloat) async -> UIImage? {
+    private nonisolated static func loadPreviewImage(source: PhotoSource, maxDimension: CGFloat) async -> UIImage? {
         switch source {
         case let .picker(pickerItem):
             let transferState = photoLoadingSignposter.beginInterval("LoadTransferable", id: photoLoadingSignposter.makeSignpostID())
@@ -450,21 +457,6 @@ struct PhotoEditor: View {
                     return
                 }
 
-                // Captions ↔ anything involves a dramatic row-count change in the
-                // Form (1 row → N rows or vice versa). Animating that inside
-                // withAnimation(.smooth) puts UICollectionViewCompositionalLayout
-                // into a recursive layout loop (depth 100 assertion crash).
-                // Instant swap with animation stripped from the transaction avoids
-                // this entirely. Strip ↔ reorder stays animated for matched-geometry.
-                let involvesCaption = newMode == .captions || mode == .captions
-                if involvesCaption {
-                    morphSignposter.emitEvent("MorphCaptionsFastPath", "from=\(mode.label),to=\(newMode.label)")
-                    var t = Transaction()
-                    t.animation = nil
-                    withTransaction(t) { mode = newMode }
-                    return
-                }
-
                 morphGeneration += 1
                 let gen = morphGeneration
                 let morphSpid = morphSignposter.makeSignpostID()
@@ -686,30 +678,40 @@ struct PhotoEditor: View {
                         .frame(width: 60, height: 60)
                         .clipped()
                         .cornerRadius(8)
+                        .overlay(alignment: .bottomLeading) {
+                            ExifChip(state: exifState)
+                                .padding(5)
+                        }
                         .modifier(MatchedPhotoModifier(id: item.id, namespace: photoNamespace))
 
-                    VStack(alignment: .leading, spacing: 6) {
-                        TextField(
-                            "Add a description for accessibility",
-                            text: $item.alt,
-                            axis: .vertical
-                        )
-                        .font(.subheadline)
-                        .lineLimit(2 ... 4)
-
-                        ExifChip(state: exifState, cameraName: item.exifSummary?.camera)
-                    }
+                    TextField(
+                        "Add a description",
+                        text: $item.alt,
+                        axis: .vertical
+                    )
+                    .font(.subheadline)
+                    .lineLimit(2 ... 4)
 
                     Spacer(minLength: 0)
 
-                    // TODO(human): per-row delete control. The list-level
-                    // `.swipeActions` we used to use doesn't apply here
-                    // because captions is one list row, not N. Add a visible
-                    // delete control that fits the row's visual language.
-                    // Deletion logic to call:
-                    //     if let index = items.firstIndex(where: { $0.id == item.id }) {
-                    //         withAnimation(.smooth) { items.remove(at: index) }
-                    //     }
+                    // Per-row delete. Matches PhotoThumbnailCell's xmark.circle.fill
+                    // icon so the visual language is consistent with the strip/grid
+                    // X button. Tinted secondary (not accent) so it reads as a
+                    // quiet trailing affordance next to the TextField instead of
+                    // competing with it. .frame(44×44)+.contentShape gives a
+                    // HIG-compliant tap target even though the glyph is 20pt.
+                    Button {
+                        guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
+                        withAnimation(.smooth) { items.remove(at: index) }
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 20))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Delete photo")
                 }
                 .padding(.vertical, 10)
             }
@@ -733,5 +735,5 @@ struct PhotoEditor: View {
     .environment(zoomState)
     .modifier(ImageZoomOverlay(zoomState: zoomState))
     .onAppear { selected = state.first?.id }
-    .preferredColorScheme(.dark)
+    .grainPreview()
 }

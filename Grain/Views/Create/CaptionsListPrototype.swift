@@ -32,7 +32,7 @@ struct CaptionsListPrototype: View {
                                 .font(.subheadline)
                                 .lineLimit(2 ... 4)
 
-                            ExifChip(state: exifState, cameraName: item.exifSummary?.camera)
+                            ExifChip(state: exifState)
                         }
                     }
                     .padding(.vertical, 10)
@@ -72,6 +72,6 @@ struct CaptionsListPrototype: View {
         items[i].exifSummary = mockExif
     }
     return CaptionsListPrototype(items: items)
-        .preferredColorScheme(.dark)
+        .grainPreview()
         .frame(maxHeight: .infinity, alignment: .top)
 }

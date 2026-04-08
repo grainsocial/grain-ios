@@ -71,5 +71,5 @@ struct ContentLabelPicker: View {
         }
     }
     .previewEnvironments()
-    .preferredColorScheme(.dark)
+    .grainPreview()
 }

@@ -78,5 +78,5 @@ struct AvatarView: View {
     }
     .padding()
     .background(Color(.systemBackground))
-    .preferredColorScheme(.dark)
+    .grainPreview()
 }

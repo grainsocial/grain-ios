@@ -56,5 +56,5 @@ struct StoryRingView<Content: View>: View {
         }
     }
     .padding()
-    .preferredColorScheme(.dark)
+    .grainPreview()
 }

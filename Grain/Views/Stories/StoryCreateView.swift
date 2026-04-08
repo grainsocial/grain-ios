@@ -240,5 +240,5 @@ struct StoryCreateView: View {
 #Preview {
     StoryCreateView(client: .preview)
         .previewEnvironments()
-        .preferredColorScheme(.dark)
+        .grainPreview()
 }

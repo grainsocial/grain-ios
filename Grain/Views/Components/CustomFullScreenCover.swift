@@ -93,5 +93,5 @@ private struct CustomFullScreenCoverModifier<PresentedView: View>: ViewModifier 
             }
         }
     }
-    .preferredColorScheme(.dark)
+    .grainPreview()
 }

@@ -68,14 +68,16 @@ struct PhotoStrip: View {
     ) {
         _items = items
         _selectedPhotoID = selectedPhotoID
-        // Start at scroll offset 0 (nil) so the strip always mounts with
-        // photos 1-3 visible at positive x coordinates. matchedGeometryEffect
-        // captures destination frames on the first layout pass — if the scroll
-        // were pre-set to a later photo, photos 1-3 would be at negative x
-        // (off-screen left) and their morph would start from the wrong position.
-        // After isAnimatingMode drops to false the onChange below scrolls to
-        // the selected photo, keeping the two-phase motion (morph → then scroll).
-        _scrollID = State(initialValue: nil)
+        // Pre-seed scroll position to the currently-selected photo so the
+        // strip mounts already centered on it. When the strip is the morph
+        // destination (grid/captions → preview), this means
+        // matchedGeometryEffect captures destination cell frames at their
+        // FINAL resting positions on the first layout pass — no two-phase
+        // morph-then-scroll snap after the animation completes. Reading
+        // the binding's wrappedValue in init is safe: @State is only
+        // initialized once, and subsequent changes to selectedPhotoID are
+        // handled by the .onChange(of: selectedPhotoID) handler below.
+        _scrollID = State(initialValue: selectedPhotoID.wrappedValue)
         self.matchedNamespace = matchedNamespace
         self.isAnimatingMode = isAnimatingMode
         self.sendExif = sendExif
@@ -103,7 +105,6 @@ struct PhotoStrip: View {
                         ),
                         isSelected: selectedPhotoID == id,
                         exifState: exifState,
-                        cameraName: item.exifSummary?.camera,
                         matchedNamespace: matchedNamespace,
                         onTap: {
                             onTapped?(id)
@@ -122,7 +123,14 @@ struct PhotoStrip: View {
                         onDelete: { handleDelete(itemID: id) }
                     )
                     .id(id)
-                    .transition(.walletRemove)
+                    // During mode transitions matched-geometry drives the
+                    // morph; walletRemove's scale(0.85) insertion and
+                    // scale(0.5)+offset removal compete with matched-geometry
+                    // and distort the perceived screen-space origin/destination
+                    // of each cell. Gating on isAnimatingMode suppresses
+                    // walletRemove inside mode morphs but preserves it for
+                    // real deletions (where isAnimatingMode is false).
+                    .transition(isAnimatingMode ? .identity : .walletRemove)
                 }
             }
             .padding(.vertical, verticalPadding)
@@ -143,34 +151,36 @@ struct PhotoStrip: View {
         .contentMargins(.trailing, horizontalPadding / 8, for: .scrollContent)
         .scrollClipDisabled()
         .frame(height: thumbSize + verticalPadding * 2)
+        // Diagnostic: fires whenever UIScrollView's content offset or
+        // content size changes. In Instruments (subsystem
+        // social.grain.grain, category Animation.Strip) you can correlate
+        // these events against MorphAnimation intervals — if offset/size
+        // are still changing AFTER a MorphAnimation has ended, the strip's
+        // UIScrollView is doing async layout catchup and matched-geometry
+        // destinations were captured too early.
+        .onScrollGeometryChange(for: ScrollGeometry.self, of: { $0 }) { _, geo in
+            stripSignposter.emitEvent(
+                "ScrollGeometry",
+                "offsetX=\(Int(geo.contentOffset.x.rounded())),offsetY=\(Int(geo.contentOffset.y.rounded())),contentW=\(Int(geo.contentSize.width.rounded())),containerW=\(Int(geo.containerSize.width.rounded()))"
+            )
+        }
         .onChange(of: isAnimatingMode) { _, animating in
-            if animating {
-                // Strip is about to unmount into grid mode. FORCE a synchronous
-                // scroll-to-start (no withAnimation) so every cell sits at a
-                // correct POSITIVE-x global position when matched-geometry
-                // captures the morph source frames. Without this, a
-                // user-scrolled strip has items 1-3 at NEGATIVE x coordinates
-                // (still rendered because of scrollClipDisabled), so
-                // matched-geometry snapshots their source positions as
-                // off-screen-left. The morph then visually starts them from
-                // "bottom-left" instead of from the visible strip leading edge.
-                //
-                // Setting scrollID = items.first?.id with anchor .center pins
-                // item 0 at leading (clamped by contentMargins — there's
-                // nothing before it to center against). This is effective
-                // offset 0. PhotoEditor pre-flags isAnimatingMode before the
-                // withAnimation and waits one runloop frame so this scroll
-                // reset is applied to layout BEFORE matched-geometry snapshots.
-                stripSignposter.emitEvent("ScrollPreMorphReset", "items=\(items.count)")
-                scrollID = items.first?.id
-            } else {
-                // Morph done. Scroll to the selected photo so it's centered
-                // in the strip for continued interaction.
-                guard let id = selectedPhotoID else { return }
-                let state = stripSignposter.beginInterval("ScrollPostMorph", id: stripSignposter.makeSignpostID(), "scrollWasNil=\(scrollID == nil),animatingMode=\(animating)")
-                withAnimation(.snappy) { scrollID = id }
-                stripSignposter.endInterval("ScrollPostMorph", state)
-            }
+            guard animating else { return }
+            // Strip is about to unmount into grid/captions mode. FORCE a
+            // synchronous scroll-to-start (no withAnimation) so every cell
+            // sits at a correct POSITIVE-x global position when matched-
+            // geometry captures the morph source frames. Without this, a
+            // user-scrolled strip has items 1-3 at NEGATIVE x coordinates
+            // (still rendered because of scrollClipDisabled), so matched-
+            // geometry snapshots their source positions as off-screen-left.
+            //
+            // The POST-morph scroll branch that used to live here has been
+            // removed: the strip's init now pre-seeds scrollID from
+            // selectedPhotoID, so when the strip mounts fresh as the morph
+            // destination it is already centered on the selected photo. No
+            // second-phase scroll snap is needed.
+            stripSignposter.emitEvent("ScrollPreMorphReset", "items=\(items.count)")
+            scrollID = items.first?.id
         }
         .onChange(of: selectedPhotoID) { _, newID in
             // Skip during mode transitions — the TabView inside the carousel

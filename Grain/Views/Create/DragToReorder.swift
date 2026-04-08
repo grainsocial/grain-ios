@@ -53,5 +53,5 @@ extension View {
     }
     .padding()
     .background(Color(.systemBackground))
-    .preferredColorScheme(.dark)
+    .grainPreview()
 }
