@@ -50,12 +50,31 @@ struct PhotoThumbnailCell: View {
     /// disappear/reappear was jarring, so it now stays visible and rides the
     /// cell's matched-geometry transition along with the photo.
     var hideDelete: Bool = false
+    /// Opacity applied to the X button independently of `hideDelete`. Used by
+    /// PhotoStrip to fade the delete button as its cell slides off the visible
+    /// edge — only starts fading below 50% cell visibility so it's not
+    /// aggressive on cells that are mostly on screen.
+    var deleteOpacity: CGFloat = 1
     /// EXIF chip state for the bottom-leading corner overlay. Defaults to
     /// `.absent` so existing call sites that don't pass the parameter compile
     /// unchanged and render no chip.
     var exifState: ExifState = .absent
     /// Shared namespace for the strip↔grid matched-geometry transition.
     var matchedNamespace: Namespace.ID?
+    /// When false, this cell is a matched-geometry DESTINATION ONLY — it
+    /// won't contribute its own bounds as a source for paired views in other
+    /// modes. Used by the captions list, whose rows can scroll off-screen and
+    /// hand strip/grid destinations negative-y source frames (causing items
+    /// to fly in "from above" during captions→strip/grid). Strip and grid
+    /// stay as sources (the default) so strip→captions and grid→captions
+    /// still morph correctly.
+    var isMatchedSource: Bool = true
+    /// True during strip↔grid↔captions mode morphs. Gates the per-property
+    /// `.animation(.spring, value: isSelected/isDragging)` modifiers so they
+    /// don't fire their own spring curve alongside the morph's `.smooth` —
+    /// two different settling rates on the same view produced visible jitter
+    /// as the morph came to rest.
+    var isAnimatingMode: Bool = false
     let onTap: () -> Void
     let onDelete: () -> Void
 
@@ -76,26 +95,13 @@ struct PhotoThumbnailCell: View {
                     altPill.opacity(hideDelete ? 0 : 1)
                 }
                 .overlay(alignment: .bottomLeading) {
+                    // ExifChip visibility is driven purely by `exifState`:
+                    // callers that don't want the chip pass `.absent`. This is
+                    // decoupled from `hideDelete` so the captions list can
+                    // render cells with hideDelete=true (no corner X, no
+                    // altPill) while still showing the EXIF badge.
                     ExifChip(state: exifState)
                         .padding(5)
-                        .opacity(hideDelete ? 0 : 1)
-                }
-                .overlay {
-                    // Selection ring. RoundedRectangle(.continuous) gives
-                    // squircle corners whose stroke weight is visually even
-                    // around the whole ring. Frame expanded by lw so .stroke's
-                    // inner edge lands on the image boundary. Corner radius
-                    // bumped by lw/2 so the inner arc matches the clip.
-                    let lw: CGFloat = 3.0
-                    RoundedRectangle(
-                        cornerRadius: geometry.maskCornerRadius + lw / 2,
-                        style: .continuous
-                    )
-                    .trim(from: 0, to: isSelected ? 1 : 0)
-                    .stroke(Color.accentColor, style: StrokeStyle(lineWidth: lw, lineCap: .round))
-                    .frame(width: geometry.maskSide + lw, height: geometry.maskSide + lw)
-                    .animation(.easeInOut(duration: 0.25), value: isSelected)
-                    .drawingGroup()
                 }
 
             // 2. X button — positioned so its center sits exactly on the
@@ -106,30 +112,48 @@ struct PhotoThumbnailCell: View {
             //    animates, the position updates and SwiftUI interpolates it
             //    inside the same withAnimation that drives the morph.
             deleteButton
+                // Divide by the parent cell's selection/drag scale so the X
+                // button's apparent size is always `deleteOpacity`, independent
+                // of whether the cell is selected or being dragged.
+                .scaleEffect((hideDelete ? 0 : deleteOpacity) / (isDragging ? 1.1 : isSelected ? 1.12 : 1))
                 .position(x: geometry.maskSide, y: 0)
-                .opacity(hideDelete ? 0 : 1)
-                .allowsHitTesting(!hideDelete)
+                .allowsHitTesting(!hideDelete && deleteOpacity > 0)
         }
         .frame(width: geometry.maskSide, height: geometry.maskSide)
         // matched-geometry on the OUTER frame so SwiftUI pairs the cell's
         // POSITION (not just the inner image's bounds) across the strip↔grid
-        // swap. This is the morph fix. The editor swaps strip and grid via
-        // if/else so at most one source exists per id at any moment — no
-        // isSource plumbing needed.
+        // swap. This is the morph fix. `isSource` is plumbed through so the
+        // captions list can opt out of providing source frames — see the
+        // doc comment on `isMatchedSource`.
         .modifier(MatchedPhotoModifier(
             id: item.id,
-            namespace: matchedNamespace
+            namespace: matchedNamespace,
+            isSource: isMatchedSource
         ))
-        // Pickup animation at the outer body so the whole cell (photo + X)
-        // scales together. Keeps the X tied to the cell so it physically
-        // rides outward as the photo grows.
-        .scaleEffect(isDragging ? 1.1 : 1)
-        .opacity(isDragging ? 0.8 : 1)
-        .shadow(
-            color: isDragging ? .black.opacity(0.25) : .clear,
-            radius: 10, y: 6
+        // Selection: accent-color glow + directional lift. Suppressed while
+        // dragging so the drag shadow reads cleanly without competing bloom.
+        .shadow(color: isSelected && !isDragging ? Color.accentColor.opacity(0.9) : .clear, radius: 5)
+        .shadow(color: isSelected && !isDragging ? Color.accentColor.opacity(0.45) : .clear, radius: 10)
+        .shadow(color: isSelected && !isDragging ? .black.opacity(0.25) : .clear, radius: 8, x: 0, y: 5)
+        .animation(
+            isAnimatingMode ? nil
+                : isSelected
+                ? .spring(response: 0.3, dampingFraction: 0.8)
+                : .spring(response: 0.3, dampingFraction: 1.0),
+            value: isSelected
         )
-        .animation(.spring(response: 0.28, dampingFraction: 0.72), value: isDragging)
+        // Scale anchored to the X button (topTrailing corner) so the X stays
+        // fixed during selection/drag — no position jitter on the X. The offset
+        // compensates for the topTrailing expansion so the photo content appears
+        // to stay visually centered rather than drifting left and down.
+        .scaleEffect(isDragging ? 1.1 : isSelected ? 1.12 : 1, anchor: .topTrailing)
+        .offset(
+            x: ((isDragging ? 1.1 : isSelected ? 1.12 : 1.0) - 1.0) * geometry.maskSide / 2,
+            y: -((isDragging ? 1.1 : isSelected ? 1.12 : 1.0) - 1.0) * geometry.maskSide / 2
+        )
+        .opacity(isDragging ? 0.8 : 1)
+        .shadow(color: isDragging ? .black.opacity(0.25) : .clear, radius: 10, y: 6)
+        .animation(isAnimatingMode ? nil : .spring(response: 0.28, dampingFraction: 0.72), value: isDragging)
         // Tap gesture at the OUTER body (sibling to the parent's reorder
         // recognizer instead of a contested child). The X button's own
         // Button still claims its own taps.
@@ -161,34 +185,39 @@ struct PhotoThumbnailCell: View {
                 .font(.system(size: 22))
                 .foregroundStyle(.white, Color.accentColor)
                 .frame(width: 44, height: 44)
-                .contentShape(Circle())
+                .contentShape(Circle().scale(0.7))
         }
         .buttonStyle(.plain)
     }
 }
 
 /// Conditionally applies `matchedGeometryEffect` when a namespace is provided.
-/// The strip and grid both pass the SAME `Namespace.ID` for the SAME photo id,
-/// so the cell's outer frame can morph between its strip-square position and
-/// its grid-slot position. Applied to the cell's OUTER frame in
-/// `PhotoThumbnailCell.body`, not to the inner image — that's the difference
-/// between "inner image bounds wiggle" and "whole cell shifts across the
-/// layout swap".
+/// All three modes (strip, grid, captions) pass the SAME `Namespace.ID` for
+/// the SAME photo id, so the cell's outer frame can morph between any two
+/// modes. Applied to the cell's OUTER frame in `PhotoThumbnailCell.body`,
+/// not to the inner image — that's the difference between "inner image
+/// bounds wiggle" and "whole cell shifts across the layout swap".
 ///
-/// We rely on the editor swapping strip and grid via `if/else` (NOT a ZStack
-/// with both subtrees mounted), which means at most one matched view exists
-/// per id at any moment — so `isSource` defaults to `true` and no plumbing
-/// is needed. SwiftUI snapshots the source's bounds at unmount time and
-/// animates the destination from those bounds to its natural bounds inside
-/// the same `withAnimation` that drives the swap.
+/// `isSource` is surfaced here because the captions list needs to opt OUT
+/// of providing source frames. Captions rows live in a tall scrollable list
+/// and can sit above or below the viewport when the form is scrolled. At
+/// mode-swap time, matched-geometry reads the unmounting source's global
+/// frame — if that frame is off-viewport (negative y or below-viewport y),
+/// strip/grid destinations animate *from* that off-screen position,
+/// producing the "items fly in from above" bug. Marking captions cells as
+/// destination-only prevents that: strip/grid remain sources (the default),
+/// so strip→captions and grid→captions still morph, but captions→strip and
+/// captions→grid skip the broken source-frame capture and just settle at
+/// their natural destination bounds.
 struct MatchedPhotoModifier: ViewModifier {
     let id: UUID
     let namespace: Namespace.ID?
+    var isSource: Bool = true
 
     func body(content: Content) -> some View {
         if let namespace {
             content
-                .matchedGeometryEffect(id: id, in: namespace)
+                .matchedGeometryEffect(id: id, in: namespace, isSource: isSource)
                 .modifier(CellGlobalFrameReporter(id: id, passthrough: false))
                 .onAppear { thumbnailSignposter.emitEvent("MatchedApplied") }
         } else {

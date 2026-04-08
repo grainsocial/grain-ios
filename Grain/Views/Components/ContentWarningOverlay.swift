@@ -92,5 +92,6 @@ struct LabelBadge: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(Color.black)
-    .grainPreview()
+    .preferredColorScheme(.dark)
+    .tint(Color("AccentColor"))
 }

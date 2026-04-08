@@ -240,5 +240,6 @@ struct StoryCreateView: View {
 #Preview {
     StoryCreateView(client: .preview)
         .previewEnvironments()
-        .grainPreview()
+        .preferredColorScheme(.dark)
+        .tint(Color("AccentColor"))
 }

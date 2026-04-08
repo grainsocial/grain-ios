@@ -209,5 +209,6 @@ private enum Segment {
         RichTextView(text: "Visit https://grain.social for more.")
     }
     .padding()
-    .grainPreview()
+    .preferredColorScheme(.dark)
+    .tint(Color("AccentColor"))
 }

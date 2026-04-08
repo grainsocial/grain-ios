@@ -71,5 +71,6 @@ struct ContentLabelPicker: View {
         }
     }
     .previewEnvironments()
-    .grainPreview()
+    .preferredColorScheme(.dark)
+    .tint(Color("AccentColor"))
 }

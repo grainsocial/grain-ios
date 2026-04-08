@@ -112,5 +112,6 @@ struct SuggestedFollowsView: View {
         suggestions: $suggestions
     )
     .previewEnvironments()
-    .grainPreview()
+    .preferredColorScheme(.dark)
+    .tint(Color("AccentColor"))
 }

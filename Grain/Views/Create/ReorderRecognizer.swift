@@ -44,9 +44,15 @@ struct ReorderRecognizer: UIGestureRecognizerRepresentable {
     func makeUIGestureRecognizer(context: Context) -> UILongPressGestureRecognizer {
         let recognizer = UILongPressGestureRecognizer()
         recognizer.minimumPressDuration = minimumPressDuration
-        // Effectively unbounded — once the long-press fires we don't want UIKit to
-        // cancel it just because the finger moved a long way.
-        recognizer.allowableMovement = .greatestFiniteMagnitude
+        // Tight arming tolerance — if the finger drifts more than this during
+        // the pre-fire window, UIKit fails the recognizer and the parent
+        // scroll pan takes over. Without this (previously unbounded), a user
+        // trying to flick-scroll the grid would still commit the long press
+        // at 0.18s and accidentally start a reorder drag. Note: this is the
+        // ARMING tolerance only; once `.began` fires the finger can move
+        // freely (UILongPressGestureRecognizer stops consulting
+        // allowableMovement after recognition succeeds).
+        recognizer.allowableMovement = 10
         // Critical for coexistence with SwiftUI taps and scroll pans:
         recognizer.cancelsTouchesInView = false
         recognizer.delaysTouchesBegan = false

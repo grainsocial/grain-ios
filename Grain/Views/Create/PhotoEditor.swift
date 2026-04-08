@@ -401,6 +401,12 @@ struct PhotoEditor: View {
     /// vertical scroll is locked only during the actual drag — not during the
     /// 0.18s arming window that precedes it.
     @Binding var isReordering: Bool
+    /// True for the duration of a strip↔grid↔captions mode morph. Hoisted to
+    /// the parent so CreateGalleryView can add it to `.scrollDisabled` — this
+    /// prevents UIKit's UICollectionView from adjusting scroll offset mid-morph,
+    /// which was shifting source/destination frames into different scroll
+    /// contexts and producing the "items fly in from the wrong direction" bug.
+    @Binding var isAnimatingMode: Bool
     let sendExif: Bool
 
     /// Current editor mode. Owned at this level so the section header button,
@@ -408,14 +414,6 @@ struct PhotoEditor: View {
     /// all read from the same source of truth. Defaults to `.preview` so the
     /// strip + carousel are visible when a gallery first appears.
     @State private var mode: EditorMode = .preview
-    /// True from the moment the user taps the header button until the
-    /// withAnimation completion fires. Drives two things in concert:
-    /// (1) cells hide their X buttons so they don't pop in mid-morph,
-    /// (2) the Post Preview carousel section stays gone for the full duration
-    ///     of the move (instead of popping back in the instant mode flips back
-    ///     to .preview).
-    /// Both settle simultaneously when the animation completes.
-    @State private var isAnimatingMode = false
     /// Monotonically increasing counter. Each animation increments this before
     /// scheduling its safety-net Task. The safety net captures the generation at
     /// creation time and exits early if a newer animation has started since —
@@ -462,74 +460,42 @@ struct PhotoEditor: View {
                 let morphSpid = morphSignposter.makeSignpostID()
                 let morphState = morphSignposter.beginInterval("MorphAnimation", id: morphSpid, "from=\(mode.label),to=\(newMode.label)")
 
-                /// Reusable safety-net that forces isAnimatingMode back down if
-                /// withAnimation's completion is silently dropped (known iOS
-                /// 17/18 issue when a concurrent transaction replaces the
-                /// animation mid-flight). Generation check prevents a stale
-                /// safety net from a completed animation from clearing
-                /// isAnimatingMode while a newer animation is in-flight.
-                @Sendable func scheduleSafetyNet() {
-                    Task { @MainActor in
-                        try? await Task.sleep(for: .seconds(1.5))
-                        guard isAnimatingMode, morphGeneration == gen else {
-                            morphSignposter.emitEvent("MorphSafetyNetStale", id: morphSpid, "gen=\(gen),current=\(morphGeneration)")
-                            return
-                        }
-                        morphSignposter.endInterval("MorphAnimation", morphState, "path=safetyNet")
-                        isAnimatingMode = false
-                    }
+                // Set the gate BEFORE withAnimation so it's a plain state
+                // mutation, not an animated one. isAnimatingMode is a @Binding
+                // to the parent — putting it inside withAnimation created a
+                // cross-view animation dependency (parent + child timelines)
+                // that prevented the completion handler from EVER firing
+                // (100% safety-net termination in Instruments). Only `mode`
+                // belongs inside withAnimation because it drives the morph.
+                isAnimatingMode = true
+                // .smooth has spring overshoot (damping < 1) which causes
+                // cell jitter as the Section row height settles. Use a
+                // critically-damped easeOut for captions transitions where
+                // matched-geometry is unreliable and the opacity crossfade
+                // is the primary visual. Keep .smooth for strip↔grid where
+                // the morph is tight and the spring feel is desirable.
+                let captionsInvolved = (mode == .captions || newMode == .captions)
+                let curve: Animation = captionsInvolved
+                    ? .easeOut(duration: 0.3)
+                    : .smooth
+                withAnimation(curve) {
+                    mode = newMode
                 }
-
-                if mode == .preview {
-                    // Any transition OUT of preview mode (→reorder OR →captions).
-                    // Pre-flag isAnimatingMode OUTSIDE withAnimation so the strip's
-                    // onChange fires synchronously and scrolls its content to
-                    // offset 0. Then yield one runloop frame before starting
-                    // withAnimation so the strip's layout has time to settle at
-                    // the reset position BEFORE matched-geometry snapshots the
-                    // morph source frames. Without this delay the snapshot and
-                    // the scroll reset happen in the same transaction and
-                    // matched-geometry captures source positions at the OLD
-                    // scroll offset — items 1-3 then morph from off-screen-left
-                    // (negative x, "bottom-left").
-                    isAnimatingMode = true
-                    Task { @MainActor in
-                        // ~5 frames of headroom. SwiftUI needs a render pass
-                        // to apply the scrollID change to UIScrollView's
-                        // contentOffset, plus any layout settle that
-                        // cascades. 80ms is well under tap-response threshold.
-                        try? await Task.sleep(nanoseconds: 80_000_000)
-                        withAnimation(.smooth) {
-                            mode = newMode
-                        } completion: {
-                            morphSignposter.endInterval("MorphAnimation", morphState, "path=completion")
-                            isAnimatingMode = false
-                        }
-                        scheduleSafetyNet()
-                    }
-                } else {
-                    // Transitions that don't unmount the strip:
-                    //   reorder → preview, captions → preview,
-                    //   reorder ↔ captions
-                    // The strip (when it's the destination) mounts fresh — its
-                    // init leaves scrollID as nil, which lets ScrollView default
-                    // to offset 0 on the first layout pass. That already puts
-                    // items 1-3 at correct positive-x positions for matched-
-                    // geometry destination capture, so no pre-delay is needed.
-                    withAnimation(.smooth) {
-                        isAnimatingMode = true
-                        mode = newMode
-                    } completion: {
-                        // Plain assignment — no withAnimation. The morph has already
-                        // settled; wrapping this in withAnimation(.smooth) re-runs a
-                        // smooth transaction over every view that reads isAnimatingMode
-                        // (both PhotoStrip and ReorderablePhotoGrid receive a new param
-                        // value), causing SwiftUI to re-interpolate cell positions that
-                        // are already at rest, which produces the post-morph wobble.
-                        morphSignposter.endInterval("MorphAnimation", morphState, "path=completion")
-                        isAnimatingMode = false
-                    }
-                    scheduleSafetyNet()
+                // Timer-based gate drop. `withAnimation` completion handlers
+                // are unreliable when matchedGeometryEffect is involved —
+                // 100% of morphs in Instruments terminated via safety-net,
+                // never via completion. A deterministic timer matching the
+                // animation's settling time is the pragmatic fix.
+                //   .smooth → spring, effective settling ~0.55s
+                //   .easeOut(0.3) → fixed duration 0.3s + 50ms margin
+                let gateDuration: Duration = captionsInvolved
+                    ? .milliseconds(350)
+                    : .milliseconds(550)
+                Task { @MainActor in
+                    try? await Task.sleep(for: gateDuration)
+                    guard morphGeneration == gen else { return }
+                    morphSignposter.endInterval("MorphAnimation", morphState, "path=timer")
+                    isAnimatingMode = false
                 }
             }
         )
@@ -572,16 +538,20 @@ struct PhotoEditor: View {
             // POSITION is what gets paired, not just the inner image bounds.
             Group {
                 if mode == .preview {
-                    // No .transition — matched-geometry drives the morph.
+                    // .opacity as a fallback: when matched-geometry succeeds
+                    // it drives the morph; when it doesn't (off-screen
+                    // sources, Form row-resize race) the fade provides
+                    // visual continuity instead of a hard cut.
                     PhotoStrip(
                         items: $items,
                         selectedPhotoID: $selectedPhotoID,
                         matchedNamespace: photoNamespace,
                         isAnimatingMode: isAnimatingMode,
-                        sendExif: sendExif
+                        sendExif: sendExif,
+                        containerWidth: gridContainerWidth
                     )
+                    .transition(.opacity)
                 } else if mode == .reorder {
-                    // No .transition — matched-geometry drives the morph.
                     ReorderablePhotoGrid(
                         items: $items,
                         selectedPhotoID: $selectedPhotoID,
@@ -591,11 +561,10 @@ struct PhotoEditor: View {
                         isAnimatingMode: isAnimatingMode,
                         sendExif: sendExif
                     )
+                    .transition(.opacity)
                 } else {
-                    // No .transition — matched-geometry drives the morph of
-                    // each row's thumbnail from its strip/grid position into
-                    // its captions row position.
                     captionsList
+                        .transition(.opacity)
                 }
             }
             .listRowInsets(EdgeInsets())
@@ -672,17 +641,42 @@ struct PhotoEditor: View {
                 }()
 
                 HStack(alignment: .top, spacing: 12) {
-                    Image(uiImage: item.thumbnail)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 60, height: 60)
-                        .clipped()
-                        .cornerRadius(8)
-                        .overlay(alignment: .bottomLeading) {
-                            ExifChip(state: exifState)
-                                .padding(5)
-                        }
-                        .modifier(MatchedPhotoModifier(id: item.id, namespace: photoNamespace))
+                    // Unified on PhotoThumbnailCell so the matched-geometry
+                    // endpoint for captions has the SAME view hierarchy as
+                    // strip and grid. Previously captions used a bare
+                    // `Image.scaledToFill().frame(60).clipped().cornerRadius(8)`
+                    // which gave matched-geometry an apples-to-oranges pairing
+                    // against strip/grid's full PhotoThumbnailCell.
+                    // `hideDelete: true` suppresses the corner X button and
+                    // the altPill (both edited via the trailing Button and
+                    // TextField respectively); the EXIF chip still renders
+                    // because ExifChip visibility is now gated purely by
+                    // `exifState`, not by `hideDelete`.
+                    //
+                    // `isMatchedSource: false` makes captions cells
+                    // destination-only. Captions rows can sit above or below
+                    // the viewport when the form is scrolled, and using them
+                    // as sources handed strip/grid destinations off-screen
+                    // global frames, producing the "items fly in from above"
+                    // regression on captions→strip/grid. Strip and grid
+                    // remain sources (the default) so strip/grid→captions
+                    // still morphs.
+                    PhotoThumbnailCell(
+                        item: $item,
+                        geometry: CellGeometry(
+                            mode: .captions,
+                            maskSide: 60,
+                            photoAspect: item.naturalAspect
+                        ),
+                        isSelected: false,
+                        hideDelete: true,
+                        exifState: exifState,
+                        matchedNamespace: photoNamespace,
+                        isMatchedSource: false,
+                        isAnimatingMode: isAnimatingMode,
+                        onTap: {},
+                        onDelete: {}
+                    )
 
                     TextField(
                         "Add a description",
@@ -729,7 +723,8 @@ struct PhotoEditor: View {
             items: $state,
             selectedPhotoID: $selected,
             isReordering: .constant(false),
-            sendExif: true
+            isAnimatingMode: .constant(false),
+            sendExif: false
         )
     }
     .environment(zoomState)

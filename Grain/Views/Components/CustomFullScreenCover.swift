@@ -93,5 +93,6 @@ private struct CustomFullScreenCoverModifier<PresentedView: View>: ViewModifier 
             }
         }
     }
-    .grainPreview()
+    .preferredColorScheme(.dark)
+    .tint(Color("AccentColor"))
 }

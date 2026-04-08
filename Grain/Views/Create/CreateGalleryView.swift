@@ -71,6 +71,12 @@ struct CreateGalleryView: View {
     /// arming window before pickup still scrolls normally, so tapping on a cell
     /// feels instant.
     @State private var isReordering = false
+    /// True for the duration of a strip↔grid↔captions mode morph inside
+    /// PhotoEditor. Drives `.scrollDisabled` alongside `isReordering` so
+    /// UIKit's UICollectionView doesn't adjust scroll offset mid-morph —
+    /// that adjustment shifts matched-geometry source/destination frames
+    /// into different scroll contexts, producing wrong-direction morphs.
+    @State private var isAnimatingMode = false
 
     let client: XRPCClient
     var onCreated: (() -> Void)?
@@ -101,7 +107,7 @@ struct CreateGalleryView: View {
             // Lock the Form's vertical scroll while the zoom overlay is up so a
             // pinch that drifts vertically can't scroll the page underneath the
             // overlay. Also stays locked during reorder, same as before.
-            .scrollDisabled(isReordering || imageZoomState.showOverlay)
+            .scrollDisabled(isReordering || isAnimatingMode || imageZoomState.showOverlay)
             .scrollDismissesKeyboard(.interactively)
         }
         .safeAreaInset(edge: .bottom) {
@@ -202,6 +208,7 @@ struct CreateGalleryView: View {
                 items: $photoItems,
                 selectedPhotoID: $selectedPhotoID,
                 isReordering: $isReordering,
+                isAnimatingMode: $isAnimatingMode,
                 sendExif: sendExif
             )
         }
@@ -812,6 +819,7 @@ private struct CreateGalleryViewPreview: View {
                     items: $photoItems,
                     selectedPhotoID: $selectedPhotoID,
                     isReordering: .constant(false),
+                    isAnimatingMode: .constant(false),
                     sendExif: true
                 )
             }

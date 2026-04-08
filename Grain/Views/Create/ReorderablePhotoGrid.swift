@@ -76,10 +76,6 @@ struct ReorderablePhotoGrid: View {
             // helper crashes when items briefly becomes empty during a delete.
             ForEach($items) { $item in
                 let id = item.id
-                let exifState: ExifState = {
-                    guard item.exifSummary != nil else { return .absent }
-                    return sendExif ? .active : .inactive
-                }()
                 PhotoThumbnailCell(
                     item: $item,
                     geometry: CellGeometry(
@@ -90,7 +86,11 @@ struct ReorderablePhotoGrid: View {
                     isSelected: false,
                     isDragging: draggedID == id,
                     hideDelete: true,
-                    exifState: exifState,
+                    // Reorder mode hides the EXIF chip to keep the drag/drop
+                    // surface uncluttered. Passing `.absent` is how the cell
+                    // omits the chip now that ExifChip visibility is no longer
+                    // coupled to `hideDelete` in PhotoThumbnailCell.
+                    exifState: .absent,
                     // matchedNamespace intentionally nil here — applied AFTER
                     // geometryGroup below. Apple docs state that
                     // matchedGeometryEffect inside a geometryGroup reports
@@ -103,6 +103,7 @@ struct ReorderablePhotoGrid: View {
                     // outside the group lets the namespace capture each cell's
                     // true global position.
                     matchedNamespace: nil,
+                    isAnimatingMode: isAnimatingMode,
                     // Selection is read-only in reorder mode. Taps do nothing
                     // so that selectedPhotoID stays frozen while the grid is
                     // visible. When the user switches back to strip, the strip
@@ -302,6 +303,7 @@ struct ReorderablePhotoGrid: View {
         .scrollDisabled(reordering)
     }
     .onAppear { selected = state.first?.id }
-    .grainPreview()
+    .preferredColorScheme(.dark)
+    .tint(Color("AccentColor"))
     .frame(maxHeight: .infinity, alignment: .top)
 }
