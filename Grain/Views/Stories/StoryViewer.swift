@@ -553,6 +553,11 @@ struct StoryViewer: View {
         if action == .none || action == .badge { timer.start() }
     }
 
+    private func isFullsizeCached(_ story: GrainStory?) -> Bool {
+        guard let url = story.flatMap({ URL(string: $0.fullsize) }) else { return false }
+        return ImagePipeline.shared.cache.cachedImage(for: ImageRequest(url: url)) != nil
+    }
+
     private func goToNext() {
         guard canNavigate() else { return }
         markCurrentStoryViewed()
@@ -578,8 +583,10 @@ struct StoryViewer: View {
 
     private func advanceStory(by delta: Int) {
         timer.progress = 0
-        currentStoryIndex += delta
-        imageLoaded = false
+        let newIndex = currentStoryIndex + delta
+        let nextStory = stories.indices.contains(newIndex) ? stories[newIndex] : nil
+        currentStoryIndex = newIndex
+        if !isFullsizeCached(nextStory) { imageLoaded = false }
         labelRevealed = false
         showLocationCopied = false
         prefetchStoryImages()
@@ -782,15 +789,18 @@ struct StoryViewer: View {
     }
 
     private func presentStories(_ fetched: [GrainStory], resumeIndex: Int? = nil) {
-        imageLoaded = false
-        showLocationCopied = false
-        stories = fetched
+        let targetIndex: Int
         if let resume = resumeIndex {
-            currentStoryIndex = min(resume, max(fetched.count - 1, 0))
+            targetIndex = min(resume, max(fetched.count - 1, 0))
         } else {
             let isOwn = fetched.first?.creator.did == auth.userDID
-            currentStoryIndex = (unreadOnly && isOwn) ? 0 : viewedStories.firstUnviewedIndex(in: fetched)
+            targetIndex = (unreadOnly && isOwn) ? 0 : viewedStories.firstUnviewedIndex(in: fetched)
         }
+        let targetStory = fetched.indices.contains(targetIndex) ? fetched[targetIndex] : nil
+        if !isFullsizeCached(targetStory) { imageLoaded = false }
+        showLocationCopied = false
+        stories = fetched
+        currentStoryIndex = targetIndex
         labelRevealed = false
         isLoadingStories = false
         startTimerIfSafe()
