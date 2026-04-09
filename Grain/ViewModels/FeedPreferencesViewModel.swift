@@ -66,6 +66,16 @@ final class FeedPreferencesViewModel {
         }
     }
 
+    func reorderFeeds(_ feeds: [PinnedFeed], auth: AuthContext?) async {
+        let original = pinnedFeeds
+        pinnedFeeds = feeds
+        do {
+            try await client.putPinnedFeeds(feeds, auth: auth)
+        } catch {
+            pinnedFeeds = original
+        }
+    }
+
     func unpinFeed(_ id: String, auth: AuthContext?) async {
         let original = pinnedFeeds
         pinnedFeeds.removeAll { $0.id == id }

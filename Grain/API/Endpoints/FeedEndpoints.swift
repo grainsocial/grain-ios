@@ -36,6 +36,7 @@ struct PinnedFeed: Codable, Sendable, Identifiable, Hashable {
     static let defaults: [PinnedFeed] = [
         PinnedFeed(id: "recent", label: "Recent", type: "feed", path: "/"),
         PinnedFeed(id: "following", label: "Following", type: "feed", path: "/feeds/following"),
+        PinnedFeed(id: "foryou", label: "For You", type: "feed", path: "/feeds/for-you"),
     ]
 
     /// The feed name parameter for the API (e.g. "recent", "following", "camera", "location", "hashtag")

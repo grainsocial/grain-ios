@@ -12,6 +12,7 @@ struct FeedView: View {
     @State private var deepLinkProfileDid: String?
     @State private var deepLinkGalleryUri: String?
     @State private var deepLinkStoryAuthor: GrainStoryAuthor?
+    @State private var showFeedsManagement = false
 
     let client: XRPCClient
     @Binding var pendingDeepLink: DeepLink?
@@ -58,6 +59,9 @@ struct FeedView: View {
                     trailingToolbarContent
                 }
                 .sharedBackgroundVisibility(.hidden)
+            }
+            .navigationDestination(isPresented: $showFeedsManagement) {
+                FeedsManagementView(prefsViewModel: prefsViewModel, client: client)
             }
             .task {
                 guard !isPreview else { return }
@@ -151,6 +155,13 @@ struct FeedView: View {
                 } label: {
                     Label("Unpin", systemImage: "pin.slash")
                 }
+            }
+
+            Divider()
+            Button {
+                showFeedsManagement = true
+            } label: {
+                Label("My Feeds", systemImage: "list.bullet")
             }
         } label: {
             HStack(spacing: 4) {
