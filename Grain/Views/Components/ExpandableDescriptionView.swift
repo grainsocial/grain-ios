@@ -1,4 +1,6 @@
+import NaturalLanguage
 import SwiftUI
+import Translation
 
 struct ExpandableDescriptionView: View {
     let text: String
@@ -8,6 +10,8 @@ struct ExpandableDescriptionView: View {
 
     @State private var isExpanded = false
     @State private var isTruncated = false
+    @State private var showTranslation = false
+    @State private var isForeignLanguage = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -44,17 +48,39 @@ struct ExpandableDescriptionView: View {
                 })
             )
 
-            if isTruncated, !isExpanded {
-                Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        isExpanded = true
+            HStack(spacing: 12) {
+                if isTruncated, !isExpanded {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isExpanded = true
+                        }
+                    } label: {
+                        Text("more")
+                            .font(.subheadline)
+                            .foregroundStyle(.tertiary)
                     }
-                } label: {
-                    Text("more")
-                        .font(.subheadline)
-                        .foregroundStyle(.tertiary)
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
+
+                if isForeignLanguage {
+                    Button {
+                        showTranslation = true
+                    } label: {
+                        Text("translate")
+                            .font(.subheadline)
+                            .foregroundStyle(.tertiary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .translationPresentation(isPresented: $showTranslation, text: text)
+        .onAppear {
+            let recognizer = NLLanguageRecognizer()
+            recognizer.processString(text)
+            if let detected = recognizer.dominantLanguage?.rawValue {
+                let preferred = Locale.preferredLanguages.first ?? "en"
+                isForeignLanguage = !preferred.hasPrefix(detected)
             }
         }
     }
