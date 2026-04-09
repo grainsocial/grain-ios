@@ -366,6 +366,11 @@ struct ProfileView: View {
         .background(Color(.systemBackground))
         .refreshable {
             await viewModel.load(did: actor, viewer: auth.userDID, auth: auth.authContext())
+            if viewMode == .favorites {
+                await viewModel.loadFavorites(did: actor, auth: auth.authContext())
+            } else if viewMode == .stories {
+                await viewModel.loadStoryArchive(did: actor, auth: auth.authContext())
+            }
         }
         .task {
             guard !isPreview else {

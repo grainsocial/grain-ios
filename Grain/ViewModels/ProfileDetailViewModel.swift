@@ -39,7 +39,6 @@ final class ProfileDetailViewModel {
                 let response = try? await client.getKnownFollowers(actor: did, viewer: viewer, auth: auth)
                 return response?.items ?? []
             }()
-
             let profileResult = try await profileFetch
             let feedResult = try await feedFetch
             let storiesResult = try await storiesFetch
@@ -50,6 +49,8 @@ final class ProfileDetailViewModel {
             hasMoreGalleries = feedResult.cursor != nil
             stories = storiesResult.stories
             knownFollowers = await knownFollowersFetch
+            favoritesLoaded = false
+            archiveLoaded = false
         } catch {
             self.error = error
         }
