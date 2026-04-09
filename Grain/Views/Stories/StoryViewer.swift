@@ -585,7 +585,11 @@ struct StoryViewer: View {
         let newIndex = currentStoryIndex + delta
         let nextStory = stories.indices.contains(newIndex) ? stories[newIndex] : nil
         currentStoryIndex = newIndex
-        if !isFullsizeCached(nextStory) { imageLoaded = false }
+        if isFullsizeCached(nextStory) {
+            startTimerIfSafe()
+        } else {
+            imageLoaded = false
+        }
         labelRevealed = false
         showLocationCopied = false
         prefetchStoryImages()
