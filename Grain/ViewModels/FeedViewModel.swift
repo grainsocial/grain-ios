@@ -37,7 +37,7 @@ final class FeedViewModel {
         self.init(
             client: client,
             feedName: pinnedFeed.feedName,
-            actor: pinnedFeed.id == "following" ? userDID : nil,
+            actor: (pinnedFeed.id == "following" || pinnedFeed.id == "foryou") ? userDID : nil,
             camera: pinnedFeed.type == "camera" ? pinnedFeed.feedValue : nil,
             location: pinnedFeed.type == "location" ? pinnedFeed.feedValue : nil,
             tag: pinnedFeed.type == "hashtag" ? pinnedFeed.feedValue : nil
