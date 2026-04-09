@@ -80,7 +80,9 @@ struct PinchZoomOverlay: UIViewRepresentable {
         return view
     }
 
-    func updateUIView(_: UIView, context _: Context) {}
+    func updateUIView(_: UIView, context: Context) {
+        context.coordinator.parent = self
+    }
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
