@@ -116,6 +116,7 @@ struct RichTextView: View {
 
     private func segmentsFromRegex(text: String) -> [Segment] {
         let urlPattern = #"https?://[^\s<>\[\]()]+"#
+        let bareDomainPattern = #"(?<![/@\w.])([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}(/[^\s<>\[\]()]*)?"#
         let mentionPattern = #"@([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?"#
         let hashtagPattern = #"#(\p{L}[\p{L}\p{N}_]*)"#
 
@@ -132,6 +133,17 @@ struct RichTextView: View {
                 if let range = Range(matchResult.range, in: text) {
                     let str = String(text[range])
                     matches.append(Match(range: range, segment: .link(str, url: str)))
+                }
+            }
+        }
+
+        if let regex = try? NSRegularExpression(pattern: bareDomainPattern) {
+            let nsRange = NSRange(text.startIndex..., in: text)
+            for matchResult in regex.matches(in: text, range: nsRange) {
+                if let range = Range(matchResult.range, in: text) {
+                    if matches.contains(where: { $0.range.overlaps(range) }) { continue }
+                    let str = String(text[range])
+                    matches.append(Match(range: range, segment: .link(str, url: "https://\(str)")))
                 }
             }
         }
