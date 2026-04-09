@@ -443,9 +443,12 @@ struct PhotoEditor: View {
     /// The `!isAnimatingMode` guard also prevents a mid-flight tap on a
     /// different segment from racing with the in-progress transition.
     ///
-    /// A 1.5 s Task safety-net forces the gate down if the completion is
-    /// silently dropped — a known iOS 17/18 issue when a concurrent transaction
-    /// replaces the animation before it settles.
+    /// A timer-based gate drop replaces `withAnimation`'s completion handler,
+    /// which never fires when `matchedGeometryEffect` is involved (confirmed
+    /// via Instruments: 100% of morphs terminated via safety-net, 0% via
+    /// completion). The gate drop is wrapped in a nil-animation `Transaction`
+    /// so it doesn't re-trigger spring curves on cells (the source of the
+    /// end-of-morph jitter).
     private var modeBinding: Binding<EditorMode> {
         Binding(
             get: { mode },
@@ -476,26 +479,29 @@ struct PhotoEditor: View {
                 // the morph is tight and the spring feel is desirable.
                 let captionsInvolved = (mode == .captions || newMode == .captions)
                 let curve: Animation = captionsInvolved
-                    ? .easeOut(duration: 0.3)
+                    ? .spring(response: 0.35, dampingFraction: 1.0)
                     : .smooth
                 withAnimation(curve) {
                     mode = newMode
                 }
-                // Timer-based gate drop. `withAnimation` completion handlers
-                // are unreliable when matchedGeometryEffect is involved —
-                // 100% of morphs in Instruments terminated via safety-net,
-                // never via completion. A deterministic timer matching the
-                // animation's settling time is the pragmatic fix.
-                //   .smooth → spring, effective settling ~0.55s
-                //   .easeOut(0.3) → fixed duration 0.3s + 50ms margin
+                // Timer-based gate drop. Durations measured via Instruments
+                // CellGlobalFrame events (actual settling, not nominal):
+                //   .smooth → ~800ms (spring with slight underdamping)
+                //   .spring(0.35, 1.0) → ~450ms (critically damped, no overshoot)
+                // The gate drop is wrapped in a nil-animation Transaction
+                // so flipping isAnimatingMode doesn't re-trigger the cell's
+                // gated `.animation(.spring, value:)` modifiers — that
+                // re-triggering was the "stutter at the end" bug.
                 let gateDuration: Duration = captionsInvolved
-                    ? .milliseconds(350)
-                    : .milliseconds(550)
+                    ? .milliseconds(450)
+                    : .milliseconds(800)
                 Task { @MainActor in
                     try? await Task.sleep(for: gateDuration)
                     guard morphGeneration == gen else { return }
                     morphSignposter.endInterval("MorphAnimation", morphState, "path=timer")
-                    isAnimatingMode = false
+                    var t = Transaction()
+                    t.animation = nil
+                    withTransaction(t) { isAnimatingMode = false }
                 }
             }
         )
@@ -537,21 +543,16 @@ struct PhotoEditor: View {
             // the OUTER cell frame (not the inner image), so the cell's
             // POSITION is what gets paired, not just the inner image bounds.
             Group {
-                if mode == .preview {
-                    // .opacity as a fallback: when matched-geometry succeeds
-                    // it drives the morph; when it doesn't (off-screen
-                    // sources, Form row-resize race) the fade provides
-                    // visual continuity instead of a hard cut.
-                    PhotoStrip(
-                        items: $items,
-                        selectedPhotoID: $selectedPhotoID,
-                        matchedNamespace: photoNamespace,
-                        isAnimatingMode: isAnimatingMode,
-                        sendExif: sendExif,
-                        containerWidth: gridContainerWidth
-                    )
-                    .transition(.opacity)
-                } else if mode == .reorder {
+                // Branch order matters: `if/else/else` compiles to nested
+                // _ConditionalContent<A, _ConditionalContent<B, C>>. The
+                // INNER pair (B↔C) doesn't reliably capture matched-geometry
+                // frames on branch swap. Putting grid (reorder) in the OUTER
+                // position ensures grid↔captions is an outer change — both
+                // directions now get proper frame capture. Strip↔captions
+                // becomes the inner pair, but those transitions already rely
+                // on the opacity fade (not matched-geometry), so the degraded
+                // inner-change behavior doesn't matter.
+                if mode == .reorder {
                     ReorderablePhotoGrid(
                         items: $items,
                         selectedPhotoID: $selectedPhotoID,
@@ -561,10 +562,28 @@ struct PhotoEditor: View {
                         isAnimatingMode: isAnimatingMode,
                         sendExif: sendExif
                     )
-                    .transition(.opacity)
+                } else if mode == .preview {
+                    PhotoStrip(
+                        items: $items,
+                        selectedPhotoID: $selectedPhotoID,
+                        matchedNamespace: photoNamespace,
+                        isAnimatingMode: isAnimatingMode,
+                        sendExif: sendExif,
+                        containerWidth: gridContainerWidth
+                    )
                 } else {
+                    // Asymmetric: fade IN (fallback for strip→captions
+                    // which is the inner conditional pair and doesn't
+                    // get reliable matched-geometry). Identity removal
+                    // so captions→grid/strip uses matched-geometry as
+                    // the sole morph driver — .opacity removal competed
+                    // with matched-geometry and made the first grid row
+                    // appear to slide down from the captions' left edge.
                     captionsList
-                        .transition(.opacity)
+                        .transition(.asymmetric(
+                            insertion: .opacity,
+                            removal: .identity
+                        ))
                 }
             }
             .listRowInsets(EdgeInsets())
@@ -631,7 +650,6 @@ struct PhotoEditor: View {
     ///
     /// One consequence of being a single row: list-row-level modifiers like
     /// `.swipeActions` and `.listRowBackground` no longer apply per-item.
-    /// Delete is handled inline per row instead.
     private var captionsList: some View {
         VStack(spacing: 0) {
             ForEach($items) { $item in
@@ -653,14 +671,18 @@ struct PhotoEditor: View {
                     // because ExifChip visibility is now gated purely by
                     // `exifState`, not by `hideDelete`.
                     //
-                    // `isMatchedSource: false` makes captions cells
-                    // destination-only. Captions rows can sit above or below
-                    // the viewport when the form is scrolled, and using them
-                    // as sources handed strip/grid destinations off-screen
-                    // global frames, producing the "items fly in from above"
-                    // regression on captions→strip/grid. Strip and grid
-                    // remain sources (the default) so strip/grid→captions
-                    // still morphs.
+                    // `isMatchedSource` toggles with `isAnimatingMode`:
+                    //   During the transition (isAnimatingMode=true), cells
+                    //   are sources so matched-geometry has frames to animate
+                    //   from/to. Form scroll is locked (.scrollDisabled) so
+                    //   cells stay at their visible positions — the off-screen
+                    //   source-frame bug that prompted the original
+                    //   isMatchedSource:false can't occur.
+                    //
+                    //   At rest (isAnimatingMode=false), cells revert to
+                    //   destination-only. If the user scrolls the captions
+                    //   list and cells move off-screen, their frames won't
+                    //   pollute the matched-geometry namespace.
                     PhotoThumbnailCell(
                         item: $item,
                         geometry: CellGeometry(
@@ -672,7 +694,7 @@ struct PhotoEditor: View {
                         hideDelete: true,
                         exifState: exifState,
                         matchedNamespace: photoNamespace,
-                        isMatchedSource: false,
+                        isMatchedSource: isAnimatingMode,
                         isAnimatingMode: isAnimatingMode,
                         onTap: {},
                         onDelete: {}
@@ -686,26 +708,22 @@ struct PhotoEditor: View {
                     .font(.subheadline)
                     .lineLimit(2 ... 4)
 
-                    Spacer(minLength: 0)
-
-                    // Per-row delete. Matches PhotoThumbnailCell's xmark.circle.fill
-                    // icon so the visual language is consistent with the strip/grid
-                    // X button. Tinted secondary (not accent) so it reads as a
-                    // quiet trailing affordance next to the TextField instead of
-                    // competing with it. .frame(44×44)+.contentShape gives a
-                    // HIG-compliant tap target even though the glyph is 20pt.
-                    Button {
-                        guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
-                        withAnimation(.smooth) { items.remove(at: index) }
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 20))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 44, height: 44)
-                            .contentShape(Rectangle())
+                    // Clear-text button — only visible when there is text.
+                    // Uses xmark.circle.fill (the iOS standard clear-field
+                    // glyph) so it reads as a text-editing affordance.
+                    if !item.alt.isEmpty {
+                        Button {
+                            item.alt = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 20))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 44, height: 44)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Clear caption")
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Delete photo")
                 }
                 .padding(.vertical, 10)
             }
