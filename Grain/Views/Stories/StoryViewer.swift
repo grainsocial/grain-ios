@@ -62,6 +62,7 @@ struct StoryViewer: View {
     @Environment(LabelDefinitionsCache.self) private var labelDefsCache
     @Environment(ViewedStoryStorage.self) private var viewedStories
     @Environment(StoryStatusCache.self) private var storyStatusCache
+    @Environment(StoryFavoriteCache.self) private var storyFavoriteCache
     let authors: [GrainStoryAuthor]
     let client: XRPCClient
     var onProfileTap: ((String) -> Void)?
@@ -447,7 +448,7 @@ struct StoryViewer: View {
                 }
                 .id(story.uri)
 
-                // Tap zones
+                // Tap zones — with a bottom inset so they don't cover the comment input bar
                 VStack(spacing: 0) {
                     Color.clear
                         .frame(height: 80)
@@ -466,7 +467,11 @@ struct StoryViewer: View {
                                 .frame(maxWidth: .infinity)
                         }
                     }
+                    Color.clear
+                        .frame(height: 80)
+                        .allowsHitTesting(false)
                 }
+                .allowsHitTesting(reportTarget == nil && !showDeleteConfirm && !showCommentSheet && (labelRevealed || storyLabelResult.action == .none || storyLabelResult.action == .badge))
 
                 // Double-tap heart animations
                 ForEach(hearts) { heart in
@@ -475,7 +480,6 @@ struct StoryViewer: View {
                             hearts.removeAll { $0.isComplete }
                         }
                 }
-                .allowsHitTesting(reportTarget == nil && !showDeleteConfirm && !showCommentSheet && (labelRevealed || storyLabelResult.action == .none || storyLabelResult.action == .badge))
             } else {
                 ProgressView()
                     .tint(.white)
@@ -596,7 +600,6 @@ struct StoryViewer: View {
                         .buttonStyle(.plain)
                     }
 
-                    // TODO(human): Implement the story comment input bar
                     storyInputBar
                 }
             }
@@ -876,7 +879,9 @@ struct StoryViewer: View {
         let targetStory = fetched.indices.contains(targetIndex) ? fetched[targetIndex] : nil
         if !isFullsizeCached(targetStory) { imageLoaded = false }
         showLocationCopied = false
-        stories = fetched
+        var fetchedWithCache = fetched
+        storyFavoriteCache.apply(to: &fetchedWithCache)
+        stories = fetchedWithCache
         currentStoryIndex = targetIndex
         labelRevealed = false
         isLoadingStories = false
@@ -999,7 +1004,10 @@ struct StoryViewer: View {
                 Image(systemName: "bubble.left")
                     .font(.body)
                     .foregroundStyle(.white)
+                    .frame(width: 36, height: 36)
+                    .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
 
             // "Add a comment..." — opens sheet with keyboard
             Button {
@@ -1014,7 +1022,9 @@ struct StoryViewer: View {
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
                     .background(.white.opacity(0.15), in: Capsule())
+                    .contentShape(Capsule())
             }
+            .buttonStyle(.plain)
 
             // Heart — like/unlike
             Button {
@@ -1025,7 +1035,10 @@ struct StoryViewer: View {
                     .font(.title3)
                     .foregroundStyle(isFavorited ? Color("AccentColor") : .white)
                     .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isFavorited)
+                    .frame(width: 36, height: 36)
+                    .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
             .overlay {
                 ForEach(likeParticleBursts, id: \.self) { _ in
                     ForEach(0 ..< 5) { i in
@@ -1069,10 +1082,12 @@ struct StoryViewer: View {
         if let favUri = story.viewer?.fav {
             // Unfavorite — optimistic
             stories[currentStoryIndex].viewer?.fav = nil
+            storyFavoriteCache.setFavorite(storyUri: story.uri, favUri: nil)
             do {
                 try await FavoriteService.delete(favoriteUri: favUri, client: client, auth: authContext)
             } catch {
                 stories[currentStoryIndex].viewer?.fav = favUri
+                storyFavoriteCache.setFavorite(storyUri: story.uri, favUri: favUri)
             }
         } else {
             // Favorite — optimistic
@@ -1081,6 +1096,7 @@ struct StoryViewer: View {
             do {
                 let response = try await FavoriteService.create(subject: story.uri, client: client, auth: authContext)
                 stories[currentStoryIndex].viewer = StoryViewerState(fav: response.uri)
+                storyFavoriteCache.setFavorite(storyUri: story.uri, favUri: response.uri)
             } catch {
                 stories[currentStoryIndex].viewer = prevViewer
             }
@@ -1133,4 +1149,5 @@ private struct StoryProgressBars: View {
         .environment(LabelDefinitionsCache())
         .environment(ViewedStoryStorage())
         .environment(StoryStatusCache())
+        .environment(StoryFavoriteCache())
 }
