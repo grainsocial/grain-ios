@@ -3,6 +3,7 @@ import ImageIO
 import os
 import PhotosUI
 import SwiftUI
+import UIKit
 
 private let logger = Logger(subsystem: "social.grain.grain", category: "Create")
 private let createSignposter = OSSignposter(subsystem: "social.grain.grain", category: "PhotoLoading.TaskGroup")
@@ -115,6 +116,7 @@ struct CreateGalleryView: View {
             // overlay. Also stays locked during reorder, same as before.
             .scrollDisabled(isReordering || isAnimatingMode || imageZoomState.showOverlay)
             .scrollDismissesKeyboard(.interactively)
+            .background(SheetGestureDisabler(isDisabled: isReordering))
         }
         .interactiveDismissDisabled(isReordering)
         .safeAreaInset(edge: .bottom) {
@@ -192,7 +194,7 @@ struct CreateGalleryView: View {
         }
         .interactiveDismissDisabled(hasChanges)
         .alert("Discard gallery?", isPresented: $showDiscardAlert) {
-            Button("Discard Changes", role: .destructive) { dismiss() }
+            Button("Discard", role: .destructive) { dismiss() }
             Button("Keep Editing", role: .cancel) {}
         }
         .environment(imageZoomState)
@@ -870,5 +872,41 @@ private struct CreateGalleryViewPreview: View {
             ToolbarItem(placement: .topBarTrailing) { Button("Post") {}.bold() }
         }
         .grainPreview()
+    }
+}
+
+// MARK: - Sheet gesture disabler
+
+/// Disables the `UISheetPresentationController`'s pan gesture while active so
+/// the card cannot move at all — `interactiveDismissDisabled` only prevents
+/// the dismiss *completion*, not the downward *motion*. Used during photo
+/// reorder so the sheet stays perfectly still while a photo is picked up.
+private struct SheetGestureDisabler: UIViewRepresentable {
+    let isDisabled: Bool
+
+    func makeUIView(context _: Context) -> UIView {
+        UIView()
+    }
+
+    func updateUIView(_ uiView: UIView, context _: Context) {
+        // Capture before hopping to async so we get the value at call time.
+        let disabled = isDisabled
+        DispatchQueue.main.async {
+            // Walk the responder chain from our UIView up to the first
+            // UIViewController whose presentationController is the sheet.
+            var responder: UIResponder? = uiView
+            while let r = responder {
+                if let vc = r as? UIViewController,
+                   vc.presentationController is UISheetPresentationController,
+                   let presentedView = vc.presentationController?.presentedView
+                {
+                    for gesture in presentedView.gestureRecognizers ?? [] where gesture is UIPanGestureRecognizer {
+                        gesture.isEnabled = !disabled
+                    }
+                    return
+                }
+                responder = r.next
+            }
+        }
     }
 }
