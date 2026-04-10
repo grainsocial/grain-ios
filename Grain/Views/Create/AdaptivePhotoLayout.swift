@@ -119,8 +119,11 @@ struct AdaptivePhotoLayout: Layout {
 
             if let drag = dragPlacement {
                 if index == drag.draggedIndex {
-                    offsetX = drag.dragOffset.width
-                    offsetY = drag.dragOffset.height
+                    // Dragged cell stays at its natural slot — the view-level
+                    // .offset modifier positions it at the finger in real time.
+                    // Keeping dragOffset out of the Layout ensures the sibling
+                    // spring animation transaction is never contaminated by the
+                    // immediate dragOffset update.
                 } else {
                     let slotDelta: Int = if drag.currentIndex > drag.draggedIndex,
                                             index > drag.draggedIndex, index <= drag.currentIndex

@@ -74,8 +74,13 @@ final class ReorderDragState {
 
 /// Lightweight value snapshot of drag state for the Layout. Using a struct
 /// (not the @Observable directly) keeps the Layout as pure value-type math.
+///
+/// `dragOffset` is intentionally excluded — it is applied as a view-level
+/// `.offset` modifier on the dragged cell, not through the Layout. This keeps
+/// the Layout parameter clean: it only changes when `currentIndex` changes
+/// (inside `withAnimation`), so SwiftUI can animate sibling displacements
+/// without the immediate dragOffset update contaminating the transaction.
 struct ReorderDragPlacement: Equatable {
     let draggedIndex: Int
     let currentIndex: Int
-    let dragOffset: CGSize
 }

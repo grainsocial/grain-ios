@@ -4,6 +4,7 @@ import UIKit
 
 private let photoLoadingSignposter = OSSignposter(subsystem: "social.grain.grain", category: "PhotoLoading.Preview")
 private let morphSignposter = OSSignposter(subsystem: "social.grain.grain", category: "Animation.Morph")
+private let reorderSignposter = OSSignposter(subsystem: "social.grain.grain", category: "Animation.Reorder")
 
 // MARK: - Preview cache store
 
@@ -373,11 +374,7 @@ struct PhotoEditor: View {
         guard let start = reorderState.dragStartIndex,
               let current = reorderState.dragCurrentIndex
         else { return nil }
-        return ReorderDragPlacement(
-            draggedIndex: start,
-            currentIndex: current,
-            dragOffset: reorderState.dragOffset
-        )
+        return ReorderDragPlacement(draggedIndex: start, currentIndex: current)
     }
 
     /// Mode binding with animation gate. Uses `withAnimation` completion
@@ -430,6 +427,13 @@ struct PhotoEditor: View {
                     }()
 
                     cellView(item: $item, index: index, exifState: exifState)
+                        // Live drag position: offset tracks the finger without animation.
+                        // dragOffset is kept out of the Layout so the sibling spring
+                        // animation is never contaminated by the immediate offset update.
+                        .offset(
+                            x: reorderState.draggedID == item.id ? reorderState.dragOffset.width : 0,
+                            y: reorderState.draggedID == item.id ? reorderState.dragOffset.height : 0
+                        )
                         .zIndex(reorderState.draggedID == item.id ? 1000 : 0)
                         .gesture(
                             ReorderRecognizer(isEnabled: mode == .reorder) { phase, translation in
@@ -598,8 +602,10 @@ struct PhotoEditor: View {
     ) {
         switch phase {
         case .arming:
+            reorderSignposter.emitEvent("Arming", "idx=\(index)")
             isReordering = true
         case .began:
+            reorderSignposter.emitEvent("DragBegan", "idx=\(index)")
             reorderState.beginDrag(itemID: itemID, at: index)
         case .changed:
             if let proposed = reorderState.handleDragChanged(
@@ -608,6 +614,10 @@ struct PhotoEditor: View {
                 columnCount: gridColumnCount,
                 stride: gridStride
             ) {
+                reorderSignposter.emitEvent(
+                    "SlotChange",
+                    "from=\(reorderState.dragCurrentIndex ?? -1),to=\(proposed)"
+                )
                 withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) {
                     reorderState.dragCurrentIndex = proposed
                 }
@@ -618,6 +628,7 @@ struct PhotoEditor: View {
                let current = reorderState.dragCurrentIndex,
                start != current
             {
+                reorderSignposter.emitEvent("DragEnded", "start=\(start),final=\(current)")
                 withAnimation(.snappy) {
                     items.move(
                         fromOffsets: IndexSet(integer: start),
@@ -631,6 +642,7 @@ struct PhotoEditor: View {
                     reorderState.draggedID = nil
                 }
             } else {
+                reorderSignposter.emitEvent("DragCancelled", "idx=\(index)")
                 reorderState.reset()
                 isReordering = false
             }
