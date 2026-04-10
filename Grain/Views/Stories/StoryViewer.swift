@@ -61,6 +61,7 @@ struct StoryViewer: View {
     @Environment(AuthManager.self) private var auth
     @Environment(LabelDefinitionsCache.self) private var labelDefsCache
     @Environment(ViewedStoryStorage.self) private var viewedStories
+    @Environment(StoryStatusCache.self) private var storyStatusCache
     let authors: [GrainStoryAuthor]
     let client: XRPCClient
     var onProfileTap: ((String) -> Void)?
@@ -87,11 +88,21 @@ struct StoryViewer: View {
     @State private var imagePrefetcher = ImagePrefetcher()
     @State private var isDragging = false
 
+    // MARK: - Comments & Likes
+
+    @State private var commentsViewModel: StoryCommentsViewModel
+    @State private var showCommentSheet = false
+    @State private var commentSheetFocusInput = false
+    @State private var hearts: [HeartAnimationState] = []
+    @State private var isFavoriting = false
+    @State private var likeParticleBursts: [UUID] = []
+
     init(authors: [GrainStoryAuthor], startAuthorDid: String? = nil, initialStories: [GrainStory]? = nil, startStoryIndex: Int? = nil, client: XRPCClient, onProfileTap: ((String) -> Void)? = nil, onDismiss: (() -> Void)? = nil) {
         self.authors = authors
         self.client = client
         self.onProfileTap = onProfileTap
         self.onDismiss = onDismiss
+        _commentsViewModel = State(initialValue: StoryCommentsViewModel(client: client))
         let resolvedIndex = startAuthorDid.flatMap { did in authors.firstIndex { $0.profile.did == did } } ?? 0
         _currentAuthorIndex = State(initialValue: resolvedIndex)
         if let initialStories {
@@ -171,6 +182,28 @@ struct StoryViewer: View {
         }
         .onChange(of: reportTarget?.uri) {
             if reportTarget == nil { timer.start() }
+        }
+        .sheet(isPresented: $showCommentSheet) {
+            if let story = currentStory {
+                StoryCommentSheet(
+                    viewModel: commentsViewModel,
+                    storyUri: story.uri,
+                    client: client,
+                    focusInput: commentSheetFocusInput,
+                    onProfileTap: { did in
+                        showCommentSheet = false
+                        close()
+                        onProfileTap?(did)
+                    },
+                    onDismiss: { showCommentSheet = false }
+                )
+                .environment(auth)
+                .environment(storyStatusCache)
+                .environment(viewedStories)
+            }
+        }
+        .onChange(of: showCommentSheet) { _, isShowing in
+            if !isShowing { startTimerIfSafe() }
         }
         .task {
             guard !isPreview else { return }
@@ -423,16 +456,26 @@ struct StoryViewer: View {
                         HStack(spacing: 0) {
                             Color.clear
                                 .contentShape(Rectangle())
+                                .onTapGesture(count: 2) { doubleTapLike(at: CGPoint(x: geo.size.width / 6, y: geo.size.height / 2)) }
                                 .onTapGesture { goToPrevious() }
                                 .frame(width: geo.size.width / 3)
                             Color.clear
                                 .contentShape(Rectangle())
+                                .onTapGesture(count: 2) { doubleTapLike(at: CGPoint(x: geo.size.width * 2 / 3, y: geo.size.height / 2)) }
                                 .onTapGesture { goToNext() }
                                 .frame(maxWidth: .infinity)
                         }
                     }
                 }
-                .allowsHitTesting(reportTarget == nil && !showDeleteConfirm && (labelRevealed || storyLabelResult.action == .none || storyLabelResult.action == .badge))
+
+                // Double-tap heart animations
+                ForEach(hearts) { heart in
+                    DoubleTapHeartView(state: heart)
+                        .onChange(of: heart.isComplete) {
+                            hearts.removeAll { $0.isComplete }
+                        }
+                }
+                .allowsHitTesting(reportTarget == nil && !showDeleteConfirm && !showCommentSheet && (labelRevealed || storyLabelResult.action == .none || storyLabelResult.action == .badge))
             } else {
                 ProgressView()
                     .tint(.white)
@@ -527,7 +570,34 @@ struct StoryViewer: View {
                         Spacer()
                     }
                     .padding(.horizontal)
-                    .padding(.bottom, 32)
+                    .padding(.bottom, 8)
+                }
+
+                // MARK: Comment preview + input bar
+
+                if currentStory != nil {
+                    // Latest comment preview
+                    if let latest = commentsViewModel.latestComment {
+                        Button {
+                            timer.stop()
+                            commentSheetFocusInput = false
+                            showCommentSheet = true
+                        } label: {
+                            HStack(spacing: 6) {
+                                AvatarView(url: latest.author.avatar, size: 20, animated: false)
+                                Text("**\(latest.author.displayName ?? latest.author.handle)** \(latest.text)")
+                                    .font(.caption)
+                                    .foregroundStyle(.white)
+                                    .lineLimit(1)
+                            }
+                            .padding(.horizontal)
+                            .padding(.bottom, 4)
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    // TODO(human): Implement the story comment input bar
+                    storyInputBar
                 }
             }
         }
@@ -543,6 +613,7 @@ struct StoryViewer: View {
     private func canNavigate() -> Bool {
         !isLoadingStories && !stories.isEmpty
             && reportTarget == nil && !showDeleteConfirm
+            && !showCommentSheet
             && !isDragging
             && Date().timeIntervalSince(lastNavTime) > 0.3
     }
@@ -593,6 +664,9 @@ struct StoryViewer: View {
         labelRevealed = false
         showLocationCopied = false
         prefetchStoryImages()
+        if let uri = nextStory?.uri {
+            Task { await commentsViewModel.switchToStory(uri: uri, auth: auth.authContext()) }
+        }
     }
 
     private func goToNextAuthor() {
@@ -809,6 +883,9 @@ struct StoryViewer: View {
         startTimerIfSafe()
         prefetchAdjacentAuthors()
         prefetchStoryImages()
+        if let uri = targetStory?.uri {
+            Task { await commentsViewModel.switchToStory(uri: uri, auth: auth.authContext()) }
+        }
     }
 
     private func prefetchAdjacentAuthors() {
@@ -904,6 +981,117 @@ struct StoryViewer: View {
         if interval < 86400 { return "\(Int(interval / 3600))h" }
         return "\(Int(interval / 86400))d"
     }
+
+    // MARK: - Comments & Likes
+
+    private var isFavorited: Bool {
+        currentStory?.viewer?.fav != nil
+    }
+
+    private var storyInputBar: some View {
+        HStack(spacing: 12) {
+            // Comment bubble — opens comment list
+            Button {
+                timer.stop()
+                commentSheetFocusInput = false
+                showCommentSheet = true
+            } label: {
+                Image(systemName: "bubble.left")
+                    .font(.body)
+                    .foregroundStyle(.white)
+            }
+
+            // "Add a comment..." — opens sheet with keyboard
+            Button {
+                timer.stop()
+                commentSheetFocusInput = true
+                showCommentSheet = true
+            } label: {
+                Text("Add a comment...")
+                    .font(.subheadline)
+                    .foregroundStyle(.white.opacity(0.6))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(.white.opacity(0.15), in: Capsule())
+            }
+
+            // Heart — like/unlike
+            Button {
+                if !isFavorited { addLikeParticleBurst() }
+                triggerFavoriteToggle()
+            } label: {
+                Image(systemName: isFavorited ? "heart.fill" : "heart")
+                    .font(.title3)
+                    .foregroundStyle(isFavorited ? Color("AccentColor") : .white)
+                    .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isFavorited)
+            }
+            .overlay {
+                ForEach(likeParticleBursts, id: \.self) { _ in
+                    ForEach(0 ..< 5) { i in
+                        LikeParticleView(index: i)
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 16)
+    }
+
+    private func doubleTapLike(at point: CGPoint) {
+        hearts.append(HeartAnimationState(position: point))
+        addLikeParticleBurst()
+        guard !isFavorited, !isFavoriting else { return }
+        triggerFavoriteToggle()
+    }
+
+    private func addLikeParticleBurst() {
+        let id = UUID()
+        likeParticleBursts.append(id)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            likeParticleBursts.removeAll { $0 == id }
+        }
+    }
+
+    private func triggerFavoriteToggle() {
+        isFavoriting = true
+        Task {
+            await toggleStoryFavorite()
+            isFavoriting = false
+        }
+    }
+
+    private func toggleStoryFavorite() async {
+        guard let authContext = await auth.authContext(),
+              currentStoryIndex < stories.count else { return }
+
+        let story = stories[currentStoryIndex]
+        if let favUri = story.viewer?.fav {
+            // Unfavorite — optimistic
+            stories[currentStoryIndex].viewer?.fav = nil
+            let rkey = favUri.split(separator: "/").last.map(String.init) ?? ""
+            do {
+                try await client.deleteRecord(collection: "social.grain.favorite", rkey: rkey, auth: authContext)
+            } catch {
+                stories[currentStoryIndex].viewer?.fav = favUri
+            }
+        } else {
+            // Favorite — optimistic
+            let prevViewer = stories[currentStoryIndex].viewer
+            stories[currentStoryIndex].viewer = StoryViewerState(fav: "pending")
+            let record = AnyCodable([
+                "subject": story.uri,
+                "createdAt": DateFormatting.nowISO(),
+            ])
+            let repo = TokenStorage.userDID ?? ""
+            do {
+                let response = try await client.createRecord(collection: "social.grain.favorite", repo: repo, record: record, auth: authContext)
+                stories[currentStoryIndex].viewer = StoryViewerState(fav: response.uri)
+            } catch {
+                stories[currentStoryIndex].viewer = prevViewer
+            }
+        }
+    }
 }
 
 /// Extracted so progress ticks only redraw this view, not the entire StoryViewer
@@ -950,4 +1138,5 @@ private struct StoryProgressBars: View {
         .environment(AuthManager())
         .environment(LabelDefinitionsCache())
         .environment(ViewedStoryStorage())
+        .environment(StoryStatusCache())
 }
