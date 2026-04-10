@@ -441,8 +441,12 @@ struct PhotoEditor: View {
                         .layoutValue(key: PhotoIndexKey.self, value: index)
                 }
             }
-            .clipped()
+            // No explicit .clipped() — the Form Section row clips its content
+            // naturally. Adding .clipped() here over-clips cells at strip edges
+            // (the X button and cell frame extend past the layout bounds when
+            // partially scrolled off-screen, cutting into the visible portion).
             .contentShape(Rectangle())
+            .animation(.smooth, value: mode)
             .gesture(
                 StripPanRecognizer(
                     isEnabled: mode == .preview,
@@ -552,14 +556,20 @@ struct PhotoEditor: View {
                         item.wrappedValue.alt = ""
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 20))
+                            .font(.system(size: 18))
                             .foregroundStyle(.secondary)
-                            .frame(width: 44, height: 44)
+                            .padding(6)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Clear caption")
                 }
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if mode == .captions {
+                Divider()
+                    .padding(.leading, maskSide + 12)
             }
         }
     }
