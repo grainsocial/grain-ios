@@ -35,4 +35,15 @@ extension XRPCClient {
     func getStoryAuthors(auth: AuthContext? = nil) async throws -> GetStoryAuthorsResponse {
         try await query("social.grain.unspecced.getStoryAuthors", auth: auth, as: GetStoryAuthorsResponse.self)
     }
+
+    func getStoryThread(
+        story: String,
+        limit: Int = 20,
+        cursor: String? = nil,
+        auth: AuthContext? = nil
+    ) async throws -> GetGalleryThreadResponse {
+        var params = ["story": story, "limit": String(limit)]
+        if let cursor { params["cursor"] = cursor }
+        return try await query("social.grain.unspecced.getStoryThread", params: params, auth: auth, as: GetGalleryThreadResponse.self)
+    }
 }

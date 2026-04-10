@@ -13,6 +13,7 @@ struct GrainStory: Codable, Sendable, Identifiable {
     let createdAt: String
     var labels: [ATLabel]?
     var crossPost: CrossPostInfo?
+    var viewer: StoryViewerState?
 
     var id: String {
         uri
@@ -24,6 +25,11 @@ struct GrainStory: Codable, Sendable, Identifiable {
 }
 
 extension GrainStory: StoryIdentifiable {}
+
+/// social.grain.story.defs#viewerState
+struct StoryViewerState: Codable, Sendable {
+    var fav: String?
+}
 
 /// social.grain.unspecced.getStoryAuthors#storyAuthor
 struct GrainStoryAuthor: Codable, Sendable, Identifiable {
