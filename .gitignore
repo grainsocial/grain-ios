@@ -3,6 +3,7 @@ Grain.xcodeproj/
 *.xcodeproj/xcuserdata/
 *.xcworkspace/xcuserdata/
 DerivedData/
+.derivedData/
 build/
 *.pbxuser
 *.mode1v3
