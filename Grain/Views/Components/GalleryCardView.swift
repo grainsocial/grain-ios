@@ -144,6 +144,8 @@ struct GalleryCardView: View {
     var onHashtagTap: ((String) -> Void)?
     var onLocationTap: ((String, String) -> Void)?
     var onStoryTap: ((GrainStoryAuthor) -> Void)?
+    var onReport: (() -> Void)?
+    var onDelete: (() -> Void)?
     @State private var isFavoriting = false
     @State private var likeParticleBursts: [UUID] = []
     @State private var currentPage = 0
@@ -151,6 +153,7 @@ struct GalleryCardView: View {
     @State private var hearts: [HeartAnimationState] = []
     @State private var showCopiedToast = false
     @State private var shareAnimating = false
+    @State private var showCardActions = false
     @State private var prefetcher = ImagePrefetcher()
 
     private var isFavorited: Bool {
@@ -193,6 +196,11 @@ struct GalleryCardView: View {
             copiedToastOverlay
         }
         .animation(.spring(response: 0.4, dampingFraction: 0.7), value: showCopiedToast)
+        .sheet(isPresented: $showCardActions) {
+            GalleryActionsSheet(onReport: onReport, onDelete: onDelete)
+                .presentationDetents([.height(200)])
+                .presentationDragIndicator(.visible)
+        }
     }
 
     private var cardHeader: some View {
@@ -239,6 +247,19 @@ struct GalleryCardView: View {
             }
 
             Spacer()
+
+            if onReport != nil || onDelete != nil {
+                Button {
+                    showCardActions = true
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.subheadline)
+                        .foregroundStyle(.primary)
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -618,4 +639,34 @@ struct GalleryCardView: View {
     .environment(StoryStatusCache())
     .environment(ViewedStoryStorage())
     .environment(LabelDefinitionsCache())
+}
+
+private struct GalleryActionsSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    var onReport: (() -> Void)?
+    var onDelete: (() -> Void)?
+
+    var body: some View {
+        List {
+            if let onReport {
+                Button {
+                    dismiss()
+                    onReport()
+                } label: {
+                    Label("Report", systemImage: "flag")
+                        .foregroundStyle(.primary)
+                }
+            }
+            if let onDelete {
+                Button {
+                    dismiss()
+                    onDelete()
+                } label: {
+                    Label("Delete Gallery", systemImage: "trash")
+                        .foregroundStyle(.primary)
+                }
+            }
+        }
+        .tint(.primary)
+    }
 }

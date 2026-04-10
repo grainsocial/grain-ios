@@ -240,6 +240,8 @@ private struct FeedTabContent: View {
     @State private var zoomState = ImageZoomState()
     @State private var cardStoryAuthor: GrainStoryAuthor?
     @State private var commentSheetUri: String?
+    @State private var reportGallery: GrainGallery?
+    @State private var deleteGalleryUri: String?
     @AppStorage("privacy.showSuggestedUsers") private var showSuggestedUsers = true
     @State private var suggestedFollows: [SuggestedItem] = []
     @State private var suggestedLoaded = false
@@ -303,20 +305,24 @@ private struct FeedTabContent: View {
                         selectedLocation = LocationDestination(h3Index: h3, name: name)
                     }, onStoryTap: { author in
                         cardStoryAuthor = author
-                    })
-                    .onAppear {
-                        // Trigger loadMore when 5 items from the end
-                        let remaining = viewModel.galleries.count - index
-                        if remaining <= 5 {
-                            Task { await viewModel.loadMore(auth: auth.authContext()) }
+                    }, onReport: gallery.creator.did != auth.userDID ? {
+                        reportGallery = gallery
+                    } : nil, onDelete: gallery.creator.did == auth.userDID ? {
+                        deleteGalleryUri = gallery.uri
+                    } : nil)
+                        .onAppear {
+                            // Trigger loadMore when 5 items from the end
+                            let remaining = viewModel.galleries.count - index
+                            if remaining <= 5 {
+                                Task { await viewModel.loadMore(auth: auth.authContext()) }
+                            }
+                            // Prefetch first image of next 3 galleries
+                            let input = viewModel.galleries.map { g in
+                                (firstThumb: g.items?.first?.thumb, firstFullsize: g.items?.first?.fullsize)
+                            }
+                            let plan = ImagePrefetchPlanning.feedPrefetchRequests(galleries: input, currentIndex: index)
+                            feedPrefetcher.startPrefetching(with: plan.all)
                         }
-                        // Prefetch first image of next 3 galleries
-                        let input = viewModel.galleries.map { g in
-                            (firstThumb: g.items?.first?.thumb, firstFullsize: g.items?.first?.fullsize)
-                        }
-                        let plan = ImagePrefetchPlanning.feedPrefetchRequests(galleries: input, currentIndex: index)
-                        feedPrefetcher.startPrefetching(with: plan.all)
-                    }
 
                     if index == 4, showSuggestedUsers {
                         SuggestedFollowsView(client: client, suggestions: $suggestedFollows, onProfileTap: { did in
@@ -393,6 +399,29 @@ private struct FeedTabContent: View {
                     }
                 )
             }
+        }
+        .sheet(item: $reportGallery) { gallery in
+            ReportView(client: client, subjectUri: gallery.uri, subjectCid: gallery.cid)
+        }
+        .alert("Delete Gallery?", isPresented: Binding(
+            get: { deleteGalleryUri != nil },
+            set: { if !$0 { deleteGalleryUri = nil } }
+        )) {
+            Button("Delete", role: .destructive) {
+                if let uri = deleteGalleryUri {
+                    Task {
+                        let rkey = uri.split(separator: "/").last.map(String.init) ?? ""
+                        do {
+                            try await client.deleteGallery(rkey: rkey, auth: auth.authContext())
+                            viewModel.galleries.removeAll { $0.uri == uri }
+                        } catch {}
+                        deleteGalleryUri = nil
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) { deleteGalleryUri = nil }
+        } message: {
+            Text("This will permanently delete this gallery and all its photos.")
         }
         .task {
             guard !isPreview else {

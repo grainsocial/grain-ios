@@ -1,4 +1,3 @@
-import NukeUI
 import SwiftUI
 
 struct GalleryDetailView: View {
@@ -52,7 +51,13 @@ struct GalleryDetailView: View {
                         },
                         onStoryTap: { author in
                             cardStoryAuthor = author
-                        }
+                        },
+                        onReport: viewModel.gallery?.creator.did != auth.userDID ? {
+                            showReportSheet = true
+                        } : nil,
+                        onDelete: viewModel.gallery?.creator.did == auth.userDID ? {
+                            showDeleteConfirmation = true
+                        } : nil
                     )
 
                     // View comments button
@@ -91,31 +96,6 @@ struct GalleryDetailView: View {
         }
         .navigationDestination(item: $selectedLocation) { loc in
             LocationFeedView(client: client, h3Index: loc.h3Index, locationName: loc.name)
-        }
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    if let gallery = viewModel.gallery {
-                        if gallery.creator.did == auth.userDID {
-                            Button(role: .destructive) {
-                                showDeleteConfirmation = true
-                            } label: {
-                                Label("Delete Gallery", systemImage: "trash")
-                            }
-                        } else {
-                            Button {
-                                showReportSheet = true
-                            } label: {
-                                Label("Report", systemImage: "flag")
-                            }
-                        }
-                    }
-                } label: {
-                    Image(systemName: "ellipsis")
-                }
-                .tint(.primary)
-                .disabled(viewModel.gallery == nil)
-            }
         }
         .alert("Delete Gallery?", isPresented: $showDeleteConfirmation) {
             Button("Delete", role: .destructive) {

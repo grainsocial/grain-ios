@@ -13,6 +13,8 @@ struct CameraFeedView: View {
     @State private var zoomState = ImageZoomState()
     @State private var cardStoryAuthor: GrainStoryAuthor?
     @State private var commentSheetUri: String?
+    @State private var reportGallery: GrainGallery?
+    @State private var deleteGalleryUri: String?
 
     let client: XRPCClient
     let camera: String
@@ -37,12 +39,16 @@ struct CameraFeedView: View {
                         selectedLocation = LocationDestination(h3Index: h3, name: name)
                     }, onStoryTap: { author in
                         cardStoryAuthor = author
-                    })
-                    .onAppear {
-                        if gallery.id == galleries.last?.id {
-                            Task { await loadMore() }
+                    }, onReport: gallery.creator.did != auth.userDID ? {
+                        reportGallery = gallery
+                    } : nil, onDelete: gallery.creator.did == auth.userDID ? {
+                        deleteGalleryUri = gallery.uri
+                    } : nil)
+                        .onAppear {
+                            if gallery.id == galleries.last?.id {
+                                Task { await loadMore() }
+                            }
                         }
-                    }
                 }
 
                 if isLoading {
@@ -127,6 +133,29 @@ struct CameraFeedView: View {
                     }
                 )
             }
+        }
+        .sheet(item: $reportGallery) { gallery in
+            ReportView(client: client, subjectUri: gallery.uri, subjectCid: gallery.cid)
+        }
+        .alert("Delete Gallery?", isPresented: Binding(
+            get: { deleteGalleryUri != nil },
+            set: { if !$0 { deleteGalleryUri = nil } }
+        )) {
+            Button("Delete", role: .destructive) {
+                if let uri = deleteGalleryUri {
+                    Task {
+                        let rkey = uri.split(separator: "/").last.map(String.init) ?? ""
+                        do {
+                            try await client.deleteGallery(rkey: rkey, auth: auth.authContext())
+                            galleries.removeAll { $0.uri == uri }
+                        } catch {}
+                        deleteGalleryUri = nil
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) { deleteGalleryUri = nil }
+        } message: {
+            Text("This will permanently delete this gallery and all its photos.")
         }
         .task {
             guard !isPreview else {
