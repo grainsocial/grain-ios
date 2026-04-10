@@ -181,7 +181,8 @@ struct StoryViewer: View {
                 onSwipeRight: { goToPreviousAuthor() },
                 onHorizontalDragStart: { forward in beginSwipe(forward: forward) },
                 onSwipeDragging: { tx in updateSwipeDrag(tx) },
-                onHorizontalDragCancel: { cancelSwipe() }
+                onHorizontalDragCancel: { cancelSwipe() },
+                isEnabled: !showCommentSheet
             )
         )
         .confirmationDialog("Delete this story?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
@@ -1101,12 +1102,11 @@ struct StoryViewer: View {
                     .font(.subheadline)
                     .foregroundStyle(.white.opacity(0.6))
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(.ultraThinMaterial, in: Capsule())
-                    .contentShape(Capsule())
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 12)
             }
             .buttonStyle(.plain)
+            .glassEffect(.regular, in: .capsule)
 
             // Heart — like/unlike
             Button {

@@ -45,6 +45,9 @@ struct DragToDismissInstaller: UIViewRepresentable {
     var onHorizontalDragStart: ((Bool) -> Void)? // true = swiping left (forward)
     var onSwipeDragging: ((CGFloat) -> Void)? // raw translation.x during drag
     var onHorizontalDragCancel: (() -> Void)?
+    /// When false, the pan gesture is disabled so another presented view (e.g.
+    /// a comment sheet) can own touches without interference.
+    var isEnabled: Bool = true
 
     func makeUIView(context: Context) -> UIView {
         let view = UIView(frame: .zero)
@@ -66,6 +69,7 @@ struct DragToDismissInstaller: UIViewRepresentable {
         context.coordinator.onHorizontalDragStart = onHorizontalDragStart
         context.coordinator.onSwipeDragging = onSwipeDragging
         context.coordinator.onHorizontalDragCancel = onHorizontalDragCancel
+        context.coordinator.setEnabled(isEnabled)
         handle.performDismiss = onDismiss
     }
 
@@ -136,6 +140,10 @@ struct DragToDismissInstaller: UIViewRepresentable {
             pan.delegate = self
             target.addGestureRecognizer(pan)
             panGesture = pan
+        }
+
+        func setEnabled(_ enabled: Bool) {
+            panGesture?.isEnabled = enabled
         }
 
         /// Allow SwiftUI tap gestures to work simultaneously
