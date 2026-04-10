@@ -8,7 +8,7 @@ private let logger = Logger(subsystem: "social.grain.grain", category: "GalleryC
 
 @Observable
 @MainActor
-private final class HeartAnimationState: Identifiable {
+final class HeartAnimationState: Identifiable {
     let id = UUID()
     let position: CGPoint
     let rotation: Double
@@ -52,7 +52,7 @@ private final class HeartAnimationState: Identifiable {
     }
 }
 
-private struct DoubleTapHeartView: View {
+struct DoubleTapHeartView: View {
     let state: HeartAnimationState
 
     var body: some View {
@@ -94,7 +94,7 @@ private struct DoubleTapHeartView: View {
 
 // MARK: - Subtle like-button particle burst
 
-private struct LikeParticleView: View {
+struct LikeParticleView: View {
     let index: Int
 
     /// Deterministic per slot — no random state stored in parent
