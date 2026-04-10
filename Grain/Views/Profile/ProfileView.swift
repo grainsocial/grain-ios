@@ -443,7 +443,9 @@ struct ProfileView: View {
                 #endif
                 return
             }
-            await viewModel.load(did: actor, viewer: auth.userDID, auth: auth.authContext())
+            if viewModel.profile == nil {
+                await viewModel.load(did: actor, viewer: auth.userDID, auth: auth.authContext())
+            }
         }
         .onChange(of: deletedGalleryUri) { _, uri in
             if let uri {
