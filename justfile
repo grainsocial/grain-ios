@@ -19,31 +19,40 @@ generate:
     BUNDLE_ID={{bundle_id}} xcodegen generate
     git config core.hooksPath .githooks
 
+# Worktree-local DerivedData path (avoids collisions with other worktrees)
+derived_data := justfile_directory() + "/.derivedData"
+
 # Build for simulator (production API — matches Xcode Run)
 build:
-    set -o pipefail && xcodebuild build -scheme Grain -destination 'generic/platform=iOS Simulator' PRODUCT_BUNDLE_IDENTIFIER={{bundle_id}} {{sim_sign}} 2>&1 | xcbeautify
+    set -o pipefail && xcodebuild build -scheme Grain -destination 'generic/platform=iOS Simulator' -derivedDataPath {{derived_data}} PRODUCT_BUNDLE_IDENTIFIER={{bundle_id}} {{sim_sign}} 2>&1 | xcbeautify
 
 # Build for simulator (local/dev API — overrides default PRODUCTION_API flag)
 build-local:
-    set -o pipefail && xcodebuild build -scheme Grain -destination 'generic/platform=iOS Simulator' PRODUCT_BUNDLE_IDENTIFIER={{bundle_id}} SWIFT_ACTIVE_COMPILATION_CONDITIONS='DEBUG' {{sim_sign}} 2>&1 | xcbeautify
+    set -o pipefail && xcodebuild build -scheme Grain -destination 'generic/platform=iOS Simulator' -derivedDataPath {{derived_data}} PRODUCT_BUNDLE_IDENTIFIER={{bundle_id}} SWIFT_ACTIVE_COMPILATION_CONDITIONS='DEBUG' {{sim_sign}} 2>&1 | xcbeautify
 
 # Build + install + launch on simulator (local/dev API)
 sim-local: build-local
     #!/usr/bin/env bash
     set -euo pipefail
-    APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData/Grain-*/Build/Products/Debug-iphonesimulator -name "Grain.app" -type d | head -1)
-    xcrun simctl install booted "$APP_PATH"
-    xcrun simctl launch booted {{bundle_id}}
+    SIM=${SIM_UDID:-booted}
+    xcrun simctl boot "$SIM" 2>/dev/null || true
+    xcrun simctl bootstatus "$SIM" -b >/dev/null
+    APP_PATH=$(find "{{derived_data}}/Build/Products/Debug-iphonesimulator" -name "${BUNDLE_NAME:-Grain}.app" -type d | head -1)
+    xcrun simctl install "$SIM" "$APP_PATH"
+    xcrun simctl launch "$SIM" {{bundle_id}}
     echo "Installed and launched on simulator (local/dev API)"
 
 # Build + install + launch on simulator (production API — grain.social; same as Xcode Run)
 sim:
     #!/usr/bin/env bash
     set -euo pipefail
-    set -o pipefail && xcodebuild build -scheme Grain -destination 'generic/platform=iOS Simulator' PRODUCT_BUNDLE_IDENTIFIER={{bundle_id}} {{sim_sign}} 2>&1 | xcbeautify
-    APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData/Grain-*/Build/Products/Debug-iphonesimulator -name "Grain.app" -type d | head -1)
-    xcrun simctl install booted "$APP_PATH"
-    xcrun simctl launch booted {{bundle_id}}
+    SIM=${SIM_UDID:-booted}
+    xcrun simctl boot "$SIM" 2>/dev/null || true
+    xcrun simctl bootstatus "$SIM" -b >/dev/null
+    set -o pipefail && xcodebuild build -scheme Grain -destination 'generic/platform=iOS Simulator' -derivedDataPath "{{derived_data}}" PRODUCT_BUNDLE_IDENTIFIER={{bundle_id}} {{sim_sign}} 2>&1 | xcbeautify
+    APP_PATH=$(find "{{derived_data}}/Build/Products/Debug-iphonesimulator" -name "${BUNDLE_NAME:-Grain}.app" -type d | head -1)
+    xcrun simctl install "$SIM" "$APP_PATH"
+    xcrun simctl launch "$SIM" {{bundle_id}}
     echo "Installed and launched on simulator (grain.social)"
 
 # Run tests
@@ -75,7 +84,7 @@ device device_id:
     set -euo pipefail
     echo "Building for device {{device_id}}..."
     set -o pipefail && xcodebuild build -scheme Grain -destination 'platform=iOS,id={{device_id}}' PRODUCT_BUNDLE_IDENTIFIER={{bundle_id}} -allowProvisioningUpdates 2>&1 | xcbeautify
-    APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData/Grain-*/Build/Products/Debug-iphoneos -name "Grain.app" -type d | head -1)
+    APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData/Grain-*/Build/Products/Debug-iphoneos -name "${BUNDLE_NAME:-Grain}.app" -type d | head -1)
     echo "Installing $APP_PATH..."
     xcrun devicectl device install app --device {{device_id}} "$APP_PATH"
     echo "Installed to device {{device_id}}!"
