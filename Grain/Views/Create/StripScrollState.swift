@@ -176,7 +176,11 @@ struct StripPanRecognizer: UIGestureRecognizerRepresentable {
             _: UIGestureRecognizer,
             shouldRecognizeSimultaneouslyWith _: UIGestureRecognizer
         ) -> Bool {
-            true
+            // Prevent simultaneous H+V scrolling: once our horizontal pan begins,
+            // the List's vertical scroll recognizer cannot also activate.
+            // Vertical swipes never reach here — gestureRecognizerShouldBegin
+            // returns false for them, so list scroll still works normally.
+            false
         }
     }
 }
