@@ -98,23 +98,25 @@ struct ProfileView: View {
                                 .onEnded { _ in avatarPressed = false }
                         )
 
-                        HStack(spacing: 0) {
-                            StatView(count: profile.galleryCount ?? 0, label: "Galleries")
+                        if !viewModel.isBlockHidden {
+                            HStack(spacing: 0) {
+                                StatView(count: profile.galleryCount ?? 0, label: "Galleries")
+                                    .frame(maxWidth: .infinity)
+                                NavigationLink {
+                                    FollowListView(client: client, did: did, mode: .followers)
+                                } label: {
+                                    StatView(count: profile.followersCount ?? 0, label: "Followers")
+                                }
+                                .buttonStyle(.plain)
                                 .frame(maxWidth: .infinity)
-                            NavigationLink {
-                                FollowListView(client: client, did: did, mode: .followers)
-                            } label: {
-                                StatView(count: profile.followersCount ?? 0, label: "Followers")
+                                NavigationLink {
+                                    FollowListView(client: client, did: did, mode: .following)
+                                } label: {
+                                    StatView(count: profile.followsCount ?? 0, label: "Following")
+                                }
+                                .buttonStyle(.plain)
+                                .frame(maxWidth: .infinity)
                             }
-                            .buttonStyle(.plain)
-                            .frame(maxWidth: .infinity)
-                            NavigationLink {
-                                FollowListView(client: client, did: did, mode: .following)
-                            } label: {
-                                StatView(count: profile.followsCount ?? 0, label: "Following")
-                            }
-                            .buttonStyle(.plain)
-                            .frame(maxWidth: .infinity)
                         }
                     }
                     .padding(.horizontal)
@@ -124,132 +126,167 @@ struct ProfileView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(profile.displayName ?? profile.handle)
                             .font(.subheadline.bold())
-                        Text("@\(profile.handle)")
+
+                        HStack(spacing: 6) {
+                            if !viewModel.isBlockHidden, profile.viewer?.followedBy != nil {
+                                Text("Follows you")
+                                    .font(.caption2)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(.quaternary)
+                                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                            }
+                            Text("@\(profile.handle)")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        if viewModel.isBlockHidden {
+                            // Block alert
+                            HStack(spacing: 6) {
+                                Image(systemName: "nosign")
+                                    .font(.caption)
+                                if profile.viewer?.blocking != nil {
+                                    Text("Account blocked")
+                                } else {
+                                    Text("This user has blocked you")
+                                }
+                            }
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
-
-                        if let description = profile.description, !description.isEmpty {
-                            RichTextView(
-                                text: description,
-                                font: .subheadline,
-                                onMentionTap: { did in selectedProfileDid = did },
-                                onHashtagTap: { tag in selectedHashtag = tag }
-                            )
-                            .padding(.top, 2)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(.quaternary)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .padding(.top, 4)
+                        } else {
+                            if let description = profile.description, !description.isEmpty {
+                                RichTextView(
+                                    text: description,
+                                    font: .subheadline,
+                                    onMentionTap: { did in selectedProfileDid = did },
+                                    onHashtagTap: { tag in selectedHashtag = tag }
+                                )
+                                .padding(.top, 2)
+                            }
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal)
 
-                    // Known followers
-                    if !viewModel.knownFollowers.isEmpty, did != auth.userDID {
-                        NavigationLink {
-                            FollowListView(client: client, did: did, mode: .knownFollowers)
-                        } label: {
-                            knownFollowersRow
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    // Follow + Germ DM buttons
-                    if did != auth.userDID {
-                        HStack(spacing: 8) {
-                            followButton(profile: profile)
-
-                            if let germUrl = germDMUrl(profile: profile) {
-                                Link(destination: germUrl) {
-                                    HStack(spacing: 4) {
-                                        Image("germ-logo")
-                                            .resizable()
-                                            .frame(width: 14, height: 14)
-                                        Text("Germ DM")
-                                            .font(.subheadline.weight(.semibold))
-                                    }
-                                    .frame(maxWidth: .infinity)
-                                }
-                                .buttonStyle(.bordered)
-                                .tint(.primary)
-                            }
-                        }
-                        .padding(.horizontal)
-                    } else {
-                        HStack(spacing: 8) {
+                    if !viewModel.isBlockHidden {
+                        // Known followers
+                        if !viewModel.knownFollowers.isEmpty, did != auth.userDID {
                             NavigationLink {
-                                EditProfileView(client: client, onSaved: {
-                                    Task { await viewModel.load(did: did) }
-                                })
+                                FollowListView(client: client, did: did, mode: .knownFollowers)
                             } label: {
-                                Text("Edit Profile")
-                                    .font(.subheadline.weight(.semibold))
-                                    .frame(maxWidth: .infinity)
+                                knownFollowersRow
                             }
-                            .buttonStyle(.bordered)
-                            .tint(.primary)
+                            .buttonStyle(.plain)
+                        }
 
-                            if let germUrl = germDMUrl(profile: profile) {
-                                Link(destination: germUrl) {
-                                    HStack(spacing: 4) {
-                                        Image("germ-logo")
-                                            .resizable()
-                                            .frame(width: 14, height: 14)
-                                        Text("Germ DM")
-                                            .font(.subheadline.weight(.semibold))
+                        // Follow + Germ DM buttons
+                        if did != auth.userDID {
+                            HStack(spacing: 8) {
+                                followButton(profile: profile)
+
+                                if let germUrl = germDMUrl(profile: profile) {
+                                    Link(destination: germUrl) {
+                                        HStack(spacing: 4) {
+                                            Image("germ-logo")
+                                                .resizable()
+                                                .frame(width: 14, height: 14)
+                                            Text("Germ DM")
+                                                .font(.subheadline.weight(.semibold))
+                                        }
+                                        .frame(maxWidth: .infinity)
                                     }
-                                    .frame(maxWidth: .infinity)
+                                    .buttonStyle(.bordered)
+                                    .tint(.primary)
+                                }
+                            }
+                            .padding(.horizontal)
+                        } else {
+                            HStack(spacing: 8) {
+                                NavigationLink {
+                                    EditProfileView(client: client, onSaved: {
+                                        Task { await viewModel.load(did: did) }
+                                    })
+                                } label: {
+                                    Text("Edit Profile")
+                                        .font(.subheadline.weight(.semibold))
+                                        .frame(maxWidth: .infinity)
                                 }
                                 .buttonStyle(.bordered)
                                 .tint(.primary)
+
+                                if let germUrl = germDMUrl(profile: profile) {
+                                    Link(destination: germUrl) {
+                                        HStack(spacing: 4) {
+                                            Image("germ-logo")
+                                                .resizable()
+                                                .frame(width: 14, height: 14)
+                                            Text("Germ DM")
+                                                .font(.subheadline.weight(.semibold))
+                                        }
+                                        .frame(maxWidth: .infinity)
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .tint(.primary)
+                                }
                             }
+                            .padding(.horizontal)
                         }
-                        .padding(.horizontal)
                     }
 
                     // Tabs + grid
-                    VStack(spacing: 0) {
-                        if did == auth.userDID {
-                            HStack(spacing: 0) {
-                                tabButton(icon: "square.grid.3x3", mode: .grid)
-                                tabButton(icon: "heart", mode: .favorites)
-                                tabButton(icon: "clock", mode: .stories)
-                            }
-                        }
-
-                        if viewMode == .grid {
-                            galleriesGrid
-                        }
-
-                        if viewMode == .favorites {
-                            favoritesGrid
-                        }
-
-                        if viewMode == .stories {
-                            storyArchiveGrid
-                        }
-                    }
-                    .highPriorityGesture(
-                        did == auth.userDID ?
-                            DragGesture(minimumDistance: 30, coordinateSpace: .local)
-                            .onEnded { value in
-                                let h = value.translation.width
-                                let v = value.translation.height
-                                guard abs(h) > abs(v) else { return }
-                                let modes: [ProfileViewMode] = [.grid, .favorites, .stories]
-                                guard let currentIdx = modes.firstIndex(of: viewMode) else { return }
-                                if h < 0, currentIdx < modes.count - 1 {
-                                    let next = modes[currentIdx + 1]
-                                    withAnimation(.easeInOut(duration: 0.2)) { viewMode = next }
-                                    if next == .stories {
-                                        Task { await viewModel.loadStoryArchive(did: did, auth: auth.authContext()) }
-                                    } else if next == .favorites {
-                                        Task { await viewModel.loadFavorites(did: did, auth: auth.authContext()) }
-                                    }
-                                } else if h > 0, currentIdx > 0 {
-                                    withAnimation(.easeInOut(duration: 0.2)) { viewMode = modes[currentIdx - 1] }
+                    if !viewModel.isBlockHidden {
+                        VStack(spacing: 0) {
+                            if did == auth.userDID {
+                                HStack(spacing: 0) {
+                                    tabButton(icon: "square.grid.3x3", mode: .grid)
+                                    tabButton(icon: "heart", mode: .favorites)
+                                    tabButton(icon: "clock", mode: .stories)
                                 }
                             }
-                            : nil
-                    )
-                }
+
+                            if viewMode == .grid {
+                                galleriesGrid
+                            }
+
+                            if viewMode == .favorites {
+                                favoritesGrid
+                            }
+
+                            if viewMode == .stories {
+                                storyArchiveGrid
+                            }
+                        }
+                        .highPriorityGesture(
+                            did == auth.userDID ?
+                                DragGesture(minimumDistance: 30, coordinateSpace: .local)
+                                .onEnded { value in
+                                    let h = value.translation.width
+                                    let v = value.translation.height
+                                    guard abs(h) > abs(v) else { return }
+                                    let modes: [ProfileViewMode] = [.grid, .favorites, .stories]
+                                    guard let currentIdx = modes.firstIndex(of: viewMode) else { return }
+                                    if h < 0, currentIdx < modes.count - 1 {
+                                        let next = modes[currentIdx + 1]
+                                        withAnimation(.easeInOut(duration: 0.2)) { viewMode = next }
+                                        if next == .stories {
+                                            Task { await viewModel.loadStoryArchive(did: did, auth: auth.authContext()) }
+                                        } else if next == .favorites {
+                                            Task { await viewModel.loadFavorites(did: did, auth: auth.authContext()) }
+                                        }
+                                    } else if h > 0, currentIdx > 0 {
+                                        withAnimation(.easeInOut(duration: 0.2)) { viewMode = modes[currentIdx - 1] }
+                                    }
+                                }
+                                : nil
+                        )
+                    }
+                } // end if !isBlockHidden (tabs + grid)
             } else if viewModel.error != nil {
                 VStack(spacing: 16) {
                     ContentUnavailableView(
@@ -284,6 +321,32 @@ struct ProfileView: View {
                         SettingsView(client: client)
                     } label: {
                         Image(systemName: "gearshape")
+                    }
+                    .tint(.primary)
+                }
+            } else if viewModel.profile != nil {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        if !viewModel.isBlockHidden {
+                            Button(role: viewModel.profile?.viewer?.muted == true ? nil : .destructive) {
+                                Task { await viewModel.toggleMute(auth: auth.authContext()) }
+                            } label: {
+                                Label(
+                                    viewModel.profile?.viewer?.muted == true ? "Unmute" : "Mute",
+                                    systemImage: viewModel.profile?.viewer?.muted == true ? "speaker.wave.2" : "speaker.slash"
+                                )
+                            }
+                        }
+                        Button(role: viewModel.profile?.viewer?.blocking != nil ? nil : .destructive) {
+                            Task { await viewModel.toggleBlock(auth: auth.authContext()) }
+                        } label: {
+                            Label(
+                                viewModel.profile?.viewer?.blocking != nil ? "Unblock" : "Block",
+                                systemImage: viewModel.profile?.viewer?.blocking != nil ? "circle" : "nosign"
+                            )
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
                     }
                     .tint(.primary)
                 }
@@ -331,7 +394,7 @@ struct ProfileView: View {
         }
         .fullScreenCover(item: $selectedArchivedStory) { story in
             if let profile = viewModel.profile,
-               let storyIndex = viewModel.archivedStories.firstIndex(where: { $0.id == story.id })
+               viewModel.archivedStories.contains(where: { $0.id == story.id })
             {
                 StoryViewer(
                     authors: [GrainStoryAuthor(
@@ -387,6 +450,11 @@ struct ProfileView: View {
                 viewModel.galleries.removeAll { $0.uri == uri }
                 deletedGalleryUri = nil
             }
+        }
+        .alert("Sign in again to block", isPresented: $viewModel.showReauthAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Please sign out and back in to enable blocking. This is a one-time step after the update.")
         }
     }
 

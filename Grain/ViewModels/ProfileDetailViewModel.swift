@@ -11,6 +11,7 @@ final class ProfileDetailViewModel {
     var knownFollowers: [FollowerItem] = []
     var isLoading = false
     var error: Error?
+    var showReauthAlert = false
 
     private var galleryCursor: String?
     private var hasMoreGalleries = true
@@ -118,6 +119,61 @@ final class ProfileDetailViewModel {
         isLoading = false
     }
 
+    /// Whether the profile content should be hidden due to a block
+    var isBlockHidden: Bool {
+        profile?.viewer?.blocking != nil || profile?.viewer?.blockedBy == true
+    }
+
+    func toggleBlock(auth: AuthContext?) async {
+        guard let profile, let auth else { return }
+        let prevViewer = profile.viewer
+        let did = profile.did
+
+        if let blockUri = profile.viewer?.blocking {
+            // Optimistic unblock
+            self.profile?.viewer?.blocking = nil
+            do {
+                try await client.unblockActor(blockUri: blockUri, auth: auth)
+            } catch {
+                self.profile?.viewer = prevViewer
+            }
+        } else {
+            // Optimistic block
+            self.profile?.viewer?.blocking = "pending"
+            do {
+                let response = try await client.blockActor(did: did, auth: auth)
+                self.profile?.viewer?.blocking = response.uri
+            } catch {
+                self.profile?.viewer = prevViewer
+                showReauthAlert = true
+            }
+        }
+    }
+
+    func toggleMute(auth: AuthContext?) async {
+        guard let profile, let auth else { return }
+        let prevViewer = profile.viewer
+        let did = profile.did
+
+        if profile.viewer?.muted == true {
+            // Optimistic unmute
+            self.profile?.viewer?.muted = false
+            do {
+                try await client.unmuteActor(did: did, auth: auth)
+            } catch {
+                self.profile?.viewer = prevViewer
+            }
+        } else {
+            // Optimistic mute
+            self.profile?.viewer?.muted = true
+            do {
+                try await client.muteActor(did: did, auth: auth)
+            } catch {
+                self.profile?.viewer = prevViewer
+            }
+        }
+    }
+
     func toggleFollow(auth: AuthContext?) async {
         guard profile != nil, let auth else { return }
 
@@ -140,8 +196,8 @@ final class ProfileDetailViewModel {
                 profile?.followersCount = prevCount
             }
         } else {
-            // Optimistic follow
-            profile?.viewer = ActorViewerState(following: "pending", followedBy: prevViewer?.followedBy)
+            // Optimistic follow — preserve existing block/mute state
+            profile?.viewer?.following = "pending"
             profile?.followersCount = (prevCount ?? 0) + 1
 
             let record = AnyCodable([

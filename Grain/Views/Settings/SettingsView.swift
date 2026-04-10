@@ -23,6 +23,14 @@ struct SettingsView: View {
                 }
             }
 
+            Section("Moderation") {
+                NavigationLink {
+                    ModerationView(client: client)
+                } label: {
+                    Label("Moderation", systemImage: "shield")
+                }
+            }
+
             Section {
                 Toggle("Include location", isOn: $includeLocation)
                     .onChange(of: includeLocation) {

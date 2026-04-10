@@ -71,6 +71,7 @@ final class AuthManager {
                 "repo:social.grain.photo.exif",
                 "repo:social.grain.actor.profile",
                 "repo:social.grain.graph.follow",
+                "repo:social.grain.graph.block",
                 "repo:social.grain.favorite",
                 "repo:social.grain.comment",
                 "repo:social.grain.story",

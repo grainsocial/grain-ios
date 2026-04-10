@@ -12,6 +12,7 @@ struct GrainComment: Codable, Sendable, Identifiable {
     var focus: AnyCodable?
     var replyTo: String?
     let createdAt: String
+    var muted: Bool?
 
     var id: String {
         uri

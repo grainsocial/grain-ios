@@ -332,72 +332,91 @@ struct CommentRow: View {
     var onStoryTap: ((GrainStoryAuthor) -> Void)?
     var onReply: (() -> Void)?
     var onDelete: (() -> Void)?
+    @State private var expanded = false
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            let avatarSize: CGFloat = isReply ? 24 : 28
-            StoryRingView(
-                hasStory: storyStatusCache.hasStory(for: comment.author.did),
-                viewed: comment.author.did != userDID && viewedStories.hasViewedAll(did: comment.author.did, storyStatusCache: storyStatusCache),
-                size: avatarSize
-            ) {
-                AvatarView(url: comment.author.avatar, size: avatarSize)
+        if comment.muted == true, !expanded {
+            Button {
+                expanded = true
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "speaker.slash")
+                        .font(.caption)
+                    Text("Muted comment")
+                        .font(.caption)
+                }
+                .foregroundStyle(.secondary)
+                .padding(.leading, isReply ? 50 : 12)
+                .padding(.trailing, 12)
+                .padding(.vertical, 8)
             }
-            .onTapGesture {
-                if let author = storyStatusCache.author(for: comment.author.did) {
-                    onStoryTap?(author)
-                } else {
+            .buttonStyle(.plain)
+        } else {
+            HStack(alignment: .top, spacing: 8) {
+                let avatarSize: CGFloat = isReply ? 24 : 28
+                StoryRingView(
+                    hasStory: storyStatusCache.hasStory(for: comment.author.did),
+                    viewed: comment.author.did != userDID && viewedStories.hasViewedAll(did: comment.author.did, storyStatusCache: storyStatusCache),
+                    size: avatarSize
+                ) {
+                    AvatarView(url: comment.author.avatar, size: avatarSize)
+                }
+                .onTapGesture {
+                    if let author = storyStatusCache.author(for: comment.author.did) {
+                        onStoryTap?(author)
+                    } else {
+                        onProfileTap?(comment.author.did)
+                    }
+                }
+                .onLongPressGesture {
                     onProfileTap?(comment.author.did)
                 }
-            }
-            .onLongPressGesture {
-                onProfileTap?(comment.author.did)
-            }
 
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 4) {
-                    Text(comment.author.displayName ?? comment.author.handle)
-                        .font(.subheadline.weight(.semibold))
-                    Text(DateFormatting.relativeTime(comment.createdAt))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                RichTextView(
-                    text: comment.text,
-                    facets: comment.facets,
-                    onMentionTap: onProfileTap,
-                    onHashtagTap: onHashtagTap
-                )
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 4) {
+                        Text(comment.author.displayName ?? comment.author.handle)
+                            .font(.subheadline.weight(.semibold))
+                        Text(DateFormatting.relativeTime(comment.createdAt))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    RichTextView(
+                        text: comment.text,
+                        facets: comment.facets,
+                        onMentionTap: onProfileTap,
+                        onHashtagTap: onHashtagTap
+                    )
 
-                // Actions
-                HStack(spacing: 16) {
-                    if onReply != nil {
-                        Button {
-                            onReply?()
-                        } label: {
-                            Text("Reply")
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(.gray)
+                    // Actions
+                    HStack(spacing: 16) {
+                        if onReply != nil {
+                            Button {
+                                onReply?()
+                            } label: {
+                                Text("Reply")
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(.gray)
+                            }
+                        }
+                        if isOwn {
+                            Button {
+                                onDelete?()
+                            } label: {
+                                Text("Delete")
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(.gray)
+                            }
                         }
                     }
-                    if isOwn {
-                        Button {
-                            onDelete?()
-                        } label: {
-                            Text("Delete")
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(.gray)
-                        }
-                    }
+                    .padding(.top, 2)
                 }
-                .padding(.top, 2)
-            }
 
-            Spacer()
+                Spacer()
+            }
+            .padding(.leading, isReply ? 50 : 12)
+            .padding(.trailing, 12)
+            .padding(.vertical, 8)
         }
-        .padding(.leading, isReply ? 50 : 12)
-        .padding(.trailing, 12)
-        .padding(.vertical, 8)
     }
 }
 

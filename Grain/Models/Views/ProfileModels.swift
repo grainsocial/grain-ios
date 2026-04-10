@@ -43,6 +43,9 @@ struct GrainProfileDetailed: Codable, Sendable, Identifiable {
 struct ActorViewerState: Codable, Sendable {
     var following: String?
     var followedBy: String?
+    var blocking: String?
+    var blockedBy: Bool?
+    var muted: Bool?
 }
 
 /// Germ Network messageMe declaration
