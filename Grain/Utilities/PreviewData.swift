@@ -220,7 +220,7 @@ enum PreviewData {
             createdAt: "2025-01-10T18:00:00Z",
             labels: nil,
             crossPost: nil,
-            viewer: nil
+            viewer: StoryViewerState(fav: "at://did:plc:prevuser1/social.grain.fav/f1")
         ),
         GrainStory(
             uri: "at://did:plc:prevuser1/social.grain.story/s2",

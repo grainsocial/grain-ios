@@ -26,107 +26,24 @@ struct StoryCommentSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                if viewModel.isLoading, viewModel.comments.isEmpty {
-                    Spacer()
-                    ProgressView()
-                    Spacer()
-                } else if viewModel.comments.isEmpty {
-                    Spacer()
-                    Text("No comments yet")
-                        .foregroundStyle(.secondary)
-                        .font(.subheadline)
-                    Spacer()
-                } else {
-                    ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 0) {
-                            ForEach(threadedComments, id: \.root.id) { thread in
-                                CommentRow(
-                                    comment: thread.root,
-                                    userDID: auth.userDID,
-                                    isOwn: thread.root.author.did == auth.userDID,
-                                    isReply: false,
-                                    onProfileTap: onProfileTap,
-                                    onHashtagTap: nil,
-                                    onStoryTap: nil,
-                                    onReply: { startReply(to: thread.root) },
-                                    onDelete: { Task { await deleteComment(thread.root) } }
-                                )
-
-                                ForEach(thread.replies) { reply in
-                                    CommentRow(
-                                        comment: reply,
-                                        userDID: auth.userDID,
-                                        isOwn: reply.author.did == auth.userDID,
-                                        isReply: true,
-                                        onProfileTap: onProfileTap,
-                                        onHashtagTap: nil,
-                                        onStoryTap: nil,
-                                        onReply: { startReplyToReply(reply, root: thread.root) },
-                                        onDelete: { Task { await deleteComment(reply) } }
-                                    )
-                                }
-                            }
+            commentList
+                .safeAreaInset(edge: .bottom) {
+                    VStack(spacing: 0) {
+                        MentionSuggestionOverlay(state: mentionState) { suggestion in
+                            mentionState.complete(handle: suggestion.handle, in: &commentText)
+                        }
+                        glassInputPill
+                    }
+                }
+                .navigationTitle("Comments")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") {
+                            onDismiss?()
                         }
                     }
                 }
-
-                Divider()
-
-                // Input area
-                VStack(spacing: 0) {
-                    if let replyTarget = replyingTo {
-                        HStack {
-                            Text("Replying to @\(replyTarget.author.handle)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            Button {
-                                replyingTo = nil
-                            } label: {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        .padding(.horizontal)
-                        .padding(.top, 8)
-                    }
-
-                    HStack(alignment: .bottom, spacing: 8) {
-                        TextField(replyingTo != nil ? "Reply..." : "Add a comment...", text: $commentText, axis: .vertical)
-                            .textFieldStyle(.plain)
-                            .font(.body)
-                            .focused($commentFocused)
-                            .lineLimit(1 ... 5)
-                            .onChange(of: commentText) { mentionState.update(text: commentText) }
-
-                        Button {
-                            Task { await postComment() }
-                        } label: {
-                            Image(systemName: "arrow.up.circle.fill")
-                                .font(.title2)
-                                .foregroundStyle(commentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .secondary : Color("AccentColor"))
-                        }
-                        .disabled(commentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.isPostingComment)
-                    }
-                    .padding(.horizontal)
-                    .padding(.vertical, 10)
-                }
-            }
-            .safeAreaInset(edge: .bottom) {
-                MentionSuggestionOverlay(state: mentionState) { suggestion in
-                    mentionState.complete(handle: suggestion.handle, in: &commentText)
-                }
-            }
-            .navigationTitle("Comments")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") {
-                        onDismiss?()
-                    }
-                }
-            }
         }
         .presentationDetents([.medium, .large])
         .task {
@@ -136,6 +53,109 @@ struct StoryCommentSheet: View {
             }
         }
     }
+
+    // MARK: - Comment list
+
+    @ViewBuilder
+    private var commentList: some View {
+        if viewModel.isLoading, viewModel.comments.isEmpty {
+            Spacer()
+            ProgressView()
+            Spacer()
+        } else if viewModel.comments.isEmpty {
+            Spacer()
+            Text("No comments yet")
+                .foregroundStyle(.secondary)
+                .font(.subheadline)
+            Spacer()
+        } else {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(threadedComments, id: \.root.id) { thread in
+                        CommentRow(
+                            comment: thread.root,
+                            userDID: auth.userDID,
+                            isOwn: thread.root.author.did == auth.userDID,
+                            isReply: false,
+                            onProfileTap: onProfileTap,
+                            onHashtagTap: nil,
+                            onStoryTap: nil,
+                            onReply: { startReply(to: thread.root) },
+                            onDelete: { Task { await deleteComment(thread.root) } }
+                        )
+
+                        ForEach(thread.replies) { reply in
+                            CommentRow(
+                                comment: reply,
+                                userDID: auth.userDID,
+                                isOwn: reply.author.did == auth.userDID,
+                                isReply: true,
+                                onProfileTap: onProfileTap,
+                                onHashtagTap: nil,
+                                onStoryTap: nil,
+                                onReply: { startReplyToReply(reply, root: thread.root) },
+                                onDelete: { Task { await deleteComment(reply) } }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Glass input pill
+
+    private var glassInputPill: some View {
+        VStack(spacing: 0) {
+            if let replyTarget = replyingTo {
+                HStack {
+                    Text("Replying to @\(replyTarget.author.handle)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button {
+                        replyingTo = nil
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.top, 10)
+                .padding(.bottom, 4)
+            }
+
+            HStack(alignment: .bottom, spacing: 8) {
+                TextField(replyingTo != nil ? "Reply..." : "Add a comment...", text: $commentText, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .font(.subheadline)
+                    .focused($commentFocused)
+                    .lineLimit(1 ... 5)
+                    .onChange(of: commentText) { mentionState.update(text: commentText) }
+
+                Button {
+                    Task { await postComment() }
+                } label: {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(commentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .secondary : Color("AccentColor"))
+                }
+                .disabled(commentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.isPostingComment)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+        }
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .strokeBorder(.white.opacity(0.15), lineWidth: 0.5)
+        }
+        .shadow(color: .black.opacity(0.12), radius: 8, y: 2)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
+    }
+
+    // MARK: - Actions
 
     private func startReply(to comment: GrainComment) {
         replyingTo = comment

@@ -94,6 +94,8 @@ struct StoryViewer: View {
     @State private var commentsViewModel: StoryCommentsViewModel
     @State private var showCommentSheet = false
     @State private var commentSheetFocusInput = false
+    @State private var sheetStoryUri: String?
+    @State private var hasLoadedInitialStories = false
     @State private var hearts: [HeartAnimationState] = []
     @State private var isFavoriting = false
     @State private var likeParticleBursts: [UUID] = []
@@ -185,10 +187,10 @@ struct StoryViewer: View {
             if reportTarget == nil { timer.start() }
         }
         .sheet(isPresented: $showCommentSheet) {
-            if let story = currentStory {
+            if let uri = sheetStoryUri {
                 StoryCommentSheet(
                     viewModel: commentsViewModel,
-                    storyUri: story.uri,
+                    storyUri: uri,
                     client: client,
                     focusInput: commentSheetFocusInput,
                     onProfileTap: { did in
@@ -204,7 +206,11 @@ struct StoryViewer: View {
             }
         }
         .task {
-            // In preview, only continue if we have prefetched stories to show (no network)
+            // Guard against re-runs: .task can re-fire when the view re-enters the
+            // hierarchy (e.g. after sheet presentation cycles), and we only want to
+            // load stories once per StoryViewer instance.
+            guard !hasLoadedInitialStories else { return }
+            hasLoadedInitialStories = true
             if isPreview, prefetchedStories.isEmpty { return }
             let startAuthor = authors[currentAuthorIndex]
             let isOwn = startAuthor.profile.did == auth.userDID
@@ -583,9 +589,7 @@ struct StoryViewer: View {
                     // Latest comment preview
                     if let latest = commentsViewModel.latestComment {
                         Button {
-                            timer.stop()
-                            commentSheetFocusInput = false
-                            showCommentSheet = true
+                            openCommentSheet(focusInput: false)
                         } label: {
                             HStack(spacing: 6) {
                                 AvatarView(url: latest.author.avatar, size: 20, animated: false)
@@ -994,6 +998,17 @@ struct StoryViewer: View {
 
     // MARK: - Comments & Likes
 
+    /// Open the comment sheet, pinning the URI at open time so the sheet
+    /// content doesn't depend on a live reading of `currentStory` (which can
+    /// flicker to nil during view re-renders).
+    private func openCommentSheet(focusInput: Bool) {
+        guard let uri = currentStory?.uri else { return }
+        timer.stop()
+        sheetStoryUri = uri
+        commentSheetFocusInput = focusInput
+        showCommentSheet = true
+    }
+
     private var isFavorited: Bool {
         guard let story = currentStory else { return false }
         return story.viewer?.fav != nil || storyFavoriteCache.isLiked(story.uri)
@@ -1003,9 +1018,7 @@ struct StoryViewer: View {
         HStack(spacing: 12) {
             // Comment bubble — opens comment list
             Button {
-                timer.stop()
-                commentSheetFocusInput = false
-                showCommentSheet = true
+                openCommentSheet(focusInput: false)
             } label: {
                 VStack(spacing: 2) {
                     Image(systemName: "bubble.left")
@@ -1017,16 +1030,14 @@ struct StoryViewer: View {
                     }
                 }
                 .foregroundStyle(.white)
-                .frame(width: 36, minHeight: 36)
+                .frame(width: 36)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
             // "Add a comment..." — opens sheet with keyboard
             Button {
-                timer.stop()
-                commentSheetFocusInput = true
-                showCommentSheet = true
+                openCommentSheet(focusInput: true)
             } label: {
                 Text("Add a comment...")
                     .font(.subheadline)
@@ -1034,7 +1045,7 @@ struct StoryViewer: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
-                    .background(.white.opacity(0.15), in: Capsule())
+                    .background(.ultraThinMaterial, in: Capsule())
                     .contentShape(Capsule())
             }
             .buttonStyle(.plain)
