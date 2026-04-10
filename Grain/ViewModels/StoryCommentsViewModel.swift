@@ -45,8 +45,10 @@ final class StoryCommentsViewModel {
 
     func loadPreview(storyUri: String, auth: AuthContext? = nil) async {
         if let cached = previewCache[storyUri] {
-            latestComment = cached.comment
-            totalCount = cached.count
+            if activeStoryUri == nil || activeStoryUri == storyUri {
+                latestComment = cached.comment
+                totalCount = cached.count
+            }
             return
         }
 
@@ -57,7 +59,7 @@ final class StoryCommentsViewModel {
                 count: response.totalCount ?? response.comments.count
             )
             previewCache[storyUri] = preview
-            if storyUri == activeStoryUri {
+            if activeStoryUri == nil || activeStoryUri == storyUri {
                 latestComment = preview.comment
                 totalCount = preview.count
             }
