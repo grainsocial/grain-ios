@@ -21,12 +21,26 @@ enum PreviewData {
 
     static let profile2 = GrainProfile(
         cid: "cid2", did: "did:plc:prevuser2",
-        handle: "marcus.grain.social", displayName: "Marcus Webb"
+        handle: "marcus.grain.social", displayName: "Marcus Webb",
+        avatar: bundleImageURL("Union_Bank_Tower,_Portland_(2024)-L1006272")
     )
 
     static let profile3 = GrainProfile(
         cid: "cid3", did: "did:plc:prevuser3",
-        handle: "sofia.grain.social", displayName: "Sofia Reyes"
+        handle: "sofia.grain.social", displayName: "Sofia Reyes",
+        avatar: bundleImageURL("Portland_Japanese_Garden_maple")
+    )
+
+    static let profile4 = GrainProfile(
+        cid: "cid4", did: "did:plc:prevuser4",
+        handle: "kai.grain.social", displayName: "Kai Müller",
+        avatar: bundleImageURL("Mount_Hood_reflected_in_Mirror_Lake,_Oregon")
+    )
+
+    static let profile5 = GrainProfile(
+        cid: "cid5", did: "did:plc:prevuser5",
+        handle: "leo.grain.social", displayName: "Leo Park",
+        avatar: bundleImageURL("Mt_Herschel,_Antarctica,_Jan_2006")
     )
 
     // MARK: - Bundle image URL helper
@@ -183,6 +197,104 @@ enum PreviewData {
         ),
     ]
 
+    // MARK: - Stories
+
+    private static let yukiProfile = GrainProfile(
+        cid: "c1",
+        did: "did:plc:prevuser1",
+        handle: "yuki.grain.social",
+        displayName: "Yuki Tanaka",
+        avatar: bundleImageURL("Penguin_in_Antarctica_jumping_out_of_the_water")
+    )
+
+    static let stories: [GrainStory] = [
+        GrainStory(
+            uri: "at://did:plc:prevuser1/social.grain.story/s1",
+            cid: "cid",
+            creator: yukiProfile,
+            thumb: bundleImageURL("Portland_Japanese_Garden_maple"),
+            fullsize: bundleImageURL("Portland_Japanese_Garden_maple"),
+            aspectRatio: AspectRatio(width: 4, height: 3),
+            location: H3Location(value: "8a2a1072b59ffff", name: "Kyoto, Japan"),
+            address: nil,
+            createdAt: "2025-01-10T18:00:00Z",
+            labels: nil,
+            crossPost: nil,
+            viewer: nil
+        ),
+        GrainStory(
+            uri: "at://did:plc:prevuser1/social.grain.story/s2",
+            cid: "cid",
+            creator: yukiProfile,
+            thumb: bundleImageURL("Mount_Hood_reflected_in_Mirror_Lake,_Oregon"),
+            fullsize: bundleImageURL("Mount_Hood_reflected_in_Mirror_Lake,_Oregon"),
+            aspectRatio: AspectRatio(width: 3, height: 2),
+            location: H3Location(value: "8a2a1072b51ffff", name: "Mirror Lake, Oregon"),
+            address: nil,
+            createdAt: "2025-01-10T16:00:00Z",
+            labels: nil,
+            crossPost: nil,
+            viewer: nil
+        ),
+        GrainStory(
+            uri: "at://did:plc:prevuser1/social.grain.story/s3",
+            cid: "cid",
+            creator: yukiProfile,
+            thumb: bundleImageURL("Union_Bank_Tower,_Portland_(2024)-L1006272"),
+            fullsize: bundleImageURL("Union_Bank_Tower,_Portland_(2024)-L1006272"),
+            aspectRatio: AspectRatio(width: 2, height: 3),
+            location: H3Location(value: "8a2a1072b52ffff", name: "Portland, OR"),
+            address: nil,
+            createdAt: "2025-01-10T14:00:00Z",
+            labels: nil,
+            crossPost: nil,
+            viewer: nil
+        ),
+    ]
+
+    static let storyComments: [GrainComment] = [
+        GrainComment(
+            uri: "at://did:plc:prevuser2/social.grain.comment/sc1",
+            cid: "cid",
+            author: profile2,
+            text: "The sunlight through those maple leaves 😍",
+            subject: AnyCodable(stories[0].uri),
+            createdAt: "2025-01-10T18:30:00Z"
+        ),
+        GrainComment(
+            uri: "at://did:plc:prevuser3/social.grain.comment/sc2",
+            cid: "cid",
+            author: profile3,
+            text: "Kyoto in fall hits different. Which temple is this near?",
+            subject: AnyCodable(stories[0].uri),
+            createdAt: "2025-01-10T18:42:00Z"
+        ),
+        GrainComment(
+            uri: "at://did:plc:prevuser1/social.grain.comment/sc3",
+            cid: "cid",
+            author: yukiProfile,
+            text: "@sofia.grain.social it's Tofuku-ji — the whole valley is lit up right now",
+            replyTo: "at://did:plc:prevuser3/social.grain.comment/sc2",
+            createdAt: "2025-01-10T18:50:00Z"
+        ),
+        GrainComment(
+            uri: "at://did:plc:prevuser4/social.grain.comment/sc4",
+            cid: "cid",
+            author: profile4,
+            text: "Portra 400 pushing 1 stop?",
+            subject: AnyCodable(stories[0].uri),
+            createdAt: "2025-01-10T19:05:00Z"
+        ),
+        GrainComment(
+            uri: "at://did:plc:prevuser5/social.grain.comment/sc5",
+            cid: "cid",
+            author: profile5,
+            text: "Adding this to my travel bucket list 🍁",
+            subject: AnyCodable(stories[0].uri),
+            createdAt: "2025-01-10T19:12:00Z"
+        ),
+    ]
+
     // MARK: - PhotoItems (UIImage-based, for editor/grid/strip previews)
 
     static var photoItems: [PhotoItem] {
@@ -246,11 +358,11 @@ enum PreviewData {
     // MARK: - Story authors
 
     static let storyAuthors: [GrainStoryAuthor] = [
-        GrainStoryAuthor(profile: GrainProfile(cid: "c1", did: "did:plc:prevuser1", handle: "yuki.grain.social", displayName: "Yuki"), storyCount: 3, latestAt: "2025-01-10T18:00:00Z"),
-        GrainStoryAuthor(profile: GrainProfile(cid: "c2", did: "did:plc:prevuser2", handle: "marcus.grain.social", displayName: "Marcus"), storyCount: 1, latestAt: "2025-01-10T15:00:00Z"),
-        GrainStoryAuthor(profile: GrainProfile(cid: "c3", did: "did:plc:prevuser3", handle: "sofia.grain.social", displayName: "Sofia"), storyCount: 2, latestAt: "2025-01-10T12:00:00Z"),
-        GrainStoryAuthor(profile: GrainProfile(cid: "c4", did: "did:plc:prevuser4", handle: "kai.grain.social", displayName: "Kai"), storyCount: 1, latestAt: "2025-01-10T10:00:00Z"),
-        GrainStoryAuthor(profile: GrainProfile(cid: "c5", did: "did:plc:prevuser5", handle: "leo.grain.social", displayName: "Leo"), storyCount: 4, latestAt: "2025-01-10T08:00:00Z"),
+        GrainStoryAuthor(profile: yukiProfile, storyCount: 3, latestAt: "2025-01-10T18:00:00Z"),
+        GrainStoryAuthor(profile: profile2, storyCount: 1, latestAt: "2025-01-10T15:00:00Z"),
+        GrainStoryAuthor(profile: profile3, storyCount: 2, latestAt: "2025-01-10T12:00:00Z"),
+        GrainStoryAuthor(profile: profile4, storyCount: 1, latestAt: "2025-01-10T10:00:00Z"),
+        GrainStoryAuthor(profile: profile5, storyCount: 4, latestAt: "2025-01-10T08:00:00Z"),
     ]
 
     // MARK: - Notifications

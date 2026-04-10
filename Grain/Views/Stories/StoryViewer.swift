@@ -1144,10 +1144,15 @@ private struct StoryProgressBars: View {
 }
 
 #Preview {
-    StoryViewer(authors: PreviewData.storyAuthors, client: XRPCClient(baseURL: AuthManager.serverURL))
-        .environment(AuthManager())
-        .environment(LabelDefinitionsCache())
-        .environment(ViewedStoryStorage())
-        .environment(StoryStatusCache())
-        .environment(StoryFavoriteCache())
+    StoryViewer(
+        authors: PreviewData.storyAuthors,
+        startAuthorDid: "did:plc:prevuser1",
+        initialStories: PreviewData.stories,
+        client: XRPCClient(baseURL: AuthManager.serverURL)
+    )
+    .environment(AuthManager())
+    .environment(LabelDefinitionsCache())
+    .environment(ViewedStoryStorage())
+    .environment(StoryStatusCache())
+    .environment(StoryFavoriteCache())
 }
