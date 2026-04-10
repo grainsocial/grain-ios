@@ -31,19 +31,25 @@ final class ReorderDragState {
         impactGenerator.impactOccurred()
     }
 
+    /// Updates `dragOffset` and returns the proposed slot index if it changed.
+    /// The caller is responsible for wrapping `dragCurrentIndex` assignment in
+    /// `withAnimation` — calling `withAnimation` from inside @Observable methods
+    /// doesn't reliably propagate animation transactions to the Layout after the
+    /// first update, causing subsequent slot changes to snap instead of animate.
+    @discardableResult
     func handleDragChanged(
         translation: CGSize,
         itemCount: Int,
         columnCount: Int,
         stride: CGSize
-    ) {
+    ) -> Int? {
         guard let start = dragStartIndex,
               stride.width > 0, stride.height > 0
-        else { return }
+        else { return nil }
         dragOffset = translation
 
-        let colDelta = Int((dragOffset.width / stride.width).rounded())
-        let rowDelta = Int((dragOffset.height / stride.height).rounded())
+        let colDelta = Int((translation.width / stride.width).rounded())
+        let rowDelta = Int((translation.height / stride.height).rounded())
 
         let startRow = start / columnCount
         let startCol = start % columnCount
@@ -52,12 +58,8 @@ final class ReorderDragState {
         let rawProposed = proposedRow * columnCount + proposedCol
         let proposed = max(0, min(itemCount - 1, rawProposed))
 
-        if proposed != dragCurrentIndex {
-            withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) {
-                dragCurrentIndex = proposed
-            }
-            selectionGenerator.selectionChanged()
-        }
+        guard proposed != dragCurrentIndex else { return nil }
+        return proposed
     }
 
     func reset() {

@@ -462,6 +462,11 @@ struct PhotoEditor: View {
             )
             .listRowInsets(EdgeInsets())
             .listRowSeparator(.hidden)
+            .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { newHeight in
+                // Signpost the actual rendered row height so Instruments shows
+                // whether the section box is sized correctly per mode.
+                morphSignposter.emitEvent("LayoutRowHeight", "mode=\(mode.label),h=\(Int(newHeight))")
+            }
             .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { newWidth in
                 guard newWidth > 0 else { return }
                 var t = Transaction()
@@ -637,17 +642,20 @@ struct PhotoEditor: View {
     @Previewable @State var state: [PhotoItem] = PreviewData.photoItemsWithExif
     @Previewable @State var selected: UUID?
     @Previewable @State var mode: EditorMode = .preview
+    @Previewable @State var isReordering = false
+    @Previewable @State var isAnimatingMode = false
     @Previewable @State var zoomState = ImageZoomState()
     Form {
         PhotoEditor(
             items: $state,
             selectedPhotoID: $selected,
-            isReordering: .constant(false),
-            isAnimatingMode: .constant(false),
+            isReordering: $isReordering,
+            isAnimatingMode: $isAnimatingMode,
             mode: $mode,
             sendExif: false
         )
     }
+    .scrollDisabled(isReordering || isAnimatingMode)
     .environment(zoomState)
     .modifier(ImageZoomOverlay(zoomState: zoomState))
     .onAppear { selected = state.first?.id }
