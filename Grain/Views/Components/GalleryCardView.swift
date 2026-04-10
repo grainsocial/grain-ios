@@ -139,6 +139,7 @@ struct GalleryCardView: View {
     @Binding var gallery: GrainGallery
     let client: XRPCClient
     var onNavigate: () -> Void = {}
+    var onCommentTap: (() -> Void)?
     var onProfileTap: ((String) -> Void)?
     var onHashtagTap: ((String) -> Void)?
     var onLocationTap: ((String, String) -> Void)?
@@ -424,7 +425,7 @@ struct GalleryCardView: View {
             }
 
             Button {
-                onNavigate()
+                (onCommentTap ?? onNavigate)()
             } label: {
                 HStack(spacing: 5) {
                     Image(systemName: "bubble.right")
