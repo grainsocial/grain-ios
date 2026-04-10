@@ -335,9 +335,8 @@ struct PhotoEditor: View {
     @Binding var selectedPhotoID: UUID?
     @Binding var isReordering: Bool
     @Binding var isAnimatingMode: Bool
+    @Binding var mode: EditorMode
     let sendExif: Bool
-
-    @State private var mode: EditorMode = .preview
     @State private var gridContainerWidth: CGFloat = 0
     @State private var stripState = StripScrollState()
     @State private var reorderState = ReorderDragState()
@@ -500,25 +499,6 @@ struct PhotoEditor: View {
             .pickerStyle(.segmented)
             .disabled(isAnimatingMode)
         }
-
-        // MARK: Post Preview section
-
-        if let _ = selectedIndex, mode == .preview {
-            Section {
-                PhotoCarouselView(
-                    items: items,
-                    selectedPhotoID: $selectedPhotoID,
-                    sendExif: sendExif
-                )
-                .id(items.count)
-                .listRowInsets(EdgeInsets())
-                .listRowSeparator(.hidden)
-                .listRowBackground(Color.black)
-            } header: {
-                Text("Post Preview")
-            }
-            .transition(.opacity)
-        }
     }
 
     // MARK: - Cell view
@@ -612,16 +592,22 @@ struct PhotoEditor: View {
         index: Int
     ) {
         switch phase {
+        case .arming:
+            isReordering = true
         case .began:
             reorderState.beginDrag(itemID: itemID, at: index)
-            isReordering = true
         case .changed:
-            reorderState.handleDragChanged(
+            if let proposed = reorderState.handleDragChanged(
                 translation: translation,
                 itemCount: items.count,
                 columnCount: gridColumnCount,
                 stride: gridStride
-            )
+            ) {
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) {
+                    reorderState.dragCurrentIndex = proposed
+                }
+                reorderState.selectionGenerator.selectionChanged()
+            }
         case .ended, .cancelled:
             if let start = reorderState.dragStartIndex,
                let current = reorderState.dragCurrentIndex,
@@ -650,6 +636,7 @@ struct PhotoEditor: View {
 #Preview {
     @Previewable @State var state: [PhotoItem] = PreviewData.photoItemsWithExif
     @Previewable @State var selected: UUID?
+    @Previewable @State var mode: EditorMode = .preview
     @Previewable @State var zoomState = ImageZoomState()
     Form {
         PhotoEditor(
@@ -657,6 +644,7 @@ struct PhotoEditor: View {
             selectedPhotoID: $selected,
             isReordering: .constant(false),
             isAnimatingMode: .constant(false),
+            mode: $mode,
             sendExif: false
         )
     }

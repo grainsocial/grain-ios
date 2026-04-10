@@ -23,6 +23,10 @@ import UIKit
 /// long-press → drag → release lifecycle without sequencing two gestures.
 struct ReorderRecognizer: UIGestureRecognizerRepresentable {
     enum Phase {
+        /// Fired the moment a touch begins on the cell — before the 0.18s hold
+        /// completes. Lets the parent lock scroll immediately so the Form can't
+        /// steal the vertical component of a reorder drag.
+        case arming
         case began
         case changed
         case ended
@@ -119,7 +123,10 @@ struct ReorderRecognizer: UIGestureRecognizerRepresentable {
         nonisolated func gestureRecognizerShouldBegin(
             _: UIGestureRecognizer
         ) -> Bool {
-            MainActor.assumeIsolated { isEnabled }
+            MainActor.assumeIsolated {
+                if isEnabled { onChange(.arming, .zero) }
+                return isEnabled
+            }
         }
 
         nonisolated func gestureRecognizer(
