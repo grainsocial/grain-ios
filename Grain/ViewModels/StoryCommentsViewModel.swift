@@ -43,6 +43,13 @@ final class StoryCommentsViewModel {
 
     // MARK: - Preview Loading
 
+    /// Fires background preview loads for the given story URIs. Already-cached URIs are skipped.
+    func prefetchPreviews(for storyUris: [String], auth: AuthContext? = nil) {
+        for uri in storyUris where previewCache[uri] == nil {
+            Task { await loadPreview(storyUri: uri, auth: auth) }
+        }
+    }
+
     func loadPreview(storyUri: String, auth: AuthContext? = nil) async {
         if let cached = previewCache[storyUri] {
             if activeStoryUri == nil || activeStoryUri == storyUri {

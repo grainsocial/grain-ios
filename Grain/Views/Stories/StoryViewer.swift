@@ -203,9 +203,6 @@ struct StoryViewer: View {
                 .environment(viewedStories)
             }
         }
-        .onChange(of: showCommentSheet) { _, isShowing in
-            if !isShowing { startTimerIfSafe() }
-        }
         .task {
             // In preview, only continue if we have prefetched stories to show (no network)
             if isPreview, prefetchedStories.isEmpty { return }
@@ -596,6 +593,7 @@ struct StoryViewer: View {
                                     .font(.caption)
                                     .foregroundStyle(.white)
                                     .lineLimit(1)
+                                Spacer(minLength: 0)
                             }
                             .padding(.horizontal)
                             .padding(.bottom, 4)
@@ -890,7 +888,11 @@ struct StoryViewer: View {
         prefetchAdjacentAuthors()
         prefetchStoryImages()
         if let uri = targetStory?.uri {
-            Task { await commentsViewModel.switchToStory(uri: uri, auth: auth.authContext()) }
+            Task {
+                let ctx = await auth.authContext()
+                commentsViewModel.switchToStory(uri: uri, auth: ctx)
+                commentsViewModel.prefetchPreviews(for: fetched.map(\.uri), auth: ctx)
+            }
         }
     }
 
@@ -899,8 +901,10 @@ struct StoryViewer: View {
         let did = authors[nextIndex].profile.did
         guard prefetchedStories[did] == nil else { return }
         Task {
-            if let response = try? await client.getStories(actor: did, auth: auth.authContext()) {
+            let ctx = await auth.authContext()
+            if let response = try? await client.getStories(actor: did, auth: ctx) {
                 prefetchedStories[did] = response.stories
+                commentsViewModel.prefetchPreviews(for: response.stories.map(\.uri), auth: ctx)
             }
         }
     }
@@ -1003,11 +1007,18 @@ struct StoryViewer: View {
                 commentSheetFocusInput = false
                 showCommentSheet = true
             } label: {
-                Image(systemName: "bubble.left")
-                    .font(.body)
-                    .foregroundStyle(.white)
-                    .frame(width: 36, height: 36)
-                    .contentShape(Rectangle())
+                VStack(spacing: 2) {
+                    Image(systemName: "bubble.left")
+                        .font(.body)
+                    if commentsViewModel.totalCount > 0 {
+                        Text("\(commentsViewModel.totalCount)")
+                            .font(.caption2)
+                            .monospacedDigit()
+                    }
+                }
+                .foregroundStyle(.white)
+                .frame(width: 36, minHeight: 36)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
@@ -1086,27 +1097,29 @@ struct StoryViewer: View {
 
         if let favUri = existingFavUri {
             // Unfavorite — optimistic
-            stories[currentStoryIndex].viewer?.fav = nil
+            let prevViewer = stories[currentStoryIndex].viewer
+            stories[currentStoryIndex].viewer = nil
             storyFavoriteCache.unlike(story.uri)
             do {
                 try await FavoriteService.delete(favoriteUri: favUri, client: client, auth: authContext)
             } catch {
-                stories[currentStoryIndex].viewer?.fav = favUri
+                stories[currentStoryIndex].viewer = prevViewer
                 storyFavoriteCache.like(story.uri, favUri: favUri)
             }
         } else {
             // Favorite — optimistic
+            let prevViewer = stories[currentStoryIndex].viewer
             stories[currentStoryIndex].viewer = StoryViewerState(fav: "pending")
             do {
                 let response = try await FavoriteService.create(subject: story.uri, client: client, auth: authContext)
-                guard let newFavUri = response.uri else {
-                    stories[currentStoryIndex].viewer = nil
-                    return
+                if let newFavUri = response.uri {
+                    stories[currentStoryIndex].viewer = StoryViewerState(fav: newFavUri)
+                    storyFavoriteCache.like(story.uri, favUri: newFavUri)
+                } else {
+                    stories[currentStoryIndex].viewer = prevViewer
                 }
-                stories[currentStoryIndex].viewer = StoryViewerState(fav: newFavUri)
-                storyFavoriteCache.like(story.uri, favUri: newFavUri)
             } catch {
-                stories[currentStoryIndex].viewer = nil
+                stories[currentStoryIndex].viewer = prevViewer
             }
         }
     }
