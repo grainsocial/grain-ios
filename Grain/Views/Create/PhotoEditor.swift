@@ -12,8 +12,8 @@ private let morphSignposter = OSSignposter(subsystem: "social.grain.grain", cate
 /// Extracted from `PhotoEditor` so that cache mutations — cache hits, task
 /// bookkeeping — only invalidate `PhotoCarouselView`, which actually reads
 /// `previewCache`. Any mutation on a plain `@State` dictionary on `PhotoEditor`
-/// would have re-rendered the entire editor (PhotoStrip, ReorderablePhotoGrid,
-/// and captionsList too), even though none of those views touch this data.
+/// would have re-rendered the entire editor, even though none of those views
+/// touch this data.
 ///
 /// `@Observable` lets us be surgical: only `previewCache` participates in
 /// tracking, while the three bookkeeping properties are marked
@@ -21,42 +21,24 @@ private let morphSignposter = OSSignposter(subsystem: "social.grain.grain", cate
 @Observable
 @MainActor
 final class PreviewCacheStore {
-    /// Decoded hi-res images keyed by PhotoItem.id. Reads of this dict inside a
-    /// SwiftUI body will register a dependency; writes will trigger an update only
-    /// for views that read it. This is intentionally observable.
     var previewCache: [UUID: UIImage] = [:]
 
-    /// LRU eviction order. Internal bookkeeping — must NOT trigger re-renders.
     @ObservationIgnored private var previewCacheOrder: [UUID] = []
-    /// Set of IDs currently being loaded. Internal bookkeeping — must NOT trigger re-renders.
     @ObservationIgnored private var loadingPreviewIDs: Set<UUID> = []
-    /// Active prefetch tasks keyed by PhotoItem.id. Internal bookkeeping — must NOT trigger re-renders.
     @ObservationIgnored private var prefetchTasks: [UUID: Task<Void, Never>] = [:]
 
-    /// 1500pt is plenty for a phone-screen carousel — at 3x density that's 4500
-    /// pixels of horizontal resolution, more than the screen's native width.
     let previewMaxDimension: CGFloat = 1500
     let previewCacheLimit = 5
 
-    /// Cancel all in-flight tasks. Call from `onDisappear`.
     func cancelAllTasks() {
         prefetchTasks.values.forEach { $0.cancel() }
         prefetchTasks.removeAll()
     }
 
-    /// Load high-res previews for the currently-selected photo PLUS its immediate
-    /// neighbors (prev/next), so that by the time the user pinches to zoom, the
-    /// 1500pt preview is already in the cache instead of the 150pt thumbnail.
-    /// Without this prefetch the zoom overlay shows a heavily-blurred image until
-    /// the load completes — by which point the user has already given up.
     func prefetchPreviewsAroundSelection(items: [PhotoItem], selectedPhotoID: UUID?) {
         guard let id = selectedPhotoID,
               let centerIdx = items.firstIndex(where: { $0.id == id }) else { return }
         let state = photoLoadingSignposter.beginInterval("PrefetchWindow", id: photoLoadingSignposter.makeSignpostID(), "center=\(centerIdx),total=\(items.count)")
-        // ±2 window. At 1500pt max dimension a decoded preview can be ~50 MB;
-        // loading all photos would be ~1 GB. byPreparingForDisplay() in
-        // loadPreviewImage ensures each hi-res image is decompressed before the
-        // carousel draws it, so the first display never stalls the main thread.
         for offset in -2 ... 2 {
             let idx = centerIdx + offset
             guard items.indices.contains(idx) else { continue }
@@ -65,10 +47,6 @@ final class PreviewCacheStore {
         photoLoadingSignposter.endInterval("PrefetchWindow", state)
     }
 
-    /// Load a higher-resolution preview image for `item` into `previewCache` unless
-    /// it's already cached or in flight. The cache is bounded by `previewCacheLimit`
-    /// — when exceeded, the least-recently-used entry is evicted. The carousel reads
-    /// from this cache and falls back to `item.thumbnail` (150pt) while loading.
     private func loadPreviewIfNeeded(for item: PhotoItem, items: [PhotoItem]) {
         guard previewCache[item.id] == nil,
               !loadingPreviewIDs.contains(item.id) else { return }
@@ -77,10 +55,6 @@ final class PreviewCacheStore {
         let source = item.source
         let maxDim = previewMaxDimension
         let cacheLimit = previewCacheLimit
-        // Task.detached so MakeThumbnail + Decompress + LoadTransferable run on the
-        // cooperative thread pool instead of the main actor. Task { } in a @MainActor
-        // context inherits main-actor isolation — all async work still runs on the
-        // main thread, which is what was causing the 100–700ms scroll hangs.
         let task = Task.detached(priority: .utility) { [weak self] in
             let spid = photoLoadingSignposter.makeSignpostID()
             let previewState = photoLoadingSignposter.beginInterval("LoadPreview", id: spid)
@@ -91,11 +65,7 @@ final class PreviewCacheStore {
                 self.prefetchTasks.removeValue(forKey: id)
                 self.loadingPreviewIDs.remove(id)
                 guard let image else { return }
-                // Bail if the item was deleted while we were loading.
                 guard items.contains(where: { $0.id == id }) else { return }
-                // Move id to the most-recent slot in the LRU. removeAll-then-append
-                // is correct even if the id was somehow already present (it never
-                // double-counts in the order array).
                 self.previewCache[id] = image
                 self.previewCacheOrder.removeAll { $0 == id }
                 self.previewCacheOrder.append(id)
@@ -108,10 +78,6 @@ final class PreviewCacheStore {
         prefetchTasks[id] = task
     }
 
-    /// Static so the closure body doesn't capture `self`. For picker items we have
-    /// to fetch the original Data via PhotosPicker; for camera items the full UIImage
-    /// already lives in the PhotoSource enum. In both cases we downsize to
-    /// `maxDimension` so cached previews fit a sane memory budget.
     private nonisolated static func loadPreviewImage(source: PhotoSource, maxDimension: CGFloat) async -> UIImage? {
         switch source {
         case let .picker(pickerItem):
@@ -126,9 +92,6 @@ final class PreviewCacheStore {
             let thumbState = photoLoadingSignposter.beginInterval("MakeThumbnail", id: photoLoadingSignposter.makeSignpostID())
             let resized = PhotoItem.makeThumbnail(from: image, maxSize: maxDimension)
             photoLoadingSignposter.endInterval("MakeThumbnail", thumbState)
-            // Pre-decode so the bitmap is ready before the carousel draws it.
-            // byPreparingForDisplay() decompresses on a background thread; fall
-            // back to the undecompressed image if it returns nil.
             let decodeState = photoLoadingSignposter.beginInterval("Decompress", id: photoLoadingSignposter.makeSignpostID())
             let result = await resized.byPreparingForDisplay() ?? resized
             photoLoadingSignposter.endInterval("Decompress", decodeState)
@@ -147,26 +110,12 @@ final class PreviewCacheStore {
 
 // MARK: - Photo carousel view
 
-/// Self-contained carousel section content: the paged TabView, page-dot
-/// indicator, ALT-text pill, and EXIF info row.
-///
-/// Extracted from `PhotoEditor` so that the 4 cache-bookkeeping `@State`
-/// properties (previewCache, previewCacheOrder, loadingPreviewIDs,
-/// prefetchTasks) and `showingCarouselAlt` live here instead of on the editor.
-/// Any mutation to those properties now only triggers a re-render of this
-/// struct — not PhotoStrip, ReorderablePhotoGrid, or captionsList.
 struct PhotoCarouselView: View {
     let items: [PhotoItem]
     @Binding var selectedPhotoID: UUID?
     let sendExif: Bool
 
-    /// Tracks whether the ALT-text overlay is visible. Local to the carousel —
-    /// PhotoEditor doesn't need to know about this toggle.
     @State private var showingCarouselAlt = false
-    /// Cache store owned by this view. `@State` is the correct ownership
-    /// primitive for `@Observable` objects created inside a view — it gives the
-    /// store the same lifetime as the view without going through the
-    /// `@StateObject` path (which requires `ObservableObject`).
     @State private var cacheStore = PreviewCacheStore()
 
     private var selectedIndex: Int? {
@@ -195,8 +144,6 @@ struct PhotoCarouselView: View {
                                 ZoomableImage(
                                     localImage: item.carouselPreview,
                                     aspectRatio: item.naturalAspect,
-                                    // Pass the hi-res prefetched image for zoom if ready;
-                                    // ZoomableImage falls back to carouselPreview otherwise.
                                     zoomImage: cacheStore.previewCache[item.id]
                                 )
 
@@ -262,8 +209,6 @@ struct PhotoCarouselView: View {
         }
     }
 
-    // MARK: - Page indicator
-
     @ViewBuilder
     private var pageIndicator: some View {
         if items.count > 1 {
@@ -293,8 +238,6 @@ struct PhotoCarouselView: View {
         }
     }
 
-    // MARK: - ALT pill indicator
-
     @ViewBuilder
     private func altPillIndicator(for index: Int) -> some View {
         let hasAlt = !items[index].alt.trimmingCharacters(in: .whitespaces).isEmpty
@@ -318,14 +261,9 @@ struct PhotoCarouselView: View {
 
 // MARK: - Editor mode
 
-/// The three modes the gallery editor can be in. Owned by `PhotoEditor` as
-/// `@State` and surfaced via a segmented `Picker` in the section header.
 enum EditorMode: Equatable, CaseIterable {
-    /// Strip layout + Post Preview carousel.
     case preview
-    /// 3-column reorder grid.
     case reorder
-    /// Scrollable list of photos with inline alt-text fields.
     case captions
 
     var label: String {
@@ -339,253 +277,186 @@ enum EditorMode: Equatable, CaseIterable {
 
 // MARK: - Cell geometry
 
-/// Bundle of layout values a `PhotoThumbnailCell` needs to lay out its photo,
-/// mask, and X button. Computed once by the parent layout (PhotoStrip or
-/// ReorderablePhotoGrid) and passed in, so the cell can't be constructed with
-/// a mask side that doesn't match its mode (e.g. preview mode with a 200pt
-/// mask). The constraint lives in the type rather than in a runtime assert.
-///
-/// `photoSize` is derived from `mode`, `maskSide`, and `photoAspect` so that
-/// strip cells use scaledToFill semantics (smallest dim = maskSide, the other
-/// dim overflows so the square mask center-crops the photo) and grid cells
-/// use scaledToFit semantics (largest dim = maskSide, the other dim
-/// letterboxes inside the square mask so the *full* photo is visible).
 struct CellGeometry: Equatable {
     let mode: EditorMode
-    /// Side length of the square mask. Strip → 72; grid → column-width square.
     let maskSide: CGFloat
-    /// Photo's natural aspect ratio (w/h) from `item.thumbnail`.
     let photoAspect: CGFloat
 
-    /// The photo's rendered size after the mode-specific scaling rule. The
-    /// cell sets the inner image's `.frame` to exactly this size, then wraps
-    /// it in a `maskSide × maskSide` outer frame plus `.clipped()` so the
-    /// mask crops whatever falls outside.
     var photoSize: CGSize {
         switch mode {
         case .preview:
-            // scaledToFill: smaller dim of the rendered photo == maskSide,
-            // larger dim overflows so the mask center-crops it.
             photoAspect >= 1
                 ? CGSize(width: maskSide * photoAspect, height: maskSide)
                 : CGSize(width: maskSide, height: maskSide / photoAspect)
         case .reorder:
-            // scaledToFit: larger dim of the rendered photo == maskSide,
-            // smaller dim letterboxes inside the square mask. Result: the
-            // full photo is visible with empty space on the off-axis.
             photoAspect >= 1
                 ? CGSize(width: maskSide, height: maskSide / photoAspect)
                 : CGSize(width: maskSide * photoAspect, height: maskSide)
         case .captions:
-            // Captions list uses the same scaledToFill rule as preview so
-            // small row thumbnails fill their square without letterboxing.
             photoAspect >= 1
                 ? CGSize(width: maskSide * photoAspect, height: maskSide)
                 : CGSize(width: maskSide, height: maskSide / photoAspect)
         }
     }
 
-    /// Corner radius applied to the mask. Strip and captions cells get 8pt
-    /// rounded corners; grid cells get a sharp square so the full photo is
-    /// visible without a pinched edge.
     var maskCornerRadius: CGFloat {
         mode == .reorder ? 0 : 8
     }
 }
 
+// MARK: - Wallet-style removal transition
+
+private struct WalletRemoveModifier: ViewModifier {
+    let isRemoving: Bool
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(isRemoving ? 0.5 : 1, anchor: .center)
+            .offset(y: isRemoving ? -20 : 0)
+            .opacity(isRemoving ? 0 : 1)
+    }
+}
+
+extension AnyTransition {
+    static var walletRemove: AnyTransition {
+        .asymmetric(
+            insertion: .scale(scale: 0.85).combined(with: .opacity),
+            removal: .modifier(
+                active: WalletRemoveModifier(isRemoving: true),
+                identity: WalletRemoveModifier(isRemoving: false)
+            )
+        )
+    }
+}
+
+// MARK: - PhotoEditor
+
 struct PhotoEditor: View {
     @Binding var items: [PhotoItem]
     @Binding var selectedPhotoID: UUID?
-    /// True while a cell is in the picked-up state (between long-press-fires and
-    /// touch-release). The parent Form uses this to drive .scrollDisabled so that
-    /// vertical scroll is locked only during the actual drag — not during the
-    /// 0.18s arming window that precedes it.
     @Binding var isReordering: Bool
-    /// True for the duration of a strip↔grid↔captions mode morph. Hoisted to
-    /// the parent so CreateGalleryView can add it to `.scrollDisabled` — this
-    /// prevents UIKit's UICollectionView from adjusting scroll offset mid-morph,
-    /// which was shifting source/destination frames into different scroll
-    /// contexts and producing the "items fly in from the wrong direction" bug.
     @Binding var isAnimatingMode: Bool
     let sendExif: Bool
 
-    /// Current editor mode. Owned at this level so the section header button,
-    /// the strip/grid swap, and the conditional carousel + alt-text sections
-    /// all read from the same source of truth. Defaults to `.preview` so the
-    /// strip + carousel are visible when a gallery first appears.
     @State private var mode: EditorMode = .preview
-    /// Monotonically increasing counter. Each animation increments this before
-    /// scheduling its safety-net Task. The safety net captures the generation at
-    /// creation time and exits early if a newer animation has started since —
-    /// preventing a stale safety net from clearing `isAnimatingMode` mid-flight
-    /// in a subsequent animation.
-    @State private var morphGeneration = 0
-    /// Pre-measured width of the photos section row. The Group containing
-    /// strip/grid always occupies this row, so its width is known before the
-    /// grid mounts. Passing it in means ReorderablePhotoGrid has the correct
-    /// cellSide from frame zero — no mid-animation onGeometryChange correction.
     @State private var gridContainerWidth: CGFloat = 0
-    /// Shared namespace for the strip↔grid matched-geometry transition. The
-    /// namespace itself is declared once at the editor level and passed to both
-    /// PhotoThumbnailCell callsites so their photo views share stable geometry IDs
-    /// across the mode toggle.
-    @Namespace private var photoNamespace
+    @State private var stripState = StripScrollState()
+    @State private var reorderState = ReorderDragState()
 
     private var selectedIndex: Int? {
         guard let id = selectedPhotoID else { return nil }
         return items.firstIndex(where: { $0.id == id })
     }
 
-    /// Wraps `mode` so the segmented Picker gets the same `isAnimatingMode`
-    /// gating as the old button: gate goes up synchronously at the start of the
-    /// animation and comes back down in the completion handler.
-    ///
-    /// The `!isAnimatingMode` guard also prevents a mid-flight tap on a
-    /// different segment from racing with the in-progress transition.
-    ///
-    /// A timer-based gate drop replaces `withAnimation`'s completion handler,
-    /// which never fires when `matchedGeometryEffect` is involved (confirmed
-    /// via Instruments: 100% of morphs terminated via safety-net, 0% via
-    /// completion). The gate drop is wrapped in a nil-animation `Transaction`
-    /// so it doesn't re-trigger spring curves on cells (the source of the
-    /// end-of-morph jitter).
+    // Grid constants (shared with AdaptivePhotoLayout)
+    private let gridColumnCount = 3
+    private let gridSpacing: CGFloat = 4
+    private let gridOuterPadding: CGFloat = 16
+
+    private var gridCellSide: CGFloat {
+        let total = max(0, gridContainerWidth - gridOuterPadding * 2 - gridSpacing * CGFloat(gridColumnCount - 1))
+        return max(1, total / CGFloat(gridColumnCount))
+    }
+
+    private var gridStride: CGSize {
+        let side = gridCellSide + gridSpacing
+        return CGSize(width: side, height: side)
+    }
+
+    private var maskSide: CGFloat {
+        switch mode {
+        case .preview: StripScrollState.thumbSize
+        case .reorder: gridCellSide
+        case .captions: 60
+        }
+    }
+
+    private var dragPlacement: ReorderDragPlacement? {
+        guard let start = reorderState.dragStartIndex,
+              let current = reorderState.dragCurrentIndex
+        else { return nil }
+        return ReorderDragPlacement(
+            draggedIndex: start,
+            currentIndex: current,
+            dragOffset: reorderState.dragOffset
+        )
+    }
+
+    /// Mode binding with animation gate. Uses `withAnimation` completion
+    /// instead of timer-based gate drop — no matchedGeometryEffect means
+    /// completion actually fires. Safety-net timer per debugging playbook.
     private var modeBinding: Binding<EditorMode> {
         Binding(
             get: { mode },
             set: { newMode in
-                guard newMode != mode, !isAnimatingMode else {
-                    morphSignposter.emitEvent("MorphGateBlocked", "animating=\(isAnimatingMode),sameMode=\(newMode == mode)")
-                    return
-                }
+                guard newMode != mode, !isAnimatingMode, !reorderState.isDragging else { return }
 
-                morphGeneration += 1
-                let gen = morphGeneration
                 let morphSpid = morphSignposter.makeSignpostID()
-                let morphState = morphSignposter.beginInterval("MorphAnimation", id: morphSpid, "from=\(mode.label),to=\(newMode.label)")
+                let morphState = morphSignposter.beginInterval(
+                    "MorphAnimation", id: morphSpid,
+                    "from=\(mode.label),to=\(newMode.label)"
+                )
 
-                // Set the gate BEFORE withAnimation so it's a plain state
-                // mutation, not an animated one. isAnimatingMode is a @Binding
-                // to the parent — putting it inside withAnimation created a
-                // cross-view animation dependency (parent + child timelines)
-                // that prevented the completion handler from EVER firing
-                // (100% safety-net termination in Instruments). Only `mode`
-                // belongs inside withAnimation because it drives the morph.
                 isAnimatingMode = true
-                // .smooth has spring overshoot (damping < 1) which causes
-                // cell jitter as the Section row height settles. Use a
-                // critically-damped easeOut for captions transitions where
-                // matched-geometry is unreliable and the opacity crossfade
-                // is the primary visual. Keep .smooth for strip↔grid where
-                // the morph is tight and the spring feel is desirable.
-                let captionsInvolved = (mode == .captions || newMode == .captions)
-                let curve: Animation = captionsInvolved
-                    ? .spring(response: 0.35, dampingFraction: 1.0)
-                    : .smooth
-                withAnimation(curve) {
+                withAnimation(.smooth) {
                     mode = newMode
+                } completion: {
+                    morphSignposter.endInterval("MorphAnimation", morphState, "path=completion")
+                    isAnimatingMode = false
                 }
-                // Timer-based gate drop. Durations measured via Instruments
-                // CellGlobalFrame events (actual settling, not nominal):
-                //   .smooth → ~800ms (spring with slight underdamping)
-                //   .spring(0.35, 1.0) → ~450ms (critically damped, no overshoot)
-                // The gate drop is wrapped in a nil-animation Transaction
-                // so flipping isAnimatingMode doesn't re-trigger the cell's
-                // gated `.animation(.spring, value:)` modifiers — that
-                // re-triggering was the "stutter at the end" bug.
-                let gateDuration: Duration = captionsInvolved
-                    ? .milliseconds(450)
-                    : .milliseconds(800)
+                // Safety net — completion should fire, but iOS can drop it
+                // if a concurrent transaction replaces the animation mid-flight.
                 Task { @MainActor in
-                    try? await Task.sleep(for: gateDuration)
-                    guard morphGeneration == gen else { return }
-                    morphSignposter.endInterval("MorphAnimation", morphState, "path=timer")
-                    var t = Transaction()
-                    t.animation = nil
-                    withTransaction(t) { isAnimatingMode = false }
+                    try? await Task.sleep(for: .milliseconds(800))
+                    isAnimatingMode = false
                 }
             }
         )
     }
 
     var body: some View {
-        // MARK: Photos section (strip OR grid)
+        // MARK: Photos section
 
         Section {
-            // Plain if/else/else swap (NOT a ZStack with all subtrees mounted).
-            // Only one layout is in the view tree at a time, which means:
-            //
-            //   1. The Section's natural height is the active layout's height,
-            //      so the strip section actually expands DOWN into the grid
-            //      (or captions list) when mode flips inside withAnimation.
-            //   2. matched-geometry can't have two simultaneous sources for
-            //      the same id, so no isActive plumbing is needed.
-            //   3. The inactive layouts don't run a layout pass each frame,
-            //      which removes the background work that was stuttering the
-            //      strip's auto-scroll on tap.
-            //
-            // Critically, all three modes render as a SINGLE list row in the
-            // Section. Earlier the captions list was placed directly in the
-            // Section as a ForEach of independent rows so `.swipeActions`
-            // could fire per-item — but that made the Section's row count
-            // flip between 1 and N inside `withAnimation`, which sent UIKit's
-            // UICollectionViewCompositionalLayout into a recursive layout-loop
-            // assertion. Keeping the row count constant at 1 sidesteps that
-            // crash and lets matched-geometry morph cleanly across all three
-            // modes. The cost is that captions rows can't use list-row-level
-            // modifiers like `.swipeActions` or `.listRowBackground`.
-            //
-            // matched-geometry still pairs the cells across the swap because
-            // all three layouts use the same `photoNamespace` and the same
-            // `item.id` per cell, and the swap is wrapped in withAnimation —
-            // SwiftUI snapshots the source's bounds at unmount and animates
-            // the destination from those bounds to its natural bounds. The
-            // critical detail is that `MatchedPhotoModifier` is applied to
-            // the OUTER cell frame (not the inner image), so the cell's
-            // POSITION is what gets paired, not just the inner image bounds.
-            Group {
-                // Branch order matters: `if/else/else` compiles to nested
-                // _ConditionalContent<A, _ConditionalContent<B, C>>. The
-                // INNER pair (B↔C) doesn't reliably capture matched-geometry
-                // frames on branch swap. Putting grid (reorder) in the OUTER
-                // position ensures grid↔captions is an outer change — both
-                // directions now get proper frame capture. Strip↔captions
-                // becomes the inner pair, but those transitions already rely
-                // on the opacity fade (not matched-geometry), so the degraded
-                // inner-change behavior doesn't matter.
-                if mode == .reorder {
-                    ReorderablePhotoGrid(
-                        items: $items,
-                        selectedPhotoID: $selectedPhotoID,
-                        isReordering: $isReordering,
-                        matchedNamespace: photoNamespace,
-                        containerWidth: gridContainerWidth,
-                        isAnimatingMode: isAnimatingMode,
-                        sendExif: sendExif
-                    )
-                } else if mode == .preview {
-                    PhotoStrip(
-                        items: $items,
-                        selectedPhotoID: $selectedPhotoID,
-                        matchedNamespace: photoNamespace,
-                        isAnimatingMode: isAnimatingMode,
-                        sendExif: sendExif,
-                        containerWidth: gridContainerWidth
-                    )
-                } else {
-                    // Asymmetric: fade IN (fallback for strip→captions
-                    // which is the inner conditional pair and doesn't
-                    // get reliable matched-geometry). Identity removal
-                    // so captions→grid/strip uses matched-geometry as
-                    // the sole morph driver — .opacity removal competed
-                    // with matched-geometry and made the first grid row
-                    // appear to slide down from the captions' left edge.
-                    captionsList
-                        .transition(.asymmetric(
-                            insertion: .opacity,
-                            removal: .identity
-                        ))
+            AdaptivePhotoLayout(
+                mode: mode,
+                containerWidth: gridContainerWidth,
+                stripScrollOffset: stripState.currentOffset,
+                dragPlacement: dragPlacement
+            ) {
+                ForEach($items) { $item in
+                    let index = items.firstIndex(where: { $0.id == item.id }) ?? 0
+                    let exifState: ExifState = {
+                        guard item.exifSummary != nil else { return .absent }
+                        return sendExif ? .active : .inactive
+                    }()
+
+                    cellView(item: $item, index: index, exifState: exifState)
+                        .zIndex(reorderState.draggedID == item.id ? 1000 : 0)
+                        .gesture(
+                            ReorderRecognizer(isEnabled: mode == .reorder) { phase, translation in
+                                handleReorder(phase: phase, translation: translation, itemID: item.id, index: index)
+                            }
+                        )
+                        .transition(mode == .preview ? .walletRemove : .opacity)
+                        .layoutValue(key: PhotoIndexKey.self, value: index)
                 }
             }
+            .clipped()
+            .contentShape(Rectangle())
+            .gesture(
+                StripPanRecognizer(
+                    isEnabled: mode == .preview,
+                    onChanged: { stripState.dragTranslation = $0 },
+                    onEnded: { t, p in
+                        stripState.handleDragEnded(
+                            translation: t,
+                            predictedEnd: p,
+                            containerWidth: gridContainerWidth,
+                            itemCount: items.count
+                        )
+                    }
+                )
+            )
             .listRowInsets(EdgeInsets())
             .listRowSeparator(.hidden)
             .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { newWidth in
@@ -593,6 +464,28 @@ struct PhotoEditor: View {
                 var t = Transaction()
                 t.animation = nil
                 withTransaction(t) { gridContainerWidth = newWidth }
+            }
+            .onChange(of: gridContainerWidth) { _, newWidth in
+                guard newWidth > 0, !isAnimatingMode else { return }
+                if let id = selectedPhotoID,
+                   let idx = items.firstIndex(where: { $0.id == id })
+                {
+                    stripState.scrollToIndex(idx, itemCount: items.count, containerWidth: newWidth, animated: false)
+                }
+            }
+            .onChange(of: selectedPhotoID) { _, newID in
+                guard mode == .preview, !isAnimatingMode,
+                      let newID, let idx = items.firstIndex(where: { $0.id == newID })
+                else { return }
+                stripState.scrollToIndex(idx, itemCount: items.count, containerWidth: gridContainerWidth)
+            }
+            .onChange(of: mode) { _, newMode in
+                if newMode == .preview, gridContainerWidth > 0,
+                   let id = selectedPhotoID,
+                   let idx = items.firstIndex(where: { $0.id == id })
+                {
+                    stripState.scrollToIndex(idx, itemCount: items.count, containerWidth: gridContainerWidth, animated: false)
+                }
             }
         } header: {
             Picker("Mode", selection: modeBinding) {
@@ -604,27 +497,10 @@ struct PhotoEditor: View {
             .disabled(isAnimatingMode)
         }
 
-        // MARK: Post Preview section (carousel + EXIF) — preview mode only
+        // MARK: Post Preview section
 
-        // The section stays in the tree for the entire duration of any
-        // transition that touches preview mode (mode == .preview OR
-        // isAnimatingMode). This prevents the hard-cut that would occur if we
-        // only gated on mode == .preview and the section left the tree the
-        // instant mode flipped to something else.
-        //
-        // `showingCarousel` is the single truth that drives both opacity and
-        // frame height simultaneously:
-        //   - Height 0 while hidden so the section takes no layout space and
-        //     the form doesn't show a black gap mid-morph.
-        //   - Both dimensions animate together on the .smooth curve so the
-        //     carousel expands+fades in as one motion.
         if let _ = selectedIndex, mode == .preview {
             Section {
-                // .id(items.count) forces UICollectionView to remeasure this
-                // row whenever photos are added or removed. SwiftUI propagating
-                // a changed .aspectRatio alone is not enough — UIKit's
-                // compositional layout caches row heights and won't re-query
-                // the cell unless its view identity changes.
                 PhotoCarouselView(
                     items: items,
                     selectedPhotoID: $selectedPhotoID,
@@ -641,94 +517,123 @@ struct PhotoEditor: View {
         }
     }
 
-    // MARK: - Captions list
+    // MARK: - Cell view
 
-    /// Vertical stack of photo rows, shown in `.captions` mode. The whole list
-    /// is one single Form row — not N independent rows — so the photos Section
-    /// keeps a constant row count of 1 across all three modes. See the comment
-    /// in `body` for why that matters (compositional-layout recursion).
-    ///
-    /// One consequence of being a single row: list-row-level modifiers like
-    /// `.swipeActions` and `.listRowBackground` no longer apply per-item.
-    private var captionsList: some View {
-        VStack(spacing: 0) {
-            ForEach($items) { $item in
-                let exifState: ExifState = {
-                    guard item.exifSummary != nil else { return .absent }
-                    return sendExif ? .active : .inactive
-                }()
+    private func cellView(item: Binding<PhotoItem>, index: Int, exifState: ExifState) -> some View {
+        HStack(alignment: .top, spacing: mode == .captions ? 12 : 0) {
+            PhotoThumbnailCell(
+                item: item,
+                geometry: CellGeometry(
+                    mode: mode,
+                    maskSide: maskSide,
+                    photoAspect: item.wrappedValue.naturalAspect
+                ),
+                isSelected: mode == .preview && selectedPhotoID == item.wrappedValue.id,
+                isDragging: reorderState.draggedID == item.wrappedValue.id,
+                hideDelete: mode != .preview,
+                deleteOpacity: mode == .preview
+                    ? stripState.deleteOpacity(cellIndex: index, containerWidth: gridContainerWidth)
+                    : 1,
+                exifState: mode == .reorder ? .absent : exifState,
+                isAnimatingMode: isAnimatingMode,
+                onTap: { handleCellTap(itemID: item.wrappedValue.id, index: index) },
+                onDelete: { handleDelete(itemID: item.wrappedValue.id) }
+            )
 
-                HStack(alignment: .top, spacing: 12) {
-                    // Unified on PhotoThumbnailCell so the matched-geometry
-                    // endpoint for captions has the SAME view hierarchy as
-                    // strip and grid. Previously captions used a bare
-                    // `Image.scaledToFill().frame(60).clipped().cornerRadius(8)`
-                    // which gave matched-geometry an apples-to-oranges pairing
-                    // against strip/grid's full PhotoThumbnailCell.
-                    // `hideDelete: true` suppresses the corner X button and
-                    // the altPill (both edited via the trailing Button and
-                    // TextField respectively); the EXIF chip still renders
-                    // because ExifChip visibility is now gated purely by
-                    // `exifState`, not by `hideDelete`.
-                    //
-                    // `isMatchedSource` toggles with `isAnimatingMode`:
-                    //   During the transition (isAnimatingMode=true), cells
-                    //   are sources so matched-geometry has frames to animate
-                    //   from/to. Form scroll is locked (.scrollDisabled) so
-                    //   cells stay at their visible positions — the off-screen
-                    //   source-frame bug that prompted the original
-                    //   isMatchedSource:false can't occur.
-                    //
-                    //   At rest (isAnimatingMode=false), cells revert to
-                    //   destination-only. If the user scrolls the captions
-                    //   list and cells move off-screen, their frames won't
-                    //   pollute the matched-geometry namespace.
-                    PhotoThumbnailCell(
-                        item: $item,
-                        geometry: CellGeometry(
-                            mode: .captions,
-                            maskSide: 60,
-                            photoAspect: item.naturalAspect
-                        ),
-                        isSelected: false,
-                        hideDelete: true,
-                        exifState: exifState,
-                        matchedNamespace: photoNamespace,
-                        isMatchedSource: isAnimatingMode,
-                        isAnimatingMode: isAnimatingMode,
-                        onTap: {},
-                        onDelete: {}
-                    )
-
-                    TextField(
-                        "Add a description",
-                        text: $item.alt,
-                        axis: .vertical
-                    )
+            if mode == .captions {
+                TextField("Add a description", text: item.alt, axis: .vertical)
                     .font(.subheadline)
                     .lineLimit(2 ... 4)
 
-                    // Clear-text button — only visible when there is text.
-                    // Uses xmark.circle.fill (the iOS standard clear-field
-                    // glyph) so it reads as a text-editing affordance.
-                    if !item.alt.isEmpty {
-                        Button {
-                            item.alt = ""
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 20))
-                                .foregroundStyle(.secondary)
-                                .frame(width: 44, height: 44)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Clear caption")
+                Spacer(minLength: 0)
+
+                if !item.wrappedValue.alt.isEmpty {
+                    Button {
+                        item.wrappedValue.alt = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 20))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Clear caption")
                 }
-                .padding(.vertical, 10)
             }
         }
-        .padding(.horizontal, 16)
+    }
+
+    // MARK: - Handlers
+
+    private func handleCellTap(itemID: UUID, index: Int) {
+        guard mode == .preview else { return }
+        withAnimation(.snappy) {
+            selectedPhotoID = itemID
+            stripState.baseOffset = StripScrollState.offset(
+                forIndex: index,
+                itemCount: items.count,
+                containerWidth: gridContainerWidth
+            )
+        }
+    }
+
+    private func handleDelete(itemID: UUID) {
+        if selectedPhotoID == itemID,
+           let removedIdx = items.firstIndex(where: { $0.id == itemID })
+        {
+            let newID: UUID? = removedIdx > 0
+                ? items[removedIdx - 1].id
+                : removedIdx < items.count - 1 ? items[removedIdx + 1].id : nil
+            selectedPhotoID = newID
+        }
+        let curve: Animation = mode == .preview
+            ? .smooth
+            : .spring(response: 0.3, dampingFraction: 0.8)
+        withAnimation(curve) {
+            items.removeAll { $0.id == itemID }
+        }
+    }
+
+    private func handleReorder(
+        phase: ReorderRecognizer.Phase,
+        translation: CGSize,
+        itemID: UUID,
+        index: Int
+    ) {
+        switch phase {
+        case .began:
+            reorderState.beginDrag(itemID: itemID, at: index)
+            isReordering = true
+        case .changed:
+            reorderState.handleDragChanged(
+                translation: translation,
+                itemCount: items.count,
+                columnCount: gridColumnCount,
+                stride: gridStride
+            )
+        case .ended, .cancelled:
+            if let start = reorderState.dragStartIndex,
+               let current = reorderState.dragCurrentIndex,
+               start != current
+            {
+                withAnimation(.snappy) {
+                    items.move(
+                        fromOffsets: IndexSet(integer: start),
+                        toOffset: current > start ? current + 1 : current
+                    )
+                    reorderState.dragOffset = .zero
+                    reorderState.dragStartIndex = nil
+                    reorderState.dragCurrentIndex = nil
+                    isReordering = false
+                } completion: {
+                    reorderState.draggedID = nil
+                }
+            } else {
+                reorderState.reset()
+                isReordering = false
+            }
+        }
     }
 }
 

@@ -30,15 +30,23 @@ struct ReorderRecognizer: UIGestureRecognizerRepresentable {
     }
 
     let minimumPressDuration: TimeInterval
+    /// When false, `gestureRecognizerShouldBegin` returns false so the
+    /// recognizer never fires. Used to gate on editor mode.
+    var isEnabled: Bool
     let onChange: (Phase, CGSize) -> Void
 
-    init(minimumPressDuration: TimeInterval = 0.18, onChange: @escaping (Phase, CGSize) -> Void) {
+    init(
+        minimumPressDuration: TimeInterval = 0.18,
+        isEnabled: Bool = true,
+        onChange: @escaping (Phase, CGSize) -> Void
+    ) {
         self.minimumPressDuration = minimumPressDuration
+        self.isEnabled = isEnabled
         self.onChange = onChange
     }
 
     func makeCoordinator(converter _: CoordinateSpaceConverter) -> Coordinator {
-        Coordinator(onChange: onChange)
+        Coordinator(isEnabled: isEnabled, onChange: onChange)
     }
 
     func makeUIGestureRecognizer(context: Context) -> UILongPressGestureRecognizer {
@@ -67,6 +75,7 @@ struct ReorderRecognizer: UIGestureRecognizerRepresentable {
 
     func updateUIGestureRecognizer(_ recognizer: UILongPressGestureRecognizer, context: Context) {
         recognizer.minimumPressDuration = minimumPressDuration
+        context.coordinator.isEnabled = isEnabled
         context.coordinator.onChange = onChange
     }
 
@@ -99,15 +108,20 @@ struct ReorderRecognizer: UIGestureRecognizerRepresentable {
     @MainActor
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
         var startLocation: CGPoint?
+        var isEnabled: Bool
         var onChange: (Phase, CGSize) -> Void
 
-        init(onChange: @escaping (Phase, CGSize) -> Void) {
+        init(isEnabled: Bool, onChange: @escaping (Phase, CGSize) -> Void) {
+            self.isEnabled = isEnabled
             self.onChange = onChange
         }
 
-        /// Allow scroll views and SwiftUI tap recognizers to recognize alongside us.
-        /// Without this, holding-then-dragging on a cell would either eat the tap or
-        /// block the parent Form's vertical scroll.
+        nonisolated func gestureRecognizerShouldBegin(
+            _: UIGestureRecognizer
+        ) -> Bool {
+            MainActor.assumeIsolated { isEnabled }
+        }
+
         nonisolated func gestureRecognizer(
             _: UIGestureRecognizer,
             shouldRecognizeSimultaneouslyWith _: UIGestureRecognizer

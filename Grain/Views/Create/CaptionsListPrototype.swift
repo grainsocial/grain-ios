@@ -3,7 +3,6 @@ import UIKit
 
 struct CaptionsListPrototype: View {
     @State var items: [PhotoItem] = []
-    var matchedNamespace: Namespace.ID?
     @State private var sendExif = true
 
     var body: some View {
@@ -25,7 +24,6 @@ struct CaptionsListPrototype: View {
                             .frame(width: 60, height: 60)
                             .clipped()
                             .cornerRadius(8)
-                            .modifier(MatchedPhotoModifier(id: item.id, namespace: matchedNamespace))
 
                         VStack(alignment: .leading, spacing: 6) {
                             TextField("Add a description for accessibility", text: $item.alt, axis: .vertical)
