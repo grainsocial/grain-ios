@@ -1,6 +1,10 @@
 import Nuke
 import NukeUI
+import os
 import SwiftUI
+
+private let svLogger = Logger(subsystem: "social.grain.grain", category: "StoryViewer")
+private let svSignposter = OSSignposter(subsystem: "social.grain.grain", category: "StoryViewer")
 
 @Observable
 @MainActor
@@ -11,6 +15,8 @@ private final class StoryTimer {
     private let duration: TimeInterval = 5.0
 
     func start() {
+        svLogger.info("[timer.start] called")
+        svSignposter.emitEvent("timer.start")
         stop()
         progress = 0
         isRunning = true
@@ -31,11 +37,17 @@ private final class StoryTimer {
             }
             guard !Task.isCancelled else { return }
             isRunning = false
+            svLogger.info("[timer.complete] fired onComplete")
+            svSignposter.emitEvent("timer.complete")
             onComplete?()
         }
     }
 
     func stop() {
+        if isRunning {
+            svLogger.info("[timer.stop] called (was running)")
+            svSignposter.emitEvent("timer.stop")
+        }
         task?.cancel()
         task = nil
         isRunning = false
@@ -135,7 +147,8 @@ struct StoryViewer: View {
     }
 
     var body: some View {
-        ZStack {
+        let _ = svLogger.debug("[body] eval showCommentSheet=\(showCommentSheet) storiesCount=\(stories.count) currentIdx=\(currentStoryIndex) imageLoaded=\(imageLoaded)")
+        return ZStack {
             if let pendingIdx = pendingTransition.authorIndex {
                 pendingFaceView(authorIdx: pendingIdx)
                     .offset(x: faceOffsets.pending)
@@ -154,6 +167,8 @@ struct StoryViewer: View {
                     .transition(.identity)
             }
         }
+        .onAppear { svLogger.info("[body] onAppear") }
+        .onDisappear { svLogger.info("[body] onDisappear") }
         .clipped()
         .background(Color.black.ignoresSafeArea())
         .background(
@@ -187,6 +202,7 @@ struct StoryViewer: View {
             if reportTarget == nil { timer.start() }
         }
         .sheet(isPresented: $showCommentSheet) {
+            let _ = svLogger.info("[sheet.content] body eval sheetStoryUri=\(sheetStoryUri ?? "nil") currentStoryURI=\(currentStory?.uri ?? "nil")")
             if let uri = sheetStoryUri {
                 StoryCommentSheet(
                     viewModel: commentsViewModel,
@@ -203,13 +219,34 @@ struct StoryViewer: View {
                 .environment(auth)
                 .environment(storyStatusCache)
                 .environment(viewedStories)
+                .onAppear { svLogger.info("[sheet.content] onAppear uri=\(uri)") }
+                .onDisappear { svLogger.info("[sheet.content] onDisappear") }
+            } else {
+                let _ = svLogger.info("[sheet.content] EMPTY (sheetStoryUri nil)")
             }
         }
+        .onChange(of: showCommentSheet) { old, new in
+            svLogger.info("[onChange showCommentSheet] \(old) → \(new) sheetStoryUri=\(sheetStoryUri ?? "nil")")
+        }
+        .onChange(of: imageLoaded) { old, new in
+            svLogger.info("[onChange imageLoaded] \(old) → \(new)")
+        }
+        .onChange(of: currentStoryIndex) { old, new in
+            svLogger.info("[onChange currentStoryIndex] \(old) → \(new)")
+        }
+        .onChange(of: stories.count) { old, new in
+            svLogger.info("[onChange stories.count] \(old) → \(new)")
+        }
         .task {
+            svLogger.info("[task] fired hasLoadedInitialStories=\(hasLoadedInitialStories) showCommentSheet=\(showCommentSheet)")
+            svSignposter.emitEvent("task.fired", "hasLoaded=\(hasLoadedInitialStories),sheetOpen=\(showCommentSheet)")
             // Guard against re-runs: .task can re-fire when the view re-enters the
             // hierarchy (e.g. after sheet presentation cycles), and we only want to
             // load stories once per StoryViewer instance.
-            guard !hasLoadedInitialStories else { return }
+            guard !hasLoadedInitialStories else {
+                svLogger.info("[task] skipping re-run")
+                return
+            }
             hasLoadedInitialStories = true
             if isPreview, prefetchedStories.isEmpty { return }
             let startAuthor = authors[currentAuthorIndex]
@@ -221,6 +258,7 @@ struct StoryViewer: View {
                 timer.onQuarter = { [self] in markCurrentStoryViewed() }
             }
             await loadStoriesForCurrentAuthor()
+            svLogger.info("[task] done")
         }
     }
 
@@ -377,6 +415,7 @@ struct StoryViewer: View {
                                 //     Text("fullsize · cache").font(.caption2.bold()).padding(6).background(.black.opacity(0.5)).foregroundStyle(.white).padding(8)
                                 // }
                                 .onAppear {
+                                    svLogger.info("[image.onAppear cached-fullsize] imageLoaded=\(imageLoaded) showCommentSheet=\(showCommentSheet)")
                                     if !imageLoaded {
                                         imageLoaded = true
                                         startTimerIfSafe()
@@ -399,6 +438,7 @@ struct StoryViewer: View {
                                         //     Text("fullsize · network").font(.caption2.bold()).padding(6).background(.black.opacity(0.5)).foregroundStyle(.white).padding(8)
                                         // }
                                         .onAppear {
+                                            svLogger.info("[image.onAppear lazy-fullsize] imageLoaded=\(imageLoaded) showCommentSheet=\(showCommentSheet)")
                                             if !imageLoaded {
                                                 imageLoaded = true
                                                 startTimerIfSafe()
@@ -627,8 +667,12 @@ struct StoryViewer: View {
     }
 
     private func startTimerIfSafe() {
-        guard imageLoaded else { return }
+        guard imageLoaded else {
+            svLogger.info("[startTimerIfSafe] skipped (imageLoaded=false)")
+            return
+        }
         let action = storyLabelResult.action
+        svLogger.info("[startTimerIfSafe] action=\(String(describing: action)) showCommentSheet=\(showCommentSheet)")
         if action == .none || action == .badge { timer.start() }
     }
 
@@ -660,6 +704,8 @@ struct StoryViewer: View {
     }
 
     private func advanceStory(by delta: Int) {
+        svLogger.info("[advanceStory] delta=\(delta) currentIdx=\(currentStoryIndex)")
+        svSignposter.emitEvent("advanceStory", "delta=\(delta)")
         timer.progress = 0
         let newIndex = currentStoryIndex + delta
         let nextStory = stories.indices.contains(newIndex) ? stories[newIndex] : nil
@@ -855,25 +901,32 @@ struct StoryViewer: View {
     }
 
     private func loadStoriesForCurrentAuthor() async {
+        svLogger.info("[loadStoriesForCurrentAuthor] enter authorIdx=\(currentAuthorIndex)")
+        svSignposter.emitEvent("loadStoriesForCurrentAuthor.enter")
         guard currentAuthorIndex < authors.count else { return }
         let did = authors[currentAuthorIndex].profile.did
         isLoadingStories = true
         timer.stop()
 
         do {
+            let fromCache = prefetchedStories[did] != nil
             let fetched: [GrainStory] = if let cached = prefetchedStories.removeValue(forKey: did) {
                 cached
             } else {
                 try await client.getStories(actor: did, auth: auth.authContext()).stories
             }
+            svLogger.info("[loadStoriesForCurrentAuthor] fetched count=\(fetched.count) fromCache=\(fromCache)")
             presentStories(fetched)
         } catch {
+            svLogger.error("[loadStoriesForCurrentAuthor] error: \(error)")
             stories = []
             isLoadingStories = false
         }
     }
 
     private func presentStories(_ fetched: [GrainStory], resumeIndex: Int? = nil) {
+        svLogger.info("[presentStories] enter count=\(fetched.count) resumeIndex=\(resumeIndex ?? -1) showCommentSheet=\(showCommentSheet)")
+        svSignposter.emitEvent("presentStories.enter", "count=\(fetched.count),sheetOpen=\(showCommentSheet)")
         let targetIndex: Int
         if let resume = resumeIndex {
             targetIndex = min(resume, max(fetched.count - 1, 0))
@@ -1002,7 +1055,12 @@ struct StoryViewer: View {
     /// content doesn't depend on a live reading of `currentStory` (which can
     /// flicker to nil during view re-renders).
     private func openCommentSheet(focusInput: Bool) {
-        guard let uri = currentStory?.uri else { return }
+        guard let uri = currentStory?.uri else {
+            svLogger.info("[openCommentSheet] SKIPPED (currentStory nil)")
+            return
+        }
+        svLogger.info("[openCommentSheet] uri=\(uri) focusInput=\(focusInput)")
+        svSignposter.emitEvent("openCommentSheet", "focusInput=\(focusInput)")
         timer.stop()
         sheetStoryUri = uri
         commentSheetFocusInput = focusInput
