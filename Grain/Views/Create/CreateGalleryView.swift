@@ -115,8 +115,8 @@ struct CreateGalleryView: View {
             // overlay. Also stays locked during reorder, same as before.
             .scrollDisabled(isReordering || isAnimatingMode || imageZoomState.showOverlay)
             .scrollDismissesKeyboard(.interactively)
-            .interactiveDismissDisabled(isReordering)
         }
+        .interactiveDismissDisabled(isReordering)
         .safeAreaInset(edge: .bottom) {
             MentionSuggestionOverlay(state: mentionState) { suggestion in
                 mentionState.complete(handle: suggestion.handle, in: &description)
@@ -173,6 +173,7 @@ struct CreateGalleryView: View {
                     }
                 } label: {
                     Image(systemName: "xmark")
+                        .foregroundStyle(hasChanges ? .red : .primary)
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {
@@ -190,7 +191,7 @@ struct CreateGalleryView: View {
             }
         }
         .interactiveDismissDisabled(hasChanges)
-        .confirmationDialog("Discard gallery?", isPresented: $showDiscardAlert, titleVisibility: .visible) {
+        .alert("Discard gallery?", isPresented: $showDiscardAlert) {
             Button("Discard Changes", role: .destructive) { dismiss() }
             Button("Keep Editing", role: .cancel) {}
         }
