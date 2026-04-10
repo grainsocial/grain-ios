@@ -117,19 +117,14 @@ final class StoryCommentsViewModel {
         guard !trimmed.isEmpty else { return }
 
         isPostingComment = true
-        var recordDict: [String: String] = [
-            "text": trimmed,
-            "subject": storyUri,
-            "createdAt": DateFormatting.nowISO(),
-        ]
-        if let replyTarget = replyTo {
-            recordDict["replyTo"] = replyTarget.uri
-        }
-        let record = AnyCodable(recordDict)
-        let repo = TokenStorage.userDID ?? ""
-
         do {
-            _ = try await client.createRecord(collection: "social.grain.comment", repo: repo, record: record, auth: auth)
+            _ = try await CommentService.create(
+                subject: storyUri,
+                text: trimmed,
+                replyTo: replyTo?.uri,
+                client: client,
+                auth: auth
+            )
             previewCache.removeValue(forKey: storyUri)
             await loadComments(storyUri: storyUri, auth: auth)
         } catch {
@@ -139,9 +134,8 @@ final class StoryCommentsViewModel {
     }
 
     func deleteComment(_ comment: GrainComment, storyUri: String, auth: AuthContext) async {
-        let rkey = comment.uri.split(separator: "/").last.map(String.init) ?? ""
         do {
-            try await client.deleteRecord(collection: "social.grain.comment", rkey: rkey, auth: auth)
+            try await CommentService.delete(commentUri: comment.uri, client: client, auth: auth)
             comments.removeAll { $0.uri == comment.uri }
             totalCount = max(totalCount - 1, 0)
 

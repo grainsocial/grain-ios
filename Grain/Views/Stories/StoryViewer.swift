@@ -1069,9 +1069,8 @@ struct StoryViewer: View {
         if let favUri = story.viewer?.fav {
             // Unfavorite — optimistic
             stories[currentStoryIndex].viewer?.fav = nil
-            let rkey = favUri.split(separator: "/").last.map(String.init) ?? ""
             do {
-                try await client.deleteRecord(collection: "social.grain.favorite", rkey: rkey, auth: authContext)
+                try await FavoriteService.delete(favoriteUri: favUri, client: client, auth: authContext)
             } catch {
                 stories[currentStoryIndex].viewer?.fav = favUri
             }
@@ -1079,13 +1078,8 @@ struct StoryViewer: View {
             // Favorite — optimistic
             let prevViewer = stories[currentStoryIndex].viewer
             stories[currentStoryIndex].viewer = StoryViewerState(fav: "pending")
-            let record = AnyCodable([
-                "subject": story.uri,
-                "createdAt": DateFormatting.nowISO(),
-            ])
-            let repo = TokenStorage.userDID ?? ""
             do {
-                let response = try await client.createRecord(collection: "social.grain.favorite", repo: repo, record: record, auth: authContext)
+                let response = try await FavoriteService.create(subject: story.uri, client: client, auth: authContext)
                 stories[currentStoryIndex].viewer = StoryViewerState(fav: response.uri)
             } catch {
                 stories[currentStoryIndex].viewer = prevViewer

@@ -580,10 +580,8 @@ struct GalleryCardView: View {
         if let favUri = gallery.viewer?.fav {
             gallery.viewer?.fav = nil
             gallery.favCount = max((gallery.favCount ?? 1) - 1, 0)
-
-            let rkey = favUri.split(separator: "/").last.map(String.init) ?? ""
             do {
-                try await client.deleteRecord(collection: "social.grain.favorite", rkey: rkey, auth: authContext)
+                try await FavoriteService.delete(favoriteUri: favUri, client: client, auth: authContext)
             } catch {
                 logger.error("Unfavorite failed: \(error)")
                 gallery.viewer?.fav = favUri
@@ -594,14 +592,8 @@ struct GalleryCardView: View {
             let prevCount = gallery.favCount
             gallery.viewer = GalleryViewerState(fav: "pending")
             gallery.favCount = (gallery.favCount ?? 0) + 1
-
-            let record = AnyCodable([
-                "subject": gallery.uri,
-                "createdAt": DateFormatting.nowISO(),
-            ])
-            let repo = TokenStorage.userDID ?? ""
             do {
-                let response = try await client.createRecord(collection: "social.grain.favorite", repo: repo, record: record, auth: authContext)
+                let response = try await FavoriteService.create(subject: gallery.uri, client: client, auth: authContext)
                 gallery.viewer = GalleryViewerState(fav: response.uri)
             } catch {
                 logger.error("Favorite failed: \(error)")
