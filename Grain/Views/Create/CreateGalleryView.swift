@@ -65,11 +65,9 @@ struct CreateGalleryView: View {
     @State private var sendExif = true
     @State private var includeLocation = true
     @State private var imageZoomState = ImageZoomState()
-    /// True while a photo is in the picked-up state inside PhotoEditor. Drives
-    /// .scrollDisabled on the Form so the user's drag translation isn't eaten by
-    /// the Form's pan recognizer. Gated on the picked-up state only — the 0.18s
-    /// arming window before pickup still scrolls normally, so tapping on a cell
-    /// feels instant.
+    /// True from the moment a cell is touched (arming window) through the end of
+    /// the drag. Drives .scrollDisabled on the Form so neither the pre-fire hold
+    /// nor the drag itself lets the Form scroll underneath the reorder gesture.
     @State private var isReordering = false
     /// True for the duration of a strip↔grid↔captions mode morph inside
     /// PhotoEditor. Drives `.scrollDisabled` alongside `isReordering` so
@@ -77,12 +75,19 @@ struct CreateGalleryView: View {
     /// that adjustment shifts matched-geometry source/destination frames
     /// into different scroll contexts, producing wrong-direction morphs.
     @State private var isAnimatingMode = false
+    @State private var editorMode: EditorMode = .preview
+    @State private var showDiscardAlert = false
 
     let client: XRPCClient
     var onCreated: (() -> Void)?
 
     private let maxTitle = 100
     private let maxDescription = 1000
+
+    private var hasChanges: Bool {
+        !photoItems.isEmpty || !title.isEmpty || !description.isEmpty ||
+            resolvedLocation != nil || !selectedLabels.isEmpty
+    }
 
     var body: some View {
         // The Form is wrapped in an outer ZStack so `ImageZoomOverlay` attaches at
@@ -97,6 +102,7 @@ struct CreateGalleryView: View {
                 photosSection
                 gallerySection
                 photoEditorSection
+                postPreviewSection
                 cameraDataSection
                 ContentLabelPicker(selectedLabels: $selectedLabels)
                 Section {
@@ -156,13 +162,18 @@ struct CreateGalleryView: View {
         }
         .navigationTitle("New Gallery")
         .navigationBarTitleDisplayMode(.inline)
-        // Lock the iOS edge-swipe-to-pop at the UIKit level while a cell is
-        // picked up. `.navigationBarBackButtonHidden` alone doesn't disable
-        // the interactive pop gesture on iOS 17+; InteractivePopLocker walks
-        // the responder chain to the UINavigationController and toggles
-        // interactivePopGestureRecognizer.isEnabled directly.
-        .background { InteractivePopLocker(isDisabled: isReordering) }
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    if hasChanges {
+                        showDiscardAlert = true
+                    } else {
+                        dismiss()
+                    }
+                } label: {
+                    Image(systemName: "xmark")
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     Task { await createGallery() }
@@ -176,6 +187,10 @@ struct CreateGalleryView: View {
                 }
                 .disabled(title.isEmpty || photoItems.isEmpty || isUploading || title.count > maxTitle || description.count > maxDescription)
             }
+        }
+        .confirmationDialog("Discard gallery?", isPresented: $showDiscardAlert, titleVisibility: .visible) {
+            Button("Discard Changes", role: .destructive) { dismiss() }
+            Button("Keep Editing", role: .cancel) {}
         }
         .environment(imageZoomState)
         .modifier(ImageZoomOverlay(zoomState: imageZoomState))
@@ -209,8 +224,29 @@ struct CreateGalleryView: View {
                 selectedPhotoID: $selectedPhotoID,
                 isReordering: $isReordering,
                 isAnimatingMode: $isAnimatingMode,
+                mode: $editorMode,
                 sendExif: sendExif
             )
+        }
+    }
+
+    @ViewBuilder
+    private var postPreviewSection: some View {
+        if editorMode == .preview, !photoItems.isEmpty {
+            Section {
+                PhotoCarouselView(
+                    items: photoItems,
+                    selectedPhotoID: $selectedPhotoID,
+                    sendExif: sendExif
+                )
+                .id(photoItems.count)
+                .listRowInsets(EdgeInsets())
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.black)
+            } header: {
+                Text("Post Preview")
+            }
+            .transition(.opacity)
         }
     }
 
@@ -820,6 +856,7 @@ private struct CreateGalleryViewPreview: View {
                     selectedPhotoID: $selectedPhotoID,
                     isReordering: .constant(false),
                     isAnimatingMode: .constant(false),
+                    mode: .constant(.preview),
                     sendExif: true
                 )
             }
@@ -829,5 +866,6 @@ private struct CreateGalleryViewPreview: View {
             ToolbarItem(placement: .cancellationAction) { Button("Cancel") {} }
             ToolbarItem(placement: .topBarTrailing) { Button("Post") {}.bold() }
         }
+        .grainPreview()
     }
 }
