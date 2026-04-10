@@ -115,6 +115,7 @@ struct CreateGalleryView: View {
             // overlay. Also stays locked during reorder, same as before.
             .scrollDisabled(isReordering || isAnimatingMode || imageZoomState.showOverlay)
             .scrollDismissesKeyboard(.interactively)
+            .interactiveDismissDisabled(isReordering)
         }
         .safeAreaInset(edge: .bottom) {
             MentionSuggestionOverlay(state: mentionState) { suggestion in
@@ -188,6 +189,7 @@ struct CreateGalleryView: View {
                 .disabled(title.isEmpty || photoItems.isEmpty || isUploading || title.count > maxTitle || description.count > maxDescription)
             }
         }
+        .interactiveDismissDisabled(hasChanges)
         .confirmationDialog("Discard gallery?", isPresented: $showDiscardAlert, titleVisibility: .visible) {
             Button("Discard Changes", role: .destructive) { dismiss() }
             Button("Keep Editing", role: .cancel) {}
