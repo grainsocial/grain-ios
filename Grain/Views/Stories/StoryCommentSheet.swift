@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct StoryCommentSheet: View {
+    @Environment(\.dismiss) private var dismiss
     @Environment(AuthManager.self) private var auth
     @Environment(StoryStatusCache.self) private var storyStatusCache
     @Environment(ViewedStoryStorage.self) private var viewedStories
@@ -26,24 +27,27 @@ struct StoryCommentSheet: View {
 
     var body: some View {
         NavigationStack {
-            commentList
-                .safeAreaInset(edge: .bottom) {
-                    VStack(spacing: 0) {
-                        MentionSuggestionOverlay(state: mentionState) { suggestion in
-                            mentionState.complete(handle: suggestion.handle, in: &commentText)
-                        }
-                        glassInputPill
+            VStack(spacing: 0) {
+                commentList
+            }
+            .safeAreaInset(edge: .bottom) {
+                VStack(spacing: 0) {
+                    MentionSuggestionOverlay(state: mentionState) { suggestion in
+                        mentionState.complete(handle: suggestion.handle, in: &commentText)
+                    }
+                    glassInputPill
+                }
+            }
+            .navigationTitle("Comments")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") {
+                        onDismiss?()
+                        dismiss()
                     }
                 }
-                .navigationTitle("Comments")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Done") {
-                            onDismiss?()
-                        }
-                    }
-                }
+            }
         }
         .presentationDetents([.medium, .large])
         .task {
@@ -117,41 +121,47 @@ struct StoryCommentSheet: View {
                         replyingTo = nil
                     } label: {
                         Image(systemName: "xmark.circle.fill")
+                            .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
-                .padding(.horizontal, 14)
-                .padding(.top, 10)
-                .padding(.bottom, 4)
+                .padding(.horizontal, 16)
+                .padding(.top, 4)
             }
 
-            HStack(alignment: .bottom, spacing: 8) {
-                TextField(replyingTo != nil ? "Reply..." : "Add a comment...", text: $commentText, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .font(.subheadline)
-                    .focused($commentFocused)
-                    .lineLimit(1 ... 5)
-                    .onChange(of: commentText) { mentionState.update(text: commentText) }
+            GlassEffectContainer(spacing: 8) {
+                HStack(alignment: .bottom, spacing: 10) {
+                    TextField(replyingTo != nil ? "Reply..." : "Add a comment...", text: $commentText, axis: .vertical)
+                        .textFieldStyle(.plain)
+                        .font(.body)
+                        .focused($commentFocused)
+                        .lineLimit(1 ... 5)
+                        .onChange(of: commentText) { mentionState.update(text: commentText) }
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 12)
+                        .glassEffect(.regular, in: .capsule)
 
-                Button {
-                    Task { await postComment() }
-                } label: {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.title2)
-                        .foregroundStyle(commentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .secondary : Color("AccentColor"))
+                    let isEmpty = commentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    if !isEmpty {
+                        Button {
+                            Task { await postComment() }
+                        } label: {
+                            Image(systemName: "arrow.up.circle.fill")
+                                .font(.system(size: 28))
+                                .foregroundStyle(Color("AccentColor"))
+                                .frame(width: 44, height: 44)
+                        }
+                        .glassEffect(.regular.interactive(), in: .circle)
+                        .disabled(viewModel.isPostingComment)
+                        .transition(.scale.combined(with: .opacity))
+                    }
                 }
-                .disabled(commentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.isPostingComment)
+                .animation(.spring(response: 0.3, dampingFraction: 0.8), value: commentText.isEmpty)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
         }
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .strokeBorder(.white.opacity(0.15), lineWidth: 0.5)
-        }
-        .shadow(color: .black.opacity(0.12), radius: 8, y: 2)
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 12)
         .padding(.bottom, 8)
     }
 
