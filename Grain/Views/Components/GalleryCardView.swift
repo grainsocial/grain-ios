@@ -494,7 +494,7 @@ struct GalleryCardView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(gallery.title ?? "")
                 .font(.subheadline.weight(.semibold))
-                .lineLimit(1)
+                .lineLimit(3)
                 .contentShape(Rectangle())
                 .onTapGesture { onNavigate() }
 
