@@ -68,7 +68,6 @@ struct MainTabView: View {
                 }
             }
         }
-        .tabBarMinimizeBehavior(.onScrollDown)
         .tint(Color("AccentColor"))
         .task {
             let c = auth.makeClient()
