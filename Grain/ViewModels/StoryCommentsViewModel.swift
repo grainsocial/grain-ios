@@ -53,7 +53,7 @@ final class StoryCommentsViewModel {
         }
 
         do {
-            let response = try await client.getStoryThread(story: storyUri, limit: 1, auth: auth)
+            let response = try await client.getGalleryThread(gallery: storyUri, limit: 1, auth: auth)
             let preview = CachedPreview(
                 comment: response.comments.first,
                 count: response.totalCount ?? response.comments.count
@@ -77,7 +77,7 @@ final class StoryCommentsViewModel {
         hasMoreComments = true
 
         do {
-            let response = try await client.getStoryThread(story: storyUri, auth: auth)
+            let response = try await client.getGalleryThread(gallery: storyUri, auth: auth)
             comments = response.comments
             commentCursor = response.cursor
             hasMoreComments = response.cursor != nil
@@ -100,7 +100,7 @@ final class StoryCommentsViewModel {
         isLoading = true
 
         do {
-            let response = try await client.getStoryThread(story: storyUri, cursor: cursor, auth: auth)
+            let response = try await client.getGalleryThread(gallery: storyUri, cursor: cursor, auth: auth)
             comments.append(contentsOf: response.comments)
             commentCursor = response.cursor
             hasMoreComments = response.cursor != nil

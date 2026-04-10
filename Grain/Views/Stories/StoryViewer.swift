@@ -207,13 +207,16 @@ struct StoryViewer: View {
             if !isShowing { startTimerIfSafe() }
         }
         .task {
-            guard !isPreview else { return }
+            // In preview, only continue if we have prefetched stories to show (no network)
+            if isPreview, prefetchedStories.isEmpty { return }
             let startAuthor = authors[currentAuthorIndex]
             let isOwn = startAuthor.profile.did == auth.userDID
             let hasUnreads = !viewedStories.hasViewedAll(authorDid: startAuthor.profile.did, latestAt: startAuthor.latestAt)
             unreadOnly = isOwn || hasUnreads
-            timer.onComplete = { [self] in goToNext() }
-            timer.onQuarter = { [self] in markCurrentStoryViewed() }
+            if !isPreview {
+                timer.onComplete = { [self] in goToNext() }
+                timer.onQuarter = { [self] in markCurrentStoryViewed() }
+            }
             await loadStoriesForCurrentAuthor()
         }
     }
@@ -879,9 +882,7 @@ struct StoryViewer: View {
         let targetStory = fetched.indices.contains(targetIndex) ? fetched[targetIndex] : nil
         if !isFullsizeCached(targetStory) { imageLoaded = false }
         showLocationCopied = false
-        var fetchedWithCache = fetched
-        storyFavoriteCache.apply(to: &fetchedWithCache)
-        stories = fetchedWithCache
+        stories = fetched
         currentStoryIndex = targetIndex
         labelRevealed = false
         isLoadingStories = false
@@ -990,7 +991,8 @@ struct StoryViewer: View {
     // MARK: - Comments & Likes
 
     private var isFavorited: Bool {
-        currentStory?.viewer?.fav != nil
+        guard let story = currentStory else { return false }
+        return story.viewer?.fav != nil || storyFavoriteCache.isLiked(story.uri)
     }
 
     private var storyInputBar: some View {
@@ -1079,26 +1081,32 @@ struct StoryViewer: View {
               currentStoryIndex < stories.count else { return }
 
         let story = stories[currentStoryIndex]
-        if let favUri = story.viewer?.fav {
+        // Resolve the favUri from either server state or session cache
+        let existingFavUri = story.viewer?.fav ?? storyFavoriteCache.favUri(for: story.uri)
+
+        if let favUri = existingFavUri {
             // Unfavorite — optimistic
             stories[currentStoryIndex].viewer?.fav = nil
-            storyFavoriteCache.setFavorite(storyUri: story.uri, favUri: nil)
+            storyFavoriteCache.unlike(story.uri)
             do {
                 try await FavoriteService.delete(favoriteUri: favUri, client: client, auth: authContext)
             } catch {
                 stories[currentStoryIndex].viewer?.fav = favUri
-                storyFavoriteCache.setFavorite(storyUri: story.uri, favUri: favUri)
+                storyFavoriteCache.like(story.uri, favUri: favUri)
             }
         } else {
             // Favorite — optimistic
-            let prevViewer = stories[currentStoryIndex].viewer
             stories[currentStoryIndex].viewer = StoryViewerState(fav: "pending")
             do {
                 let response = try await FavoriteService.create(subject: story.uri, client: client, auth: authContext)
-                stories[currentStoryIndex].viewer = StoryViewerState(fav: response.uri)
-                storyFavoriteCache.setFavorite(storyUri: story.uri, favUri: response.uri)
+                guard let newFavUri = response.uri else {
+                    stories[currentStoryIndex].viewer = nil
+                    return
+                }
+                stories[currentStoryIndex].viewer = StoryViewerState(fav: newFavUri)
+                storyFavoriteCache.like(story.uri, favUri: newFavUri)
             } catch {
-                stories[currentStoryIndex].viewer = prevViewer
+                stories[currentStoryIndex].viewer = nil
             }
         }
     }
@@ -1143,7 +1151,7 @@ private struct StoryProgressBars: View {
     }
 }
 
-#Preview {
+#Preview("Story Viewer") {
     StoryViewer(
         authors: PreviewData.storyAuthors,
         startAuthorDid: "did:plc:prevuser1",
@@ -1155,4 +1163,33 @@ private struct StoryProgressBars: View {
     .environment(ViewedStoryStorage())
     .environment(StoryStatusCache())
     .environment(StoryFavoriteCache())
+}
+
+#Preview("Story Viewer + Comment Sheet") {
+    let vm = StoryCommentsViewModel(client: XRPCClient(baseURL: AuthManager.serverURL))
+    vm.comments = PreviewData.storyComments
+    vm.latestComment = PreviewData.storyComments.first
+    vm.totalCount = PreviewData.storyComments.count
+
+    return StoryViewer(
+        authors: PreviewData.storyAuthors,
+        startAuthorDid: "did:plc:prevuser1",
+        initialStories: PreviewData.stories,
+        client: XRPCClient(baseURL: AuthManager.serverURL)
+    )
+    .environment(AuthManager())
+    .environment(LabelDefinitionsCache())
+    .environment(ViewedStoryStorage())
+    .environment(StoryStatusCache())
+    .environment(StoryFavoriteCache())
+    .sheet(isPresented: .constant(true)) {
+        StoryCommentSheet(
+            viewModel: vm,
+            storyUri: PreviewData.stories[0].uri,
+            client: XRPCClient(baseURL: AuthManager.serverURL)
+        )
+        .environment(AuthManager())
+        .environment(StoryStatusCache())
+        .environment(ViewedStoryStorage())
+    }
 }

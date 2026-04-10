@@ -1,32 +1,27 @@
 import Foundation
 
-/// Session-scoped cache of story favorites. Ensures that favoriting a story
-/// sticks across navigation and story re-fetches, even when the server does
-/// not yet return viewer state for stories.
+/// Session-scoped cache of story favorites. Bridges the gap until the grain
+/// appview returns `viewer.fav` on story responses — once it does, this
+/// becomes redundant and can be removed.
 @Observable
 @MainActor
 final class StoryFavoriteCache {
-    /// Maps story URI → favorite record URI.
-    private(set) var favoritesByUri: [String: String] = [:]
+    /// storyUri → favorite record URI. Presence means liked.
+    var favorites: [String: String] = [:]
+
+    func isLiked(_ storyUri: String) -> Bool {
+        favorites[storyUri] != nil
+    }
 
     func favUri(for storyUri: String) -> String? {
-        favoritesByUri[storyUri]
+        favorites[storyUri]
     }
 
-    func setFavorite(storyUri: String, favUri: String?) {
-        if let favUri {
-            favoritesByUri[storyUri] = favUri
-        } else {
-            favoritesByUri.removeValue(forKey: storyUri)
-        }
+    func like(_ storyUri: String, favUri: String) {
+        favorites[storyUri] = favUri
     }
 
-    /// Overlays cached favorites onto a story array so the UI reflects session state.
-    func apply(to stories: inout [GrainStory]) {
-        for i in stories.indices {
-            if let favUri = favoritesByUri[stories[i].uri] {
-                stories[i].viewer = StoryViewerState(fav: favUri)
-            }
-        }
+    func unlike(_ storyUri: String) {
+        favorites.removeValue(forKey: storyUri)
     }
 }
