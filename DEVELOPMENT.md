@@ -22,6 +22,12 @@ just generate
 open Grain.xcodeproj
 ```
 
+If using a non-Xcode editor with SourceKit-LSP (e.g. Zed), run once after generating:
+
+```bash
+xcode-build-server config -scheme Grain -project Grain.xcodeproj
+```
+
 No local backend needed — `just sim` and `just device` both hit the production API at grain.social.
 
 ### Device builds
