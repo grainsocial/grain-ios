@@ -71,7 +71,7 @@ struct CreateGalleryView: View {
     /// nor the drag itself lets the Form scroll underneath the reorder gesture.
     @State private var isReordering = false
     /// True for the duration of a strip↔grid↔captions mode morph inside
-    /// PhotoEditor. Drives `.scrollDisabled` alongside `isReordering` so
+    /// GalleryEditor. Drives `.scrollDisabled` alongside `isReordering` so
     /// UIKit's UICollectionView doesn't adjust scroll offset mid-morph —
     /// that adjustment shifts matched-geometry source/destination frames
     /// into different scroll contexts, producing wrong-direction morphs.
@@ -224,7 +224,7 @@ struct CreateGalleryView: View {
     @ViewBuilder
     private var photoEditorSection: some View {
         if !photoItems.isEmpty {
-            PhotoEditor(
+            GalleryEditor(
                 items: $photoItems,
                 selectedPhotoID: $selectedPhotoID,
                 isReordering: $isReordering,
@@ -856,7 +856,7 @@ private struct CreateGalleryViewPreview: View {
                 Text("Gallery")
             }
             Section {
-                PhotoEditor(
+                GalleryEditor(
                     items: $photoItems,
                     selectedPhotoID: $selectedPhotoID,
                     isReordering: .constant(false),

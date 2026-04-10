@@ -186,7 +186,7 @@ struct ZoomableImage: View {
     @State private var resetTask: Task<Void, Never>?
     /// Per-instance flag flipped on in `onBegan` and off in `resetZoom`. We use this
     /// instead of comparing `zoomState.localImage === source` because the rendered
-    /// image instance can change mid-lifetime (e.g. PhotoEditor's preview cache
+    /// image instance can change mid-lifetime (e.g. GalleryEditor's preview cache
     /// swaps a low-res thumbnail for the high-res preview), which would defeat
     /// identity-based equality and leave the base image visible behind the overlay.
     @State private var isZoomingMe = false

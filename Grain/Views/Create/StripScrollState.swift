@@ -7,7 +7,7 @@ private let stripSignposter = OSSignposter(subsystem: "social.grain.grain", cate
 // MARK: - Strip scroll state
 
 /// Manages horizontal scroll position for the photo strip. Extracted from
-/// PhotoStrip so the state persists across mode switches (owned by PhotoEditor).
+/// PhotoStrip so the state persists across mode switches (owned by GalleryEditor).
 ///
 /// `@Observable` so per-property mutations (e.g. dragTranslation every frame)
 /// only invalidate views that read that specific property.

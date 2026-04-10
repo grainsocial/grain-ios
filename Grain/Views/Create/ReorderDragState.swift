@@ -4,7 +4,7 @@ import UIKit
 // MARK: - Reorder drag state
 
 /// Manages drag-to-reorder state for the photo grid. Extracted from
-/// ReorderablePhotoGrid so the state is owned by PhotoEditor and the
+/// ReorderablePhotoGrid so the state is owned by GalleryEditor and the
 /// AdaptivePhotoLayout can read it for cell displacement.
 @Observable
 @MainActor

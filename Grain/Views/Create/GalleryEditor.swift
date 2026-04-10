@@ -10,7 +10,7 @@ private let reorderSignposter = OSSignposter(subsystem: "social.grain.grain", ca
 
 /// Holds the LRU preview-image cache that the carousel uses for hi-res zoom.
 ///
-/// Extracted from `PhotoEditor` so that cache mutations — cache hits, task
+/// Extracted from `GalleryEditor` so that cache mutations — cache hits, task
 /// bookkeeping — only invalidate `PhotoCarouselView`, which actually reads
 /// `previewCache`. Any mutation on a plain `@State` dictionary on `PhotoEditor`
 /// would have re-rendered the entire editor, even though none of those views
@@ -329,9 +329,9 @@ extension AnyTransition {
     }
 }
 
-// MARK: - PhotoEditor
+// MARK: - GalleryEditor
 
-struct PhotoEditor: View {
+struct GalleryEditor: View {
     @Binding var items: [PhotoItem]
     @Binding var selectedPhotoID: UUID?
     @Binding var isReordering: Bool
@@ -658,7 +658,7 @@ struct PhotoEditor: View {
     @Previewable @State var isAnimatingMode = false
     @Previewable @State var zoomState = ImageZoomState()
     Form {
-        PhotoEditor(
+        GalleryEditor(
             items: $state,
             selectedPhotoID: $selected,
             isReordering: $isReordering,
