@@ -132,7 +132,7 @@ struct StoryViewer: View {
     @State private var hasLoadedInitialStories = false
     @State private var hearts: [HeartAnimationState] = []
     @State private var isFavoriting = false
-    @State private var likeParticleBursts: [UUID] = []
+    @State private var heartBeatTrigger = 0
     @State private var instanceID: Int = 0
 
     init(authors: [GrainStoryAuthor], startAuthorDid: String? = nil, initialStories: [GrainStory]? = nil, startStoryIndex: Int? = nil, client: XRPCClient, onProfileTap: ((String) -> Void)? = nil, onDismiss: (() -> Void)? = nil) {
@@ -173,8 +173,7 @@ struct StoryViewer: View {
     }
 
     var body: some View {
-        let _ = svLogger.info("[body] eval id=\(instanceID) storiesCount=\(stories.count) currentIdx=\(currentStoryIndex) imageLoaded=\(imageLoaded) hasLoaded=\(hasLoadedInitialStories)")
-        return ZStack {
+        ZStack {
             if let pendingIdx = pendingTransition.authorIndex {
                 pendingFaceView(authorIdx: pendingIdx)
                     .offset(x: faceOffsets.pending)
@@ -193,8 +192,6 @@ struct StoryViewer: View {
                     .transition(.identity)
             }
         }
-        .onAppear { svLogger.info("[body] onAppear id=\(instanceID)") }
-        .onDisappear { svLogger.info("[body] onDisappear id=\(instanceID)") }
         .clipped()
         .background(Color.black.ignoresSafeArea())
         .background(
@@ -228,25 +225,14 @@ struct StoryViewer: View {
         .onChange(of: reportTarget?.uri) {
             if reportTarget == nil { timer.start() }
         }
-        .onChange(of: imageLoaded) { old, new in
-            svLogger.info("[onChange imageLoaded] \(old) → \(new)")
-        }
-        .onChange(of: currentStoryIndex) { old, new in
-            svLogger.info("[onChange currentStoryIndex] \(old) → \(new)")
-        }
-        .onChange(of: stories.count) { old, new in
-            svLogger.info("[onChange stories.count] \(old) → \(new)")
+        .onChange(of: currentStory?.uri) { _, _ in
+            hearts.removeAll()
         }
         .task {
-            svLogger.info("[task] fired id=\(instanceID) hasLoadedInitialStories=\(hasLoadedInitialStories)")
-            svSignposter.emitEvent("task.fired", "id=\(instanceID) hasLoaded=\(hasLoadedInitialStories)")
             // Guard against re-runs: .task can re-fire when the view re-enters the
             // hierarchy (e.g. after sheet presentation cycles), and we only want to
             // load stories once per StoryViewer instance.
-            guard !hasLoadedInitialStories else {
-                svLogger.info("[task] skipping re-run")
-                return
-            }
+            guard !hasLoadedInitialStories else { return }
             hasLoadedInitialStories = true
             if isPreview, prefetchedStories.isEmpty { return }
             let startAuthor = authors[currentAuthorIndex]
@@ -258,7 +244,6 @@ struct StoryViewer: View {
                 timer.onQuarter = { [self] in markCurrentStoryViewed() }
             }
             await loadStoriesForCurrentAuthor()
-            svLogger.info("[task] done")
         }
     }
 
@@ -406,7 +391,6 @@ struct StoryViewer: View {
                                 //     Text("fullsize · cache").font(.caption2.bold()).padding(6).background(.black.opacity(0.5)).foregroundStyle(.white).padding(8)
                                 // }
                                 .onAppear {
-                                    svLogger.info("[image.onAppear cached-fullsize] imageLoaded=\(imageLoaded)")
                                     if !imageLoaded {
                                         imageLoaded = true
                                         startTimerIfSafe()
@@ -429,7 +413,6 @@ struct StoryViewer: View {
                                         //     Text("fullsize · network").font(.caption2.bold()).padding(6).background(.black.opacity(0.5)).foregroundStyle(.white).padding(8)
                                         // }
                                         .onAppear {
-                                            svLogger.info("[image.onAppear lazy-fullsize] imageLoaded=\(imageLoaded)")
                                             if !imageLoaded {
                                                 imageLoaded = true
                                                 startTimerIfSafe()
@@ -645,30 +628,14 @@ struct StoryViewer: View {
     }
 
     private func startTimerIfSafe() {
-        guard imageLoaded else {
-            svLogger.info("[startTimerIfSafe] skipped (imageLoaded=false)")
-            return
-        }
-        guard !isCommentSheetOpen else {
-            svLogger.info("[startTimerIfSafe] skipped (sheet open)")
-            return
-        }
+        guard imageLoaded, !isCommentSheetOpen else { return }
         let action = storyLabelResult.action
-        svLogger.info("[startTimerIfSafe] action=\(String(describing: action))")
         if action == .none || action == .badge { timer.start() }
     }
 
     private func resumeTimerIfSafe() {
-        guard imageLoaded else {
-            svLogger.info("[resumeTimerIfSafe] skipped (imageLoaded=false)")
-            return
-        }
-        guard !isCommentSheetOpen else {
-            svLogger.info("[resumeTimerIfSafe] skipped (sheet open)")
-            return
-        }
+        guard imageLoaded, !isCommentSheetOpen else { return }
         let action = storyLabelResult.action
-        svLogger.info("[resumeTimerIfSafe] action=\(String(describing: action)) progress=\(timer.progress)")
         if action == .none || action == .badge { timer.resume() }
     }
 
@@ -1131,19 +1098,17 @@ struct StoryViewer: View {
             // Heart — favorite/unfavorite
             if interactive {
                 Button {
-                    if !isFavorited { addLikeParticleBurst() }
+                    if !isFavorited { heartBeatTrigger &+= 1 }
                     triggerFavoriteToggle()
                 } label: {
                     heartIcon(isFavorited: isFavorited)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .overlay { particleBurstOverlay }
             } else {
                 heartIcon(isFavorited: isFavorited)
-                    .overlay { particleBurstOverlay }
                     .onChange(of: isFavorited) { oldValue, newValue in
-                        if !oldValue, newValue { addLikeParticleBurst() }
+                        if !oldValue, newValue { heartBeatTrigger &+= 1 }
                     }
             }
         }
@@ -1156,31 +1121,24 @@ struct StoryViewer: View {
             .font(.title)
             .foregroundStyle(isFavorited ? Color("AccentColor") : .white)
             .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isFavorited)
-            .frame(width: 44, height: 44)
-    }
-
-    private var particleBurstOverlay: some View {
-        ForEach(likeParticleBursts, id: \.self) { _ in
-            ForEach(0 ..< 5) { i in
-                LikeParticleView(index: i)
+            .keyframeAnimator(initialValue: 1.0, trigger: heartBeatTrigger) { content, scale in
+                content.scaleEffect(scale)
+            } keyframes: { _ in
+                KeyframeTrack {
+                    SpringKeyframe(1.35, duration: 0.14, spring: .bouncy)
+                    SpringKeyframe(0.95, duration: 0.12, spring: .bouncy)
+                    SpringKeyframe(1.22, duration: 0.12, spring: .bouncy)
+                    SpringKeyframe(1.0, duration: 0.20, spring: .bouncy)
+                }
             }
-        }
-        .scaleEffect(1.4)
+            .frame(width: 44, height: 44)
     }
 
     private func doubleTapLike(at point: CGPoint) {
         hearts.append(HeartAnimationState(position: point))
-        addLikeParticleBurst()
+        heartBeatTrigger &+= 1
         guard !isFavorited, !isFavoriting else { return }
         triggerFavoriteToggle()
-    }
-
-    private func addLikeParticleBurst() {
-        let id = UUID()
-        likeParticleBursts.append(id)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-            likeParticleBursts.removeAll { $0 == id }
-        }
     }
 
     private func triggerFavoriteToggle() {
