@@ -48,6 +48,27 @@ struct LoginView: View {
                             .foregroundStyle(.white)
                             .padding(.bottom, suggestions.isEmpty ? 60 : 20)
 
+                        if let reason = auth.reauthReason, suggestions.isEmpty {
+                            HStack(alignment: .top, spacing: 10) {
+                                Image(systemName: "exclamationmark.circle.fill")
+                                    .font(.body.weight(.medium))
+                                    .foregroundStyle(.white)
+                                Text(reason)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.white)
+                                    .multilineTextAlignment(.leading)
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
+                            .background(.white.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(.white.opacity(0.25), lineWidth: 1)
+                            )
+                            .padding(.horizontal, 20)
+                            .padding(.bottom, 20)
+                        }
+
                         if suggestions.isEmpty {
                             // Heading
                             Text("Log in with your internet handle")

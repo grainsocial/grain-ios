@@ -15,6 +15,9 @@ final class AuthManager {
     var userHandle: String?
     var userAvatar: String?
     var avatarImage: UIImage?
+    /// Set when a launch-time scope migration forced the user to sign out.
+    /// LoginView reads this to display an explanation above the sign-in form.
+    var reauthReason: String?
 
     private(set) var dpop: DPoP?
     private var codeVerifier: String?
@@ -28,6 +31,32 @@ final class AuthManager {
     #endif
     nonisolated static let clientID = "grain-native://app"
     nonisolated static let redirectURI = "grain://oauth/callback"
+
+    /// OAuth scopes the app currently requests at sign-in. Update here, then
+    /// bump a `scopeMigration*` flag below if you want existing installs to
+    /// be forced through a fresh sign-in to pick the new scope up.
+    nonisolated static let requiredScopes: [String] = [
+        "atproto",
+        "blob:image/*",
+        "repo:social.grain.gallery",
+        "repo:social.grain.gallery.item",
+        "repo:social.grain.photo",
+        "repo:social.grain.photo.exif",
+        "repo:social.grain.actor.profile",
+        "repo:social.grain.graph.follow",
+        "repo:social.grain.graph.block",
+        "repo:social.grain.favorite",
+        "repo:social.grain.comment",
+        "repo:social.grain.story",
+        "repo:app.bsky.feed.post?action=create",
+    ]
+
+    /// Version-tagged UserDefaults key marking that a one-shot scope
+    /// migration has already run for this install. Prevents re-auth loops
+    /// when a re-login still yields a token without the newly added scopes.
+    /// To force another migration (e.g. after adding a scope), bump the
+    /// suffix: `scopeMigrationDone_v2`, `_v3`, etc.
+    private static let scopeMigrationKey = "scopeMigrationDone_v1"
 
     init() {
         let spid = authSignposter.makeSignpostID()
@@ -50,12 +79,37 @@ final class AuthManager {
             dpop = try? DPoP.loadOrCreate()
             authSignposter.endInterval("DPoPLoad", dpopState)
             logger.debug("[DPoPLoad] end")
+
+            runScopeMigrationIfNeeded()
         } else {
             authSignposter.emitEvent("KeychainRead", id: spid, "authenticated=false")
             logger.debug("[KeychainRead] authenticated=false")
         }
         authSignposter.endInterval("SessionRestore", state)
         logger.debug("[SessionRestore] end")
+    }
+
+    /// One-shot check at launch: if the currently-stored token predates the
+    /// scope-persistence code (or is missing any required scope) and we
+    /// haven't already run this migration, log the user out so they re-auth
+    /// with a fresh grant. The UserDefaults flag guarantees this fires at
+    /// most once per install per version — even if the re-login somehow
+    /// still returns an insufficient grant, we don't loop.
+    private func runScopeMigrationIfNeeded() {
+        guard !UserDefaults.standard.bool(forKey: Self.scopeMigrationKey) else { return }
+
+        let stored = TokenStorage.grantedScope.map { Set($0.split(separator: " ").map(String.init)) } ?? []
+        let missing = Self.requiredScopes.filter { !stored.contains($0) }
+        guard !missing.isEmpty else {
+            // Nothing to do — stored token already covers every required scope.
+            UserDefaults.standard.set(true, forKey: Self.scopeMigrationKey)
+            return
+        }
+
+        logger.info("[ScopeMigration] forcing re-auth; missing=\(missing.joined(separator: ","), privacy: .public)")
+        UserDefaults.standard.set(true, forKey: Self.scopeMigrationKey)
+        logout()
+        reauthReason = "Grain has been updated. Please sign in again to enable new features."
     }
 
     /// Start the OAuth login flow. Set `createAccount` to show the sign-up page.
@@ -78,21 +132,7 @@ final class AuthManager {
             "response_type": "code",
             "code_challenge": challenge,
             "code_challenge_method": "S256",
-            "scope": [
-                "atproto",
-                "blob:image/*",
-                "repo:social.grain.gallery",
-                "repo:social.grain.gallery.item",
-                "repo:social.grain.photo",
-                "repo:social.grain.photo.exif",
-                "repo:social.grain.actor.profile",
-                "repo:social.grain.graph.follow",
-                "repo:social.grain.graph.block",
-                "repo:social.grain.favorite",
-                "repo:social.grain.comment",
-                "repo:social.grain.story",
-                "repo:app.bsky.feed.post?action=create",
-            ].joined(separator: " "),
+            "scope": Self.requiredScopes.joined(separator: " "),
         ]
         if createAccount {
             parBody["prompt"] = "create"
@@ -315,6 +355,9 @@ final class AuthManager {
         TokenStorage.userDID = response.sub
         TokenStorage.userHandle = response.handle
         TokenStorage.tokenExpiresAt = Date().addingTimeInterval(TimeInterval(response.expiresIn))
+        if let scope = response.scope {
+            TokenStorage.grantedScope = scope
+        }
 
         // Guard each @Observable assignment: the macro's setter always fires the
         // observation registrar even when the value is unchanged, so token refreshes
@@ -322,6 +365,7 @@ final class AuthManager {
         if !isAuthenticated { isAuthenticated = true }
         if userDID != response.sub { userDID = response.sub }
         if userHandle != response.handle { userHandle = response.handle }
+        if reauthReason != nil { reauthReason = nil }
     }
 
     func fetchAvatarIfNeeded() async {
@@ -395,6 +439,7 @@ private struct TokenResponse: Codable {
     let refreshToken: String?
     let sub: String
     let handle: String?
+    let scope: String?
 
     enum CodingKeys: String, CodingKey {
         case accessToken = "access_token"
@@ -403,6 +448,7 @@ private struct TokenResponse: Codable {
         case refreshToken = "refresh_token"
         case sub
         case handle
+        case scope
     }
 }
 

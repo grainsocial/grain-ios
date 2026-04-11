@@ -56,6 +56,17 @@ enum TokenStorage {
         }
     }
 
+    /// Space-separated OAuth scope string from the token response. Used at
+    /// launch to detect tokens minted before newer scopes were added so the
+    /// app can force a fresh sign-in. `nil` for sessions created before this
+    /// field was introduced — treat as a full scope mismatch.
+    static var grantedScope: String? {
+        get { try? keychain.get("token_scope") }
+        set {
+            if let newValue { try? keychain.set(newValue, key: "token_scope") } else { try? keychain.remove("token_scope") }
+        }
+    }
+
     static func clear() {
         accessToken = nil
         refreshToken = nil
@@ -63,5 +74,6 @@ enum TokenStorage {
         userHandle = nil
         userAvatar = nil
         tokenExpiresAt = nil
+        grantedScope = nil
     }
 }
