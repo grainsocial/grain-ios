@@ -18,7 +18,7 @@ struct GrainApp: App {
             if let dataCache = try? DataCache(name: "social.grain.images") {
                 config.dataCache = dataCache
             }
-            await MainActor.run { ImagePipeline.shared = ImagePipeline(configuration: config) }
+            await MainActor.run { ImagePipeline.shared = ImagePipeline(configuration: config, delegate: GrainImagePipelineDelegate()) }
             appSignposter.endInterval("NukePipelineSetup", state)
             appLogger.debug("[NukePipelineSetup] end")
         }
