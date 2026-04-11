@@ -68,7 +68,6 @@ struct CommentSheetContent: View {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Done") {
                             onDismiss()
-                            dismiss()
                         }
                     }
                 }

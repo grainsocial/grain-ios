@@ -29,6 +29,10 @@ struct CommentSheetTarget: Identifiable, Equatable {
 private final class CommentSheetWindowState {
     var target: CommentSheetTarget?
     @ObservationIgnored var onDismissed: (() -> Void)?
+    /// Tracks which code path first cleared `target` so the dismiss log can
+    /// distinguish swipe-down (default) from dim-tap, Done-button, and
+    /// `close()`. Cleared inside `.sheet` `onDismiss`.
+    @ObservationIgnored var pendingDismissSource: String?
 }
 
 // MARK: - Root view of the dedicated window
@@ -51,8 +55,8 @@ private struct CommentSheetHostView: View {
                     .ignoresSafeArea()
                     .contentShape(Rectangle())
                     .onTapGesture {
-                        spLogger.info("[dim.tap] dismissing via background tap")
                         spSignposter.emitEvent("dim.tap")
+                        state.pendingDismissSource = "dim.tap"
                         state.target = nil
                     }
                     .transition(.opacity)
@@ -64,8 +68,10 @@ private struct CommentSheetHostView: View {
         // in `onDismiss` truncates it and the user sees a pop.
         .animation(.easeInOut(duration: 0.35), value: state.target != nil)
         .sheet(item: $state.target, onDismiss: {
-            spLogger.info("[sheet.onDismiss] fired")
-            spSignposter.emitEvent("sheet.onDismiss")
+            let source = state.pendingDismissSource ?? "swipe"
+            state.pendingDismissSource = nil
+            spLogger.info("[sheet.onDismiss] source=\(source)")
+            spSignposter.emitEvent("sheet.onDismiss", "source=\(source)")
             let cb = state.onDismissed
             state.onDismissed = nil
             cb?()
@@ -77,7 +83,7 @@ private struct CommentSheetHostView: View {
                 focusInput: target.focusInput,
                 onProfileTap: target.onProfileTap,
                 onDismiss: {
-                    spLogger.info("[sheet.content] onDismiss closure called")
+                    state.pendingDismissSource = "content.onDismiss"
                     state.target = nil
                 }
             )
@@ -142,6 +148,11 @@ final class StoryCommentPresenter {
             spSignposter.emitEvent("open.skipped", "reason=target-set")
             return
         }
+        guard state.onDismissed == nil else {
+            spLogger.info("[open] SKIPPED — dismiss in progress")
+            spSignposter.emitEvent("open.skipped", "reason=dismiss-in-progress")
+            return
+        }
         guard let auth = authManager,
               let statusCache = storyStatusCache,
               let viewed = viewedStories
@@ -158,7 +169,7 @@ final class StoryCommentPresenter {
 
         let intervalState = spSignposter.beginInterval("open", "focusInput=\(focusInput)")
         openSignpostState = intervalState
-        spLogger.info("[open] begin storyUri=\(storyUri) focusInput=\(focusInput)")
+        spLogger.info("[open] storyUri=\(storyUri) focusInput=\(focusInput)")
 
         // Lazy window creation — built once per app session and reused. The
         // root view's state/bindings persist across open/close cycles.
@@ -179,14 +190,31 @@ final class StoryCommentPresenter {
         // onDismiss closure sees the correct handler.
         state.onDismissed = { [weak self] in
             guard let self else { return }
-            spLogger.info("[onDismissed] running")
+            spLogger.info("[onDismissed] begin")
+            spSignposter.emitEvent("onDismissed.begin")
+
             presentedStoryUri = nil
-            commentWindow?.isHidden = true
+
+            // Hiding the comment window (or calling endEditing on it) crashes
+            // when done synchronously inside SwiftUI's .sheet onDismiss:
+            // resigning the @FocusState-bound TextField mid-sheet-teardown
+            // re-enters SwiftUI while the sheet view tree is still unwinding.
+            // Defer both to the next main-runloop tick so the current dismiss
+            // callback returns first. Do NOT inline these — the crash is
+            // easy to re-introduce.
+            let windowToHide = commentWindow
+            DispatchQueue.main.async {
+                windowToHide?.endEditing(true)
+                windowToHide?.isHidden = true
+                spSignposter.emitEvent("onDismissed.window-hidden")
+            }
+
             if let intervalState = openSignpostState {
                 spSignposter.endInterval("open", intervalState)
                 openSignpostState = nil
             }
             onDidClose?()
+            spSignposter.emitEvent("onDismissed.end")
         }
 
         state.target = CommentSheetTarget(
@@ -203,6 +231,7 @@ final class StoryCommentPresenter {
     func close() {
         spLogger.info("[close] programmatic close")
         spSignposter.emitEvent("close.programmatic")
+        state.pendingDismissSource = "close.programmatic"
         state.target = nil
     }
 
