@@ -1,5 +1,8 @@
 import Nuke
+import os
 import SwiftUI
+
+private let launchSignposter = OSSignposter(subsystem: "social.grain.grain", category: "AppLaunch")
 
 struct FeedView: View {
     @Environment(AuthManager.self) private var auth
@@ -12,6 +15,9 @@ struct FeedView: View {
     @State private var deepLinkProfileDid: String?
     @State private var deepLinkGalleryUri: String?
     @State private var deepLinkStoryAuthor: GrainStoryAuthor?
+    @State private var deepLinkStory: GrainStory?
+    @State private var showFeedsManagement = false
+    @State private var feedRefreshID = UUID()
 
     let client: XRPCClient
     @Binding var pendingDeepLink: DeepLink?
@@ -46,6 +52,7 @@ struct FeedView: View {
                         },
                         prefsViewModel: prefsViewModel
                     )
+                    .id(feedRefreshID)
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
@@ -59,9 +66,13 @@ struct FeedView: View {
                 }
                 .sharedBackgroundVisibility(.hidden)
             }
+            .navigationDestination(isPresented: $showFeedsManagement) {
+                FeedsManagementView(prefsViewModel: prefsViewModel, client: client)
+            }
             .task {
                 guard !isPreview else { return }
                 await prefsViewModel.loadIfNeeded(auth: auth.authContext())
+                launchSignposter.emitEvent("FeedPrefsReady")
                 await storyViewModel.load(auth: auth.authContext(), storyStatusCache: storyStatusCache)
             }
             .onAppear {
@@ -104,6 +115,15 @@ struct FeedView: View {
             .navigationDestination(item: $deepLinkGalleryUri) { uri in
                 GalleryDetailView(client: client, galleryUri: uri)
             }
+            .sheet(isPresented: $showCreate) {
+                NavigationStack {
+                    CreateGalleryView(client: client) {
+                        showCreate = false
+                        feedRefreshID = UUID()
+                    }
+                }
+                .tint(Color("AccentColor"))
+            }
             .fullScreenCover(item: $deepLinkStoryAuthor) { author in
                 StoryViewer(
                     authors: [author],
@@ -116,6 +136,23 @@ struct FeedView: View {
                         deepLinkStoryAuthor = nil
                         storyViewModel.invalidate()
                     }
+                )
+                .environment(auth)
+            }
+            .fullScreenCover(item: $deepLinkStory) { story in
+                StoryViewer(
+                    authors: [GrainStoryAuthor(
+                        profile: story.creator,
+                        storyCount: 1,
+                        latestAt: story.createdAt
+                    )],
+                    initialStories: [story],
+                    client: client,
+                    onProfileTap: { did in
+                        deepLinkStory = nil
+                        deepLinkProfileDid = did
+                    },
+                    onDismiss: { deepLinkStory = nil }
                 )
                 .environment(auth)
             }
@@ -151,6 +188,13 @@ struct FeedView: View {
                 } label: {
                     Label("Unpin", systemImage: "pin.slash")
                 }
+            }
+
+            Divider()
+            Button {
+                showFeedsManagement = true
+            } label: {
+                Label("My Feeds", systemImage: "list.bullet")
             }
         } label: {
             HStack(spacing: 4) {
@@ -191,12 +235,12 @@ struct FeedView: View {
             deepLinkProfileDid = did
         case .gallery:
             deepLinkGalleryUri = link.galleryUri
-        case let .story(did, _):
-            Task { await openStoryDeepLink(did: did) }
+        case let .story(did, rkey):
+            Task { await openStoryDeepLink(did: did, rkey: rkey) }
         }
     }
 
-    private func openStoryDeepLink(did: String) async {
+    private func openStoryDeepLink(did: String, rkey: String) async {
         do {
             let response = try await client.getStories(actor: did, auth: auth.authContext())
             let count = response.stories.count
@@ -207,11 +251,15 @@ struct FeedView: View {
                     latestAt: response.stories.last?.createdAt ?? ""
                 )
             } else {
-                // Story expired — fall back to profile
-                deepLinkProfileDid = did
+                // Story expired — fetch the specific story
+                let storyUri = "at://\(did)/social.grain.story/\(rkey)"
+                if let story = try await client.getStory(uri: storyUri, auth: auth.authContext()).story {
+                    deepLinkStory = story
+                } else {
+                    deepLinkProfileDid = did
+                }
             }
         } catch {
-            // Fall back to profile on error
             deepLinkProfileDid = did
         }
     }
@@ -228,6 +276,10 @@ private struct FeedTabContent: View {
     @State private var deletedGalleryUri: String?
     @State private var zoomState = ImageZoomState()
     @State private var cardStoryAuthor: GrainStoryAuthor?
+    @State private var commentSheetUri: String?
+    @State private var reportGallery: GrainGallery?
+    @State private var deleteGalleryUri: String?
+    @State private var showDeleteConfirmation = false
     @AppStorage("privacy.showSuggestedUsers") private var showSuggestedUsers = true
     @State private var suggestedFollows: [SuggestedItem] = []
     @State private var suggestedLoaded = false
@@ -279,8 +331,18 @@ private struct FeedTabContent: View {
                 )
 
                 ForEach(Array($viewModel.galleries.enumerated()), id: \.element.id) { index, $gallery in
+                    let isOwner = gallery.creator.did == auth.userDID
+                    let reportAction: (() -> Void)? = !isOwner ? {
+                        reportGallery = gallery
+                    } : nil
+                    let deleteAction: (() -> Void)? = isOwner ? {
+                        showDeleteConfirmation = true
+                        deleteGalleryUri = gallery.uri
+                    } : nil
                     GalleryCardView(gallery: $gallery, client: client, onNavigate: {
                         selectedUri = gallery.uri
+                    }, onCommentTap: {
+                        commentSheetUri = gallery.uri
                     }, onProfileTap: { did in
                         selectedProfileDid = did
                     }, onHashtagTap: { tag in
@@ -289,20 +351,20 @@ private struct FeedTabContent: View {
                         selectedLocation = LocationDestination(h3Index: h3, name: name)
                     }, onStoryTap: { author in
                         cardStoryAuthor = author
-                    })
-                    .onAppear {
-                        // Trigger loadMore when 5 items from the end
-                        let remaining = viewModel.galleries.count - index
-                        if remaining <= 5 {
-                            Task { await viewModel.loadMore(auth: auth.authContext()) }
+                    }, onReport: reportAction, onDelete: deleteAction)
+                        .onAppear {
+                            // Trigger loadMore when 5 items from the end
+                            let remaining = viewModel.galleries.count - index
+                            if remaining <= 5 {
+                                Task { await viewModel.loadMore(auth: auth.authContext()) }
+                            }
+                            // Prefetch first image of next 3 galleries
+                            let input = viewModel.galleries.map { g in
+                                (firstThumb: g.items?.first?.thumb, firstFullsize: g.items?.first?.fullsize)
+                            }
+                            let plan = ImagePrefetchPlanning.feedPrefetchRequests(galleries: input, currentIndex: index)
+                            feedPrefetcher.startPrefetching(with: plan.all)
                         }
-                        // Prefetch first image of next 3 galleries
-                        let input = viewModel.galleries.map { g in
-                            (firstThumb: g.items?.first?.thumb, firstFullsize: g.items?.first?.fullsize)
-                        }
-                        let plan = ImagePrefetchPlanning.feedPrefetchRequests(galleries: input, currentIndex: index)
-                        feedPrefetcher.startPrefetching(with: plan.all)
-                    }
 
                     if index == 4, showSuggestedUsers {
                         SuggestedFollowsView(client: client, suggestions: $suggestedFollows, onProfileTap: { did in
@@ -351,6 +413,54 @@ private struct FeedTabContent: View {
             )
             .environment(auth)
         }
+        .sheet(isPresented: Binding(
+            get: { commentSheetUri != nil },
+            set: { if !$0 { commentSheetUri = nil } }
+        )) {
+            if let uri = commentSheetUri {
+                CommentSheetView(
+                    client: client,
+                    galleryUri: uri,
+                    onDismiss: { commentSheetUri = nil },
+                    onProfileTap: { did in
+                        commentSheetUri = nil
+                        selectedProfileDid = did
+                    },
+                    onHashtagTap: { tag in
+                        commentSheetUri = nil
+                        selectedHashtag = tag
+                    },
+                    onStoryTap: { author in
+                        commentSheetUri = nil
+                        cardStoryAuthor = author
+                    },
+                    onCommentCountChanged: { count in
+                        if let idx = viewModel.galleries.firstIndex(where: { $0.uri == uri }) {
+                            viewModel.galleries[idx].commentCount = count
+                        }
+                    }
+                )
+            }
+        }
+        .sheet(item: $reportGallery) { gallery in
+            ReportView(client: client, subjectUri: gallery.uri, subjectCid: gallery.cid ?? "")
+        }
+        .alert("Delete Gallery?", isPresented: $showDeleteConfirmation) {
+            Button("Delete", role: .destructive) {
+                if let uri = deleteGalleryUri {
+                    Task {
+                        guard let authContext = await auth.authContext() else { return }
+                        let rkey = uri.split(separator: "/").last.map(String.init) ?? ""
+                        try? await client.deleteRecord(collection: "social.grain.gallery", rkey: rkey, auth: authContext)
+                        viewModel.galleries.removeAll { $0.uri == uri }
+                    }
+                    deleteGalleryUri = nil
+                }
+            }
+            Button("Cancel", role: .cancel) { deleteGalleryUri = nil }
+        } message: {
+            Text("This will permanently delete this gallery and all its photos.")
+        }
         .task {
             guard !isPreview else {
                 #if DEBUG
@@ -360,6 +470,7 @@ private struct FeedTabContent: View {
             }
             if !viewModel.hasFetchedInitial {
                 await viewModel.loadInitial(auth: auth.authContext())
+                launchSignposter.emitEvent("FeedFirstContent")
                 lastLoadTime = .now
             }
             if showSuggestedUsers, !suggestedLoaded, let did = auth.userDID {
