@@ -115,7 +115,7 @@ struct CameraFeedView: View {
             }
         }
         .sheet(item: $reportGallery) { gallery in
-            ReportView(client: client, subjectUri: gallery.uri, subjectCid: gallery.cid ?? "")
+            ReportView(client: client, subjectUri: gallery.uri, subjectCid: gallery.cid)
         }
         .alert("Delete Gallery?", isPresented: $showDeleteConfirmation) {
             Button("Delete", role: .destructive) {

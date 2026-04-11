@@ -3,8 +3,6 @@ import NukeUI
 import OSLog
 import SwiftUI
 
-private let avatarOverlaySignposter = OSSignposter(subsystem: "social.grain.grain", category: "AvatarOverlay")
-private let avatarOverlayLogger = Logger(subsystem: "social.grain.grain", category: "AvatarOverlay")
 private let profileLaunchSignposter = OSSignposter(subsystem: "social.grain.grain", category: "AppLaunch")
 
 enum ProfileViewMode: String, CaseIterable {
@@ -14,6 +12,7 @@ enum ProfileViewMode: String, CaseIterable {
 struct ProfileView: View {
     @Namespace private var viewModeNS
     @Namespace private var galleryZoomNS
+    @Namespace private var avatarZoomNS
     @Environment(AuthManager.self) private var auth
     @Environment(ViewedStoryStorage.self) private var viewedStories
     @Environment(LabelDefinitionsCache.self) private var labelDefsCache
@@ -26,7 +25,14 @@ struct ProfileView: View {
     @State private var selectedHashtag: String?
     @State private var deletedGalleryUri: String?
     @State private var viewMode: ProfileViewMode = .grid
+    @State private var tabPageWidth: CGFloat = 0
+    @State private var tabScrollOffsetX: CGFloat = 0
+    @State private var tabSectionViewportMinY: CGFloat = .infinity
     @State private var zoomState = ImageZoomState()
+    // Flipped on during a dismiss so the overlay disappears via a plain opacity
+    // transition instead of morphing back to the avatar anchor. Reset after the
+    // overlay is gone so the next open can morph again.
+    @State private var suppressAvatarMorph = false
     @State private var cardStoryAuthor: GrainStoryAuthor?
     let client: XRPCClient
     @State private var selectedArchivedStory: GrainStory?
@@ -51,12 +57,25 @@ struct ProfileView: View {
 
     var body: some View {
         let _ = profileLaunchSignposter.emitEvent("ProfileViewBodyBegin")
-        if isRoot {
-            NavigationStack {
+        ZStack {
+            if isRoot {
+                NavigationStack {
+                    profileContent
+                }
+            } else {
                 profileContent
             }
-        } else {
-            profileContent
+
+            if showAvatarOverlay, let avatar = viewModel.profile?.avatar {
+                AvatarOverlay(
+                    url: avatar,
+                    namespace: suppressAvatarMorph ? nil : avatarZoomNS,
+                    onDismiss: dismissAvatarOverlay
+                )
+                .ignoresSafeArea()
+                .zIndex(999)
+                .transition(.asymmetric(insertion: .identity, removal: .opacity))
+            }
         }
     }
 
@@ -70,6 +89,7 @@ struct ProfileView: View {
         ) {
             AvatarView(url: profile.avatar, size: 80)
                 .liquidGlassCircle()
+                .matchedGeometryEffect(id: "avatar", in: avatarZoomNS, isSource: !showAvatarOverlay)
         }
         .overlay(alignment: .bottomTrailing) {
             if did == auth.userDID {
@@ -86,7 +106,7 @@ struct ProfileView: View {
                 if hasStory { showStoryViewer = true } else { showStoryCreate = true }
             } else {
                 if hasStory { showStoryViewer = true }
-                else if profile.avatar != nil { showAvatarOverlay = true }
+                else if profile.avatar != nil { openAvatarOverlay() }
             }
         }
         .profileContextMenu(
@@ -94,7 +114,7 @@ struct ProfileView: View {
             hasStory: hasStory,
             onViewStory: hasStory ? { showStoryViewer = true } : nil,
             onAddStory: did == auth.userDID ? { showStoryCreate = true } : nil,
-            onViewPhoto: profile.avatar != nil ? { showAvatarOverlay = true } : nil,
+            onViewPhoto: profile.avatar != nil ? { openAvatarOverlay() } : nil,
             showSharingActions: false
         ) {
             StoryRingView(hasStory: hasStory, viewed: false, size: 120) {
@@ -104,414 +124,388 @@ struct ProfileView: View {
         }
     }
 
-    private var profileContent: some View {
-        ScrollView {
-            if let profile = viewModel.profile {
-                VStack(spacing: 12) {
-                    // Avatar + stats row
-                    HStack(alignment: .center, spacing: 16) {
-                        avatarButton(profile: profile)
-
-                        if !viewModel.isBlockHidden {
-                            HStack(spacing: 0) {
-                                StatView(count: profile.galleryCount ?? 0, label: "Galleries")
-                                    .frame(maxWidth: .infinity)
-                                NavigationLink {
-                                    FollowListView(client: client, did: did, mode: .followers)
-                                } label: {
-                                    StatView(count: profile.followersCount ?? 0, label: "Followers")
-                                }
-                                .buttonStyle(.plain)
-                                .frame(maxWidth: .infinity)
-                                NavigationLink {
-                                    FollowListView(client: client, did: did, mode: .following)
-                                } label: {
-                                    StatView(count: profile.followsCount ?? 0, label: "Following")
-                                }
-                                .buttonStyle(.plain)
-                                .frame(maxWidth: .infinity)
-                            }
+    private func handleRow(profile: GrainProfileDetailed) -> some View {
+        HStack(spacing: 6) {
+            if !viewModel.isBlockHidden, profile.viewer?.followedBy != nil {
+                Text("Follows you")
+                    .font(.caption2)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(.quaternary)
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
+            }
+            Text("@\(profile.handle)")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .contextMenu {
+                    if profile.avatar != nil {
+                        Button { openAvatarOverlay() } label: {
+                            Label("View Profile Photo", systemImage: "person.crop.circle")
                         }
+                        Divider()
                     }
-                    .padding(.horizontal)
-                    .padding(.top, 8)
-
-                    // Name + handle + bio
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(profile.displayName ?? profile.handle)
-                            .font(.subheadline.bold())
-
-                        HStack(spacing: 6) {
-                            if !viewModel.isBlockHidden, profile.viewer?.followedBy != nil {
-                                Text("Follows you")
-                                    .font(.caption2)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(.quaternary)
-                                    .clipShape(RoundedRectangle(cornerRadius: 4))
-                            }
-                            Text("@\(profile.handle)")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .contextMenu {
-                                    if profile.avatar != nil {
-                                        Button { showAvatarOverlay = true } label: {
-                                            Label("View Profile Photo", systemImage: "person.crop.circle")
-                                        }
-                                        Divider()
-                                    }
-                                    Button { copyText("@\(profile.handle)") } label: {
-                                        Label("Copy Handle", systemImage: "doc.on.doc")
-                                    }
-                                    Button { copyText(did) } label: {
-                                        Label("Copy DID", systemImage: "number")
-                                    }
-                                }
-                        }
-
-                        if viewModel.isBlockHidden {
-                            // Block alert
-                            HStack(spacing: 6) {
-                                Image(systemName: "nosign")
-                                    .font(.caption)
-                                if profile.viewer?.blocking != nil {
-                                    Text("Account blocked")
-                                } else {
-                                    Text("This user has blocked you")
-                                }
-                            }
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(.quaternary)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                            .padding(.top, 4)
-                        } else {
-                            if let description = profile.description, !description.isEmpty {
-                                RichTextView(
-                                    text: description,
-                                    font: .subheadline,
-                                    onMentionTap: { did in selectedProfileDid = did },
-                                    onHashtagTap: { tag in selectedHashtag = tag }
-                                )
-                                .padding(.top, 2)
-                            }
-                        }
+                    Button { copyText("@\(profile.handle)") } label: {
+                        Label("Copy Handle", systemImage: "doc.on.doc")
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal)
-
-                    if !viewModel.isBlockHidden {
-                        // Known followers
-                        if !viewModel.knownFollowers.isEmpty, did != auth.userDID {
-                            NavigationLink {
-                                FollowListView(client: client, did: did, mode: .knownFollowers)
-                            } label: {
-                                knownFollowersRow
-                            }
-                            .buttonStyle(.plain)
-                        }
-
-                        // Follow + Germ DM buttons
-                        if did != auth.userDID {
-                            HStack(spacing: 8) {
-                                followButton(profile: profile)
-
-                                if let germUrl = germDMUrl(profile: profile) {
-                                    Link(destination: germUrl) {
-                                        HStack(spacing: 4) {
-                                            Image("germ-logo")
-                                                .resizable()
-                                                .frame(width: 14, height: 14)
-                                            Text("Germ DM")
-                                                .font(.subheadline.weight(.semibold))
-                                        }
-                                        .frame(maxWidth: .infinity)
-                                    }
-                                    .buttonStyle(.bordered)
-                                    .tint(.primary)
-                                }
-                            }
-                            .padding(.horizontal)
-                        } else {
-                            HStack(spacing: 8) {
-                                NavigationLink {
-                                    EditProfileView(client: client, onSaved: {
-                                        Task { await viewModel.load(did: did) }
-                                    })
-                                } label: {
-                                    Text("Edit Profile")
-                                        .font(.subheadline.weight(.semibold))
-                                        .frame(maxWidth: .infinity)
-                                }
-                                .buttonStyle(.bordered)
-                                .tint(.primary)
-
-                                if let germUrl = germDMUrl(profile: profile) {
-                                    Link(destination: germUrl) {
-                                        HStack(spacing: 4) {
-                                            Image("germ-logo")
-                                                .resizable()
-                                                .frame(width: 14, height: 14)
-                                            Text("Germ DM")
-                                                .font(.subheadline.weight(.semibold))
-                                        }
-                                        .frame(maxWidth: .infinity)
-                                    }
-                                    .buttonStyle(.bordered)
-                                    .tint(.primary)
-                                }
-                            }
-                            .padding(.horizontal)
-                        }
-                    }
-
-                    // Tabs + grid
-                    if !viewModel.isBlockHidden {
-                        VStack(spacing: 0) {
-                            if did == auth.userDID {
-                                HStack(spacing: 0) {
-                                    tabButton(icon: "square.grid.3x3", mode: .grid)
-                                    tabButton(icon: "heart", mode: .favorites)
-                                    tabButton(icon: "clock", mode: .stories)
-                                }
-                            }
-
-                            if viewMode == .grid {
-                                galleriesGrid
-                            }
-
-                            if viewMode == .favorites {
-                                favoritesGrid
-                            }
-
-                            if viewMode == .stories {
-                                storyArchiveGrid
-                            }
-                        }
-                        .highPriorityGesture(
-                            did == auth.userDID ?
-                                DragGesture(minimumDistance: 30, coordinateSpace: .local)
-                                .onEnded { value in
-                                    let h = value.translation.width
-                                    let v = value.translation.height
-                                    guard abs(h) > abs(v) else { return }
-                                    let modes: [ProfileViewMode] = [.grid, .favorites, .stories]
-                                    guard let currentIdx = modes.firstIndex(of: viewMode) else { return }
-                                    if h < 0, currentIdx < modes.count - 1 {
-                                        let next = modes[currentIdx + 1]
-                                        withAnimation(.easeInOut(duration: 0.2)) { viewMode = next }
-                                        if next == .stories {
-                                            Task { await viewModel.loadStoryArchive(did: did, auth: auth.authContext()) }
-                                        } else if next == .favorites {
-                                            Task { await viewModel.loadFavorites(did: did, auth: auth.authContext()) }
-                                        }
-                                    } else if h > 0, currentIdx > 0 {
-                                        withAnimation(.easeInOut(duration: 0.2)) { viewMode = modes[currentIdx - 1] }
-                                    }
-                                }
-                                : nil
-                        )
-                    }
-                } // end if !isBlockHidden (tabs + grid)
-            } else if viewModel.error != nil {
-                VStack(spacing: 16) {
-                    ContentUnavailableView(
-                        "Profile Not Found",
-                        systemImage: "person.slash",
-                        description: Text("This user doesn't have a Grain profile yet.")
-                    )
-                    if let url = URL(string: "https://bsky.app/profile/\(actor)") {
-                        Link(destination: url) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "arrow.up.right")
-                                Text("View on Bluesky")
-                            }
-                            .font(.subheadline.weight(.medium))
-                        }
+                    Button { copyText(did) } label: {
+                        Label("Copy DID", systemImage: "number")
                     }
                 }
-                .padding(.top, 40)
-            } else {
-                ProgressView()
-                    .padding(.top, 100)
-            }
         }
-        .environment(zoomState)
-        .modifier(ImageZoomOverlay(zoomState: zoomState))
-        .navigationTitle("")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            if did == auth.userDID {
-                if let handle = viewModel.profile?.handle,
-                   let profileURL = URL(string: "https://grain.social/profile/\(handle)")
-                {
+    }
+
+    private var profileContent: some View {
+        ScrollViewReader { scrollProxy in
+            ScrollView {
+                if let profile = viewModel.profile {
+                    VStack(spacing: 12) {
+                        // Avatar + stats row
+                        HStack(alignment: .center, spacing: 16) {
+                            avatarButton(profile: profile)
+
+                            if !viewModel.isBlockHidden {
+                                HStack(spacing: 0) {
+                                    StatView(count: profile.galleryCount ?? 0, label: "Galleries")
+                                        .frame(maxWidth: .infinity)
+                                    NavigationLink {
+                                        FollowListView(client: client, did: did, mode: .followers)
+                                    } label: {
+                                        StatView(count: profile.followersCount ?? 0, label: "Followers")
+                                    }
+                                    .buttonStyle(.plain)
+                                    .frame(maxWidth: .infinity)
+                                    NavigationLink {
+                                        FollowListView(client: client, did: did, mode: .following)
+                                    } label: {
+                                        StatView(count: profile.followsCount ?? 0, label: "Following")
+                                    }
+                                    .buttonStyle(.plain)
+                                    .frame(maxWidth: .infinity)
+                                }
+                            }
+                        }
+                        .padding(.horizontal)
+                        .padding(.top, 8)
+
+                        // Name + handle + bio
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(profile.displayName ?? profile.handle)
+                                .font(.subheadline.bold())
+
+                            handleRow(profile: profile)
+
+                            if viewModel.isBlockHidden {
+                                // Block alert
+                                HStack(spacing: 6) {
+                                    Image(systemName: "nosign")
+                                        .font(.caption)
+                                    if profile.viewer?.blocking != nil {
+                                        Text("Account blocked")
+                                    } else {
+                                        Text("This user has blocked you")
+                                    }
+                                }
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(.quaternary)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                .padding(.top, 4)
+                            } else {
+                                if let description = profile.description, !description.isEmpty {
+                                    RichTextView(
+                                        text: description,
+                                        font: .subheadline,
+                                        onMentionTap: { did in selectedProfileDid = did },
+                                        onHashtagTap: { tag in selectedHashtag = tag }
+                                    )
+                                    .padding(.top, 2)
+                                }
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal)
+
+                        if !viewModel.isBlockHidden {
+                            // Known followers
+                            if !viewModel.knownFollowers.isEmpty, did != auth.userDID {
+                                NavigationLink {
+                                    FollowListView(client: client, did: did, mode: .knownFollowers)
+                                } label: {
+                                    knownFollowersRow
+                                }
+                                .buttonStyle(.plain)
+                            }
+
+                            // Follow + Germ DM buttons
+                            if did != auth.userDID {
+                                HStack(spacing: 8) {
+                                    followButton(profile: profile)
+
+                                    if let germUrl = germDMUrl(profile: profile) {
+                                        Link(destination: germUrl) {
+                                            HStack(spacing: 4) {
+                                                Image("germ-logo")
+                                                    .resizable()
+                                                    .frame(width: 14, height: 14)
+                                                Text("Germ DM")
+                                                    .font(.subheadline.weight(.semibold))
+                                            }
+                                            .frame(maxWidth: .infinity)
+                                        }
+                                        .buttonStyle(.bordered)
+                                        .tint(.primary)
+                                    }
+                                }
+                                .padding(.horizontal)
+                            } else {
+                                HStack(spacing: 8) {
+                                    NavigationLink {
+                                        EditProfileView(client: client, onSaved: {
+                                            Task { await viewModel.load(did: did) }
+                                        })
+                                    } label: {
+                                        Text("Edit Profile")
+                                            .font(.subheadline.weight(.semibold))
+                                            .frame(maxWidth: .infinity)
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .tint(.primary)
+
+                                    if let germUrl = germDMUrl(profile: profile) {
+                                        Link(destination: germUrl) {
+                                            HStack(spacing: 4) {
+                                                Image("germ-logo")
+                                                    .resizable()
+                                                    .frame(width: 14, height: 14)
+                                                Text("Germ DM")
+                                                    .font(.subheadline.weight(.semibold))
+                                            }
+                                            .frame(maxWidth: .infinity)
+                                        }
+                                        .buttonStyle(.bordered)
+                                        .tint(.primary)
+                                    }
+                                }
+                                .padding(.horizontal)
+                            }
+                        }
+
+                        // Tabs + grid
+                        if !viewModel.isBlockHidden {
+                            if did == auth.userDID {
+                                ownProfileTabSection
+                                    .id("profileTabSection")
+                                    .onGeometryChange(for: CGFloat.self) { proxy in
+                                        proxy.frame(in: .scrollView).minY
+                                    } action: { newValue in
+                                        tabSectionViewportMinY = newValue
+                                    }
+                            } else {
+                                galleriesGrid
+                            }
+                        }
+                    } // end if !isBlockHidden (tabs + grid)
+                } else if viewModel.error != nil {
+                    VStack(spacing: 16) {
+                        ContentUnavailableView(
+                            "Profile Not Found",
+                            systemImage: "person.slash",
+                            description: Text("This user doesn't have a Grain profile yet.")
+                        )
+                        if let url = URL(string: "https://bsky.app/profile/\(actor)") {
+                            Link(destination: url) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "arrow.up.right")
+                                    Text("View on Bluesky")
+                                }
+                                .font(.subheadline.weight(.medium))
+                            }
+                        }
+                    }
+                    .padding(.top, 40)
+                } else {
+                    ProgressView()
+                        .padding(.top, 100)
+                }
+            }
+            .environment(zoomState)
+            .modifier(ImageZoomOverlay(zoomState: zoomState))
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if did == auth.userDID {
+                    if let handle = viewModel.profile?.handle,
+                       let profileURL = URL(string: "https://grain.social/profile/\(handle)")
+                    {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            ShareLink(item: profileURL) {
+                                Image(systemName: "square.and.arrow.up")
+                            }
+                            .tint(.primary)
+                        }
+                    }
                     ToolbarItem(placement: .topBarTrailing) {
-                        ShareLink(item: profileURL) {
-                            Image(systemName: "square.and.arrow.up")
+                        NavigationLink {
+                            SettingsView(client: client)
+                        } label: {
+                            Image(systemName: "gearshape")
+                        }
+                        .tint(.primary)
+                    }
+                } else if let profile = viewModel.profile {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Menu {
+                            if let profileURL = URL(string: "https://grain.social/profile/\(profile.handle)") {
+                                ShareLink(item: profileURL) {
+                                    Label("Share Profile", systemImage: "square.and.arrow.up")
+                                }
+                                Button {
+                                    UIPasteboard.general.string = profile.handle
+                                } label: {
+                                    Label("Copy Username", systemImage: "at")
+                                }
+                                Divider()
+                            }
+                            if !viewModel.isBlockHidden {
+                                Button(role: profile.viewer?.muted == true ? nil : .destructive) {
+                                    Task { await viewModel.toggleMute(auth: auth.authContext()) }
+                                } label: {
+                                    Label(
+                                        profile.viewer?.muted == true ? "Unmute" : "Mute",
+                                        systemImage: profile.viewer?.muted == true ? "speaker.wave.2" : "speaker.slash"
+                                    )
+                                }
+                            }
+                            Button(role: profile.viewer?.blocking != nil ? nil : .destructive) {
+                                Task { await viewModel.toggleBlock(auth: auth.authContext()) }
+                            } label: {
+                                Label(
+                                    profile.viewer?.blocking != nil ? "Unblock" : "Block",
+                                    systemImage: profile.viewer?.blocking != nil ? "circle" : "nosign"
+                                )
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis")
                         }
                         .tint(.primary)
                     }
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                    NavigationLink {
-                        SettingsView(client: client)
-                    } label: {
-                        Image(systemName: "gearshape")
-                    }
-                    .tint(.primary)
-                }
-            } else if let profile = viewModel.profile {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        if let profileURL = URL(string: "https://grain.social/profile/\(profile.handle)") {
-                            ShareLink(item: profileURL) {
-                                Label("Share Profile", systemImage: "square.and.arrow.up")
-                            }
-                            Button {
-                                UIPasteboard.general.string = profile.handle
-                            } label: {
-                                Label("Copy Username", systemImage: "at")
-                            }
-                            Divider()
-                        }
-                        if !viewModel.isBlockHidden {
-                            Button(role: profile.viewer?.muted == true ? nil : .destructive) {
-                                Task { await viewModel.toggleMute(auth: auth.authContext()) }
-                            } label: {
-                                Label(
-                                    profile.viewer?.muted == true ? "Unmute" : "Mute",
-                                    systemImage: profile.viewer?.muted == true ? "speaker.wave.2" : "speaker.slash"
-                                )
-                            }
-                        }
-                        Button(role: profile.viewer?.blocking != nil ? nil : .destructive) {
-                            Task { await viewModel.toggleBlock(auth: auth.authContext()) }
-                        } label: {
-                            Label(
-                                profile.viewer?.blocking != nil ? "Unblock" : "Block",
-                                systemImage: profile.viewer?.blocking != nil ? "circle" : "nosign"
-                            )
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis")
-                    }
-                    .tint(.primary)
+            }
+            .navigationDestination(item: $selectedGalleryUri) { uri in
+                ProfileGalleryFeedView(viewModel: viewModel, client: client, did: did, initialUri: uri)
+                    .navigationTransition(.zoom(sourceID: uri, in: galleryZoomNS))
+            }
+            .navigationDestination(item: $selectedProfileDid) { did in
+                ProfileView(client: client, did: did)
+            }
+            .navigationDestination(item: $selectedHashtag) { tag in
+                HashtagFeedView(client: client, tag: tag)
+            }
+            .fullScreenCover(isPresented: $showStoryViewer) {
+                if let profile = viewModel.profile {
+                    StoryViewer(
+                        authors: [GrainStoryAuthor(
+                            profile: GrainProfile(cid: "", did: did, handle: profile.handle, displayName: profile.displayName, avatar: profile.avatar),
+                            storyCount: viewModel.stories.count,
+                            latestAt: viewModel.stories.last?.createdAt ?? ""
+                        )],
+                        client: client,
+                        onProfileTap: { did in
+                            showStoryViewer = false
+                            selectedProfileDid = did
+                        },
+                        onDismiss: { showStoryViewer = false }
+                    )
+                    .environment(auth)
                 }
             }
-        }
-        .navigationDestination(item: $selectedGalleryUri) { uri in
-            GalleryDetailView(client: client, galleryUri: uri, deletedGalleryUri: $deletedGalleryUri)
-                .navigationTransition(.zoom(sourceID: uri, in: galleryZoomNS))
-        }
-        .navigationDestination(item: $selectedProfileDid) { did in
-            ProfileView(client: client, did: did)
-        }
-        .navigationDestination(item: $selectedHashtag) { tag in
-            HashtagFeedView(client: client, tag: tag)
-        }
-        .fullScreenCover(isPresented: $showStoryViewer) {
-            if let profile = viewModel.profile {
+            .fullScreenCover(item: $cardStoryAuthor) { author in
                 StoryViewer(
-                    authors: [GrainStoryAuthor(
-                        profile: GrainProfile(cid: "", did: did, handle: profile.handle, displayName: profile.displayName, avatar: profile.avatar),
-                        storyCount: viewModel.stories.count,
-                        latestAt: viewModel.stories.last?.createdAt ?? ""
-                    )],
+                    authors: [author],
                     client: client,
                     onProfileTap: { did in
-                        showStoryViewer = false
+                        cardStoryAuthor = nil
                         selectedProfileDid = did
                     },
-                    onDismiss: { showStoryViewer = false }
+                    onDismiss: { cardStoryAuthor = nil }
                 )
                 .environment(auth)
             }
-        }
-        .fullScreenCover(item: $cardStoryAuthor) { author in
-            StoryViewer(
-                authors: [author],
-                client: client,
-                onProfileTap: { did in
-                    cardStoryAuthor = nil
-                    selectedProfileDid = did
-                },
-                onDismiss: { cardStoryAuthor = nil }
-            )
-            .environment(auth)
-        }
-        .fullScreenCover(item: $selectedArchivedStory) { story in
-            if let profile = viewModel.profile,
-               viewModel.archivedStories.contains(where: { $0.id == story.id })
-            {
-                StoryViewer(
-                    authors: [GrainStoryAuthor(
-                        profile: GrainProfile(cid: "", did: did, handle: profile.handle, displayName: profile.displayName, avatar: profile.avatar),
-                        storyCount: 1,
-                        latestAt: story.createdAt
-                    )],
-                    initialStories: [story],
-                    client: client,
-                    onProfileTap: { did in
-                        selectedArchivedStory = nil
-                        selectedProfileDid = did
-                    },
-                    onDismiss: { selectedArchivedStory = nil }
-                )
-                .environment(auth)
-            }
-        }
-        .fullScreenCover(isPresented: $showStoryCreate) {
-            StoryCreateView(client: client, onCreated: {
-                Task { await viewModel.load(did: did) }
-            })
-            .environment(auth)
-        }
-        .fullScreenCover(isPresented: $showAvatarOverlay) {
-            if let avatar = viewModel.profile?.avatar {
-                AvatarOverlay(url: avatar) {
-                    showAvatarOverlay = false
+            .fullScreenCover(item: $selectedArchivedStory) { story in
+                if let profile = viewModel.profile,
+                   viewModel.archivedStories.contains(where: { $0.id == story.id })
+                {
+                    StoryViewer(
+                        authors: [GrainStoryAuthor(
+                            profile: GrainProfile(cid: "", did: did, handle: profile.handle, displayName: profile.displayName, avatar: profile.avatar),
+                            storyCount: 1,
+                            latestAt: story.createdAt
+                        )],
+                        initialStories: [story],
+                        client: client,
+                        onProfileTap: { did in
+                            selectedArchivedStory = nil
+                            selectedProfileDid = did
+                        },
+                        onDismiss: { selectedArchivedStory = nil }
+                    )
+                    .environment(auth)
                 }
             }
-        }
-        .background(Color(.systemBackground))
-        .refreshable {
-            await viewModel.load(did: actor, viewer: auth.userDID, auth: auth.authContext())
-            if viewMode == .favorites {
-                await viewModel.loadFavorites(did: actor, auth: auth.authContext())
-            } else if viewMode == .stories {
-                await viewModel.loadStoryArchive(did: actor, auth: auth.authContext())
+            .fullScreenCover(isPresented: $showStoryCreate) {
+                StoryCreateView(client: client, onCreated: {
+                    Task { await viewModel.load(did: did) }
+                })
+                .environment(auth)
             }
-        }
-        .task {
-            guard !isPreview else {
-                #if DEBUG
-                    viewModel.profile = PreviewData.profile
-                    viewModel.galleries = PreviewData.galleries
-                #endif
-                return
-            }
-            if viewModel.profile == nil {
+            .background(Color(.systemBackground))
+            .refreshable {
                 await viewModel.load(did: actor, viewer: auth.userDID, auth: auth.authContext())
+                if viewMode == .favorites {
+                    await viewModel.loadFavorites(did: actor, auth: auth.authContext())
+                } else if viewMode == .stories {
+                    await viewModel.loadStoryArchive(did: actor, auth: auth.authContext())
+                }
             }
-        }
-        .onChange(of: deletedGalleryUri) { _, uri in
-            if let uri {
-                viewModel.galleries.removeAll { $0.uri == uri }
-                deletedGalleryUri = nil
+            .task {
+                guard !isPreview else {
+                    #if DEBUG
+                        viewModel.profile = PreviewData.profile
+                        viewModel.galleries = PreviewData.galleries
+                    #endif
+                    return
+                }
+                if viewModel.profile == nil {
+                    await viewModel.load(did: actor, viewer: auth.userDID, auth: auth.authContext())
+                }
             }
-        }
-        .alert("Sign in again to block", isPresented: $viewModel.showReauthAlert) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text("Please sign out and back in to enable blocking. This is a one-time step after the update.")
-        }
-        .overlay(alignment: .center) {
-            if showCopiedToast { CopiedCheckmarkToast() }
-        }
-        .animation(.spring(response: 0.4, dampingFraction: 0.7), value: showCopiedToast)
-        .sensoryFeedback(.impact(weight: .medium), trigger: showCopiedToast)
+            .onChange(of: deletedGalleryUri) { _, uri in
+                if let uri {
+                    viewModel.galleries.removeAll { $0.uri == uri }
+                    deletedGalleryUri = nil
+                }
+            }
+            .alert("Sign in again to block", isPresented: $viewModel.showReauthAlert) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("Please sign out and back in to enable blocking. This is a one-time step after the update.")
+            }
+            .overlay(alignment: .center) {
+                if showCopiedToast { CopiedCheckmarkToast() }
+            }
+            .animation(.spring(response: 0.4, dampingFraction: 0.7), value: showCopiedToast)
+            .sensoryFeedback(.impact(weight: .medium), trigger: showCopiedToast)
+            .coordinateSpace(.named("profileScroll"))
+            .onChange(of: viewMode) { _, _ in
+                if tabSectionViewportMinY < 0 {
+                    withAnimation(.smooth(duration: 0.35)) {
+                        scrollProxy.scrollTo("profileTabSection", anchor: .top)
+                    }
+                }
+            }
+        } // close ScrollViewReader
     }
 
     private func copyText(_ text: String) {
@@ -568,28 +562,116 @@ struct ProfileView: View {
     }
 
     private func tabButton(icon: String, mode: ProfileViewMode) -> some View {
-        let isActive = viewMode == mode
+        let modes: [ProfileViewMode] = [.grid, .favorites, .stories]
+        let activeIdx: Int = {
+            if tabPageWidth > 0 {
+                let raw = Int((tabScrollOffsetX / tabPageWidth).rounded())
+                return max(0, min(modes.count - 1, raw))
+            }
+            return modes.firstIndex(of: viewMode) ?? 0
+        }()
+        let isActive = modes.firstIndex(of: mode) == activeIdx
         let symbolName = isActive ? icon + ".fill" : icon
         return Button {
-            withAnimation(.easeInOut(duration: 0.2)) { viewMode = mode }
-            if mode == .stories {
-                Task { await viewModel.loadStoryArchive(did: did, auth: auth.authContext()) }
-            } else if mode == .favorites {
-                Task { await viewModel.loadFavorites(did: did, auth: auth.authContext()) }
-            }
+            setViewMode(mode)
         } label: {
-            VStack(spacing: 4) {
-                Image(systemName: symbolName)
-                    .font(.system(size: 22))
-                    .foregroundStyle(isActive ? .primary : .secondary)
-                Rectangle()
-                    .fill(viewMode == mode ? Color("AccentColor") : .clear)
-                    .frame(width: 32, height: 2.5)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
+            Image(systemName: symbolName)
+                .font(.system(size: 22))
+                .foregroundStyle(isActive ? .primary : .secondary)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 8)
+                .padding(.bottom, 14)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+
+    private func setViewMode(_ mode: ProfileViewMode) {
+        guard mode != viewMode else { return }
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
+            viewMode = mode
+        }
+        if mode == .stories {
+            Task { await viewModel.loadStoryArchive(did: did, auth: auth.authContext()) }
+        } else if mode == .favorites {
+            Task { await viewModel.loadFavorites(did: did, auth: auth.authContext()) }
+        }
+    }
+
+    private var ownProfileTabSection: some View {
+        let modes: [ProfileViewMode] = [.grid, .favorites, .stories]
+        let currentIdx = modes.firstIndex(of: viewMode) ?? 0
+
+        let scrollBinding = Binding<ProfileViewMode?>(
+            get: { viewMode },
+            set: { newMode in
+                guard let newMode, newMode != viewMode else { return }
+                viewMode = newMode
+                if newMode == .stories {
+                    Task { await viewModel.loadStoryArchive(did: did, auth: auth.authContext()) }
+                } else if newMode == .favorites {
+                    Task { await viewModel.loadFavorites(did: did, auth: auth.authContext()) }
+                }
+            }
+        )
+
+        return VStack(spacing: 0) {
+            // Tab bar with a single indicator driven by live scroll offset.
+            HStack(spacing: 0) {
+                tabButton(icon: "square.grid.3x3", mode: .grid)
+                tabButton(icon: "heart", mode: .favorites)
+                tabButton(icon: "clock", mode: .stories)
+            }
+            .overlay(alignment: .bottomLeading) {
+                GeometryReader { tabBarGeo in
+                    let tabWidth = tabBarGeo.size.width / CGFloat(modes.count)
+                    let indicatorWidth: CGFloat = 32
+                    let fraction: CGFloat = tabPageWidth > 0
+                        ? tabScrollOffsetX / tabPageWidth
+                        : CGFloat(currentIdx)
+                    let clamped = max(0, min(fraction, CGFloat(modes.count - 1)))
+                    let xOffset = clamped * tabWidth + (tabWidth - indicatorWidth) / 2
+                    Rectangle()
+                        .fill(Color("AccentColor"))
+                        .frame(width: indicatorWidth, height: 2.5)
+                        .offset(x: xOffset, y: -6)
+                }
+                .frame(height: 2.5)
+                .allowsHitTesting(false)
+            }
+
+            // Native horizontally-paged grids. SwiftUI handles the physics, snapping,
+            // and axis disambiguation with the outer vertical ScrollView.
+            ScrollView(.horizontal) {
+                HStack(alignment: .top, spacing: 0) {
+                    galleriesGrid
+                        .frame(maxHeight: .infinity, alignment: .top)
+                        .containerRelativeFrame(.horizontal)
+                        .id(ProfileViewMode.grid)
+                    favoritesGrid
+                        .frame(maxHeight: .infinity, alignment: .top)
+                        .containerRelativeFrame(.horizontal)
+                        .id(ProfileViewMode.favorites)
+                    storyArchiveGrid
+                        .frame(maxHeight: .infinity, alignment: .top)
+                        .containerRelativeFrame(.horizontal)
+                        .id(ProfileViewMode.stories)
+                }
+                .scrollTargetLayout()
+            }
+            .scrollTargetBehavior(.paging)
+            .scrollPosition(id: scrollBinding)
+            .scrollIndicators(.hidden)
+            .onScrollGeometryChange(for: CGFloat.self) { geo in
+                geo.contentOffset.x
+            } action: { _, newValue in
+                tabScrollOffsetX = newValue
+            }
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { newWidth in
+                if newWidth > 0 { tabPageWidth = newWidth }
+            }
+            .frame(minHeight: 500)
+        }
     }
 
     @ViewBuilder
@@ -827,19 +909,46 @@ struct ProfileView: View {
         }
         return URL(string: "\(messageMe.messageMeUrl)/web#\(did)+\(viewerDid)")
     }
+
+    private func openAvatarOverlay() {
+        suppressAvatarMorph = false
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
+            showAvatarOverlay = true
+        }
+    }
+
+    private func dismissAvatarOverlay() {
+        // Detach matchedGeometryEffect before the removal transition so the overlay
+        // fades instead of morphing back into the avatar anchor. The flag resets
+        // after the transition so the next open still animates from the avatar.
+        suppressAvatarMorph = true
+        withAnimation(.easeOut(duration: 0.25)) {
+            showAvatarOverlay = false
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(300))
+            suppressAvatarMorph = false
+        }
+    }
 }
 
 struct AvatarOverlay: View {
     let url: String
+    var namespace: Namespace.ID?
     let onDismiss: () -> Void
 
     @State private var zoomState = ImageZoomState()
-    @State private var dragOffset: CGFloat = 0
     @State private var circularImage: UIImage?
+    @State private var dragOffset: CGFloat = 0
+    @GestureState private var dragDelta: CGFloat = 0
+
+    private var liveDrag: CGFloat {
+        dragOffset + dragDelta
+    }
 
     private var backgroundOpacity: Double {
         guard !zoomState.showOverlay else { return 0.92 }
-        return max(0, 0.92 - abs(dragOffset) / 250)
+        return max(0, 0.92 - abs(liveDrag) / 250)
     }
 
     var body: some View {
@@ -847,29 +956,51 @@ struct AvatarOverlay: View {
             Color.black
                 .opacity(backgroundOpacity)
                 .ignoresSafeArea()
+                .contentShape(Rectangle())
+                .onTapGesture { onDismiss() }
 
-            if let image = circularImage {
-                ZoomableImage(localImage: image, aspectRatio: 1.0, onSingleTap: {
-                    guard !zoomState.showOverlay else { return }
-                    onDismiss()
-                })
-                .padding(32)
-                .offset(y: dragOffset)
-            } else {
-                ProgressView()
+            GeometryReader { geo in
+                let side = geo.size.width - 64
+                Group {
+                    if let image = circularImage {
+                        ZoomableImage(
+                            localImage: image,
+                            aspectRatio: 1.0,
+                            onSingleTap: {
+                                // Ignore taps while actively pinch-zoomed — ZoomableImage
+                                // emits a single tap on release too, and we don't want
+                                // that to dismiss.
+                                if !zoomState.showOverlay { onDismiss() }
+                            }
+                        )
+                        .frame(width: side, height: side)
+                    } else {
+                        ProgressView()
+                            .tint(.white)
+                            .frame(width: side, height: side)
+                    }
+                }
+                .position(x: geo.size.width / 2, y: geo.size.height / 2)
+                .offset(y: liveDrag)
+                .if(namespace != nil) { view in
+                    view.matchedGeometryEffect(id: "avatar", in: namespace!, isSource: false)
+                }
             }
+            .ignoresSafeArea()
         }
-        .gesture(
+        .environment(zoomState)
+        .modifier(ImageZoomOverlay(zoomState: zoomState))
+        .simultaneousGesture(
             DragGesture()
-                .onChanged { val in
-                    guard !zoomState.showOverlay else { return }
-                    dragOffset = val.translation.height
+                .updating($dragDelta) { val, state, _ in
+                    // Don't let a 1-finger drag move the image while the user is
+                    // pinch-zooming — ZoomableImage's 2-finger pan handles that.
+                    if !zoomState.showOverlay { state = val.translation.height }
                 }
                 .onEnded { val in
-                    let shouldDismiss = !zoomState.showOverlay && (
-                        abs(val.translation.height) > 80 ||
-                            abs(val.predictedEndTranslation.height) > 150
-                    )
+                    guard !zoomState.showOverlay else { return }
+                    let shouldDismiss = abs(val.translation.height) > 80
+                        || abs(val.predictedEndTranslation.height) > 150
                     if shouldDismiss {
                         onDismiss()
                     } else {
@@ -879,17 +1010,10 @@ struct AvatarOverlay: View {
                     }
                 }
         )
-        .environment(zoomState)
-        .modifier(ImageZoomOverlay(zoomState: zoomState))
         .task {
             guard let imageURL = URL(string: url) else { return }
-            let spid = avatarOverlaySignposter.makeSignpostID()
-            let state = avatarOverlaySignposter.beginInterval("LoadCircularAvatar", id: spid, "url=\(url)")
-            avatarOverlayLogger.debug("[LoadCircularAvatar] begin url=\(url)")
             let request = ImageRequest(url: imageURL, processors: [ImageProcessors.Circle()])
             circularImage = try? await ImagePipeline.shared.image(for: request)
-            avatarOverlayLogger.debug("[LoadCircularAvatar] end success=\(circularImage != nil)")
-            avatarOverlaySignposter.endInterval("LoadCircularAvatar", state, "success=\(circularImage != nil)")
         }
     }
 }

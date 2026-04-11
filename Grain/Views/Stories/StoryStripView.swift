@@ -8,7 +8,6 @@ struct StoryStripView: View {
     var sortVersion: Int = 0
     let onAuthorTap: (GrainStoryAuthor, Int) -> Void
     var onAuthorLongPress: ((String) -> Void)?
-    var onViewPhoto: ((String) -> Void)?
     let onCreateTap: () -> Void
 
     private let avatarSize: CGFloat = 68
@@ -70,8 +69,7 @@ struct StoryStripView: View {
                             handle: author.profile.handle,
                             hasStory: true,
                             onViewProfile: { onAuthorLongPress?(author.profile.did) },
-                            onViewStory: { onAuthorTap(author, 0) },
-                            onViewPhoto: author.profile.avatar.map { url in { onViewPhoto?(url) } }
+                            onViewStory: { onAuthorTap(author, 0) }
                         ) {
                             StoryRingView(hasStory: true, viewed: isViewed, size: 96) {
                                 AvatarView(url: author.profile.avatar, size: 96)
