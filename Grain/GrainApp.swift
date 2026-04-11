@@ -1,14 +1,27 @@
 import Nuke
+import os
 import SwiftUI
+
+private let appSignposter = OSSignposter(subsystem: "social.grain.grain", category: "AppLaunch")
+private let appLogger = Logger(subsystem: "social.grain.grain", category: "AppLaunch")
 
 @main
 struct GrainApp: App {
     init() {
-        var config = ImagePipeline.Configuration.withDataCache
-        if let dataCache = try? DataCache(name: "social.grain.images") {
-            config.dataCache = dataCache
+        // Defer Nuke DataCache setup off the main-thread init path — no images
+        // load during the ~800ms before MainTabView.task fires, so this is safe.
+        Task.detached(priority: .userInitiated) {
+            let spid = appSignposter.makeSignpostID()
+            let state = appSignposter.beginInterval("NukePipelineSetup", id: spid)
+            appLogger.debug("[NukePipelineSetup] begin")
+            var config = ImagePipeline.Configuration.withDataCache
+            if let dataCache = try? DataCache(name: "social.grain.images") {
+                config.dataCache = dataCache
+            }
+            await MainActor.run { ImagePipeline.shared = ImagePipeline(configuration: config) }
+            appSignposter.endInterval("NukePipelineSetup", state)
+            appLogger.debug("[NukePipelineSetup] end")
         }
-        ImagePipeline.shared = ImagePipeline(configuration: config)
     }
 
     @UIApplicationDelegateAdaptor private var appDelegate: AppDelegate

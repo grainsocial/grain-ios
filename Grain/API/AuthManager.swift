@@ -4,6 +4,7 @@ import Foundation
 import os
 
 private let logger = Logger(subsystem: "social.grain.grain", category: "Auth")
+private let authSignposter = OSSignposter(subsystem: "social.grain.grain", category: "Auth")
 
 /// Manages OAuth + DPoP authentication flow against the hatk server.
 @Observable
@@ -29,6 +30,9 @@ final class AuthManager {
     nonisolated static let redirectURI = "grain://oauth/callback"
 
     init() {
+        let spid = authSignposter.makeSignpostID()
+        let state = authSignposter.beginInterval("SessionRestore", id: spid)
+        logger.debug("[SessionRestore] begin")
         // Restore session from Keychain — allow expired tokens since we can refresh
         if TokenStorage.accessToken != nil,
            let did = TokenStorage.userDID,
@@ -38,8 +42,20 @@ final class AuthManager {
             userDID = did
             userHandle = TokenStorage.userHandle
             userAvatar = TokenStorage.userAvatar
+            authSignposter.emitEvent("KeychainRead", id: spid, "authenticated=true")
+            logger.debug("[KeychainRead] authenticated=true")
+            let dpopSpid = authSignposter.makeSignpostID()
+            let dpopState = authSignposter.beginInterval("DPoPLoad", id: dpopSpid)
+            logger.debug("[DPoPLoad] begin")
             dpop = try? DPoP.loadOrCreate()
+            authSignposter.endInterval("DPoPLoad", dpopState)
+            logger.debug("[DPoPLoad] end")
+        } else {
+            authSignposter.emitEvent("KeychainRead", id: spid, "authenticated=false")
+            logger.debug("[KeychainRead] authenticated=false")
         }
+        authSignposter.endInterval("SessionRestore", state)
+        logger.debug("[SessionRestore] end")
     }
 
     /// Start the OAuth login flow. Set `createAccount` to show the sign-up page.

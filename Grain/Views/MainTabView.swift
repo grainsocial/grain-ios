@@ -1,4 +1,8 @@
+import os
 import SwiftUI
+
+private let launchSignposter = OSSignposter(subsystem: "social.grain.grain", category: "AppLaunch")
+private let launchLogger = Logger(subsystem: "social.grain.grain", category: "AppLaunch")
 
 private enum AppTab: Hashable {
     case feed, notifications, profile, search
@@ -74,6 +78,10 @@ struct MainTabView: View {
         .tint(Color("AccentColor"))
         .environment(commentPresenter)
         .task {
+            let taskSpid = launchSignposter.makeSignpostID()
+            let taskState = launchSignposter.beginInterval("MainTabLaunch", id: taskSpid)
+            launchLogger.debug("[MainTabLaunch] begin")
+
             commentPresenter.configure(
                 auth: auth,
                 storyStatusCache: storyStatusCache,
@@ -82,12 +90,43 @@ struct MainTabView: View {
             let c = auth.makeClient()
             client = c
             notificationsVM.updateClient(c)
-            await auth.fetchAvatarIfNeeded()
+
+            // Start avatar fetch immediately — it doesn't need an auth context
+            let avatarSpid = launchSignposter.makeSignpostID()
+            let avatarState = launchSignposter.beginInterval("AvatarFetch", id: avatarSpid)
+            launchLogger.debug("[AvatarFetch] begin")
+            async let avatarFetch: Void = auth.fetchAvatarIfNeeded()
+
+            // Resolve auth context once (may refresh token) while avatar is in flight
+            let ctx = await auth.authContext()
+
+            // Kick off notifications + label defs in parallel now that we have ctx
+            let notifSpid = launchSignposter.makeSignpostID()
+            let labelsSpid = launchSignposter.makeSignpostID()
+            let notifState = launchSignposter.beginInterval("NotificationsFetch", id: notifSpid)
+            launchLogger.debug("[NotificationsFetch] begin")
+            let labelsState = launchSignposter.beginInterval("LabelDefsFetch", id: labelsSpid)
+            launchLogger.debug("[LabelDefsFetch] begin")
+            async let notifFetch: Void = notificationsVM.fetchUnseenCount(auth: ctx)
+            async let labelsFetch: Void = labelDefsCache.loadIfNeeded(client: c, auth: ctx)
+
+            await avatarFetch
+            launchSignposter.endInterval("AvatarFetch", avatarState)
+            launchLogger.debug("[AvatarFetch] end")
             if let uiImage = auth.avatarImage {
                 avatarTabImage = circularAvatar(uiImage, size: 26)
             }
-            await notificationsVM.fetchUnseenCount(auth: auth.authContext())
-            await labelDefsCache.loadIfNeeded(client: c, auth: auth.authContext())
+
+            await notifFetch
+            launchSignposter.endInterval("NotificationsFetch", notifState)
+            launchLogger.debug("[NotificationsFetch] end")
+
+            await labelsFetch
+            launchSignposter.endInterval("LabelDefsFetch", labelsState)
+            launchLogger.debug("[LabelDefsFetch] end")
+
+            launchSignposter.endInterval("MainTabLaunch", taskState)
+            launchLogger.debug("[MainTabLaunch] end")
         }
         .onChange(of: auth.avatarImage) {
             if let uiImage = auth.avatarImage {
