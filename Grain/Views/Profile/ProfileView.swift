@@ -391,6 +391,10 @@ struct ProfileView: View {
                     initialUri: selection.uri,
                     source: selection.source
                 )
+                // Force a fresh identity per selection so @State (scrollAnchor,
+                // didExpand) resets — without this, SwiftUI reuses the prior
+                // push's state and lands on the old scroll position.
+                .id(selection.uri)
                 .navigationTransition(.zoom(sourceID: selection.uri, in: galleryZoomNS))
             }
             .navigationDestination(item: $selectedProfileDid) { did in
