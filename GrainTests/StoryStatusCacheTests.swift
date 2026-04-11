@@ -3,11 +3,21 @@ import XCTest
 
 @MainActor
 final class StoryStatusCacheTests: XCTestCase {
-    private func makeAuthor(did: String, storyCount: Int = 1) -> GrainStoryAuthor {
-        GrainStoryAuthor(
+    private static let iso8601: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+
+    /// Creates an author whose latest story was created `offset` seconds from now.
+    /// Positive offset = future (not yet expired).
+    /// Negative offset = past (expired if |offset| > 86400).
+    private func makeAuthor(did: String, storyCount: Int = 1, latestAtOffset: TimeInterval = -3600) -> GrainStoryAuthor {
+        let latestAt = Self.iso8601.string(from: Date().addingTimeInterval(latestAtOffset))
+        return GrainStoryAuthor(
             profile: GrainProfile(cid: "cid", did: did, handle: "\(did).test"),
             storyCount: storyCount,
-            latestAt: "2024-06-15T12:00:00Z"
+            latestAt: latestAt
         )
     }
 
@@ -23,7 +33,6 @@ final class StoryStatusCacheTests: XCTestCase {
         let cache = StoryStatusCache()
         cache.update(from: [makeAuthor(did: "did:plc:alice", storyCount: 3)])
         cache.update(from: [makeAuthor(did: "did:plc:bob", storyCount: 1)])
-        // After second update, alice should be gone
         XCTAssertNil(cache.author(for: "did:plc:alice"))
         XCTAssertNotNil(cache.author(for: "did:plc:bob"))
     }
@@ -67,5 +76,58 @@ final class StoryStatusCacheTests: XCTestCase {
     func testDidsWithStoriesEmptyByDefault() {
         let cache = StoryStatusCache()
         XCTAssertTrue(cache.didsWithStories.isEmpty)
+    }
+
+    // MARK: - Expiry
+
+    func testExpiredEntryNotVisibleViaHasStory() {
+        let cache = StoryStatusCache()
+        // latestAt was 25 hours ago — story expired 1 hour ago
+        cache.update(from: [makeAuthor(did: "did:plc:alice", latestAtOffset: -90000)])
+        XCTAssertFalse(cache.hasStory(for: "did:plc:alice"))
+    }
+
+    func testExpiredEntryNotVisibleViaAuthor() {
+        let cache = StoryStatusCache()
+        cache.update(from: [makeAuthor(did: "did:plc:alice", latestAtOffset: -90000)])
+        XCTAssertNil(cache.author(for: "did:plc:alice"))
+    }
+
+    func testExpiredEntryExcludedFromAuthorsByDid() {
+        let cache = StoryStatusCache()
+        cache.update(from: [
+            makeAuthor(did: "did:plc:fresh", latestAtOffset: -3600), // expires in 23h
+            makeAuthor(did: "did:plc:stale", latestAtOffset: -90000), // expired 1h ago
+        ])
+        XCTAssertEqual(cache.authorsByDid.count, 1)
+        XCTAssertNotNil(cache.authorsByDid["did:plc:fresh"])
+    }
+
+    func testExpiredEntryExcludedFromDidsWithStories() {
+        let cache = StoryStatusCache()
+        cache.update(from: [
+            makeAuthor(did: "did:plc:fresh", latestAtOffset: -3600),
+            makeAuthor(did: "did:plc:stale", latestAtOffset: -90000),
+        ])
+        XCTAssertEqual(cache.didsWithStories, Set(["did:plc:fresh"]))
+    }
+
+    func testPurgeExpiredRemovesStalePurgesEntries() {
+        let cache = StoryStatusCache()
+        cache.update(from: [
+            makeAuthor(did: "did:plc:fresh", latestAtOffset: -3600),
+            makeAuthor(did: "did:plc:stale", latestAtOffset: -90000),
+        ])
+        cache.purgeExpired()
+        XCTAssertTrue(cache.hasStory(for: "did:plc:fresh"))
+        XCTAssertFalse(cache.hasStory(for: "did:plc:stale"))
+    }
+
+    func testPurgeExpiredKeepsFreshEntries() {
+        let cache = StoryStatusCache()
+        cache.update(from: [makeAuthor(did: "did:plc:alice", latestAtOffset: -3600)])
+        cache.purgeExpired()
+        XCTAssertTrue(cache.hasStory(for: "did:plc:alice"))
+        XCTAssertNotNil(cache.author(for: "did:plc:alice"))
     }
 }

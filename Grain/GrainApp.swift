@@ -32,7 +32,10 @@ struct GrainApp: App {
                         .environment(labelDefsCache)
                         .tint(Color("AccentColor"))
                         .onAppear {
-                            viewedStoryStorage.cleanup()
+                            Task {
+                                viewedStoryStorage.cleanup()
+                                storyStatusCache.purgeExpired()
+                            }
                             pushManager.configure(authManager: authManager)
                             appDelegate.pushManager = pushManager
                             appDelegate.onNotificationTap = { deepLink in
@@ -56,7 +59,10 @@ struct GrainApp: App {
             }
             .onChange(of: scenePhase) {
                 if scenePhase == .background {
-                    viewedStoryStorage.cleanup()
+                    Task {
+                        viewedStoryStorage.cleanup()
+                        storyStatusCache.purgeExpired()
+                    }
                 }
             }
         }
