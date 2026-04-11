@@ -11,12 +11,20 @@ enum PreviewData {
         handle: "yuki.grain.social",
         displayName: "Yuki Tanaka",
         description: "Analog photographer based in Tokyo 🇯🇵\nLeica M6 · Mamiya RB67 · Kodak Portra\n#35mm #film #analog #streetphoto",
-        avatar: nil,
+        avatar: bundleImageURL("Penguin_in_Antarctica_jumping_out_of_the_water"),
         cameras: ["Leica M6", "Mamiya RB67"],
         followersCount: 2847,
         followsCount: 412,
         galleryCount: 63,
         viewer: ActorViewerState(following: nil, followedBy: "at://preview/follow/1")
+    )
+
+    static let profile1 = GrainProfile(
+        cid: "c1",
+        did: "did:plc:prevuser1",
+        handle: "yuki.grain.social",
+        displayName: "Yuki Tanaka",
+        avatar: bundleImageURL("Penguin_in_Antarctica_jumping_out_of_the_water")
     )
 
     static let profile2 = GrainProfile(
@@ -126,10 +134,7 @@ enum PreviewData {
         title: "Golden Hour, Kyoto",
         description: "Shot on Leica M6 with Kodak Portra 400 during autumn in Kyoto. #analog #japan #35mm #film",
         cameras: ["Leica M6"],
-        creator: GrainProfile(
-            cid: "cid", did: "did:plc:prevuser1",
-            handle: "yuki.grain.social", displayName: "Yuki Tanaka"
-        ),
+        creator: profile1,
         items: photos,
         favCount: 184,
         commentCount: 12,
@@ -142,10 +147,7 @@ enum PreviewData {
         title: "Lower East Side",
         description: "Sunday morning light on Orchard St. #nyc #street #leica",
         cameras: ["Leica Q3"],
-        creator: GrainProfile(
-            cid: "cid", did: "did:plc:prevuser2",
-            handle: "marcus.grain.social", displayName: "Marcus Webb"
-        ),
+        creator: profile2,
         items: Array(photos.prefix(2)),
         favCount: 97,
         commentCount: 5,
@@ -158,10 +160,7 @@ enum PreviewData {
         title: "Oaxaca Market",
         description: "Colors, light, and life. Shot on Fuji Velvia 50. #mexico #analog #color",
         cameras: ["Nikon FM2"],
-        creator: GrainProfile(
-            cid: "cid", did: "did:plc:prevuser3",
-            handle: "sofia.grain.social", displayName: "Sofia Reyes"
-        ),
+        creator: profile3,
         items: Array(photos.prefix(3)),
         favCount: 231,
         commentCount: 18,
