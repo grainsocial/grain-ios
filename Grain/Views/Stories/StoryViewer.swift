@@ -599,6 +599,7 @@ struct StoryViewer: View {
                                         .padding(.horizontal, 10)
                                         .padding(.vertical, 5)
                                         .background(.white.opacity(0.15), in: .capsule)
+                                    Spacer(minLength: 0)
                                 }
                             }
                             .buttonStyle(.plain)

@@ -30,7 +30,7 @@ struct StoryCommentSheet: View {
             },
             onDismiss: { onDismiss?() },
             onProfileTap: onProfileTap,
-            dismissStyle: .done,
+            dismissStyle: .xmark,
             focusOnAppear: false
         )
         .presentationDetents([.large])
