@@ -1,5 +1,11 @@
+import Nuke
 import NukeUI
+import OSLog
 import SwiftUI
+
+private let avatarOverlaySignposter = OSSignposter(subsystem: "social.grain.grain", category: "AvatarOverlay")
+private let avatarOverlayLogger = Logger(subsystem: "social.grain.grain", category: "AvatarOverlay")
+private let profileLaunchSignposter = OSSignposter(subsystem: "social.grain.grain", category: "AppLaunch")
 
 enum ProfileViewMode: String, CaseIterable {
     case grid, favorites, stories
@@ -22,11 +28,11 @@ struct ProfileView: View {
     @State private var viewMode: ProfileViewMode = .grid
     @State private var zoomState = ImageZoomState()
     @State private var cardStoryAuthor: GrainStoryAuthor?
-    @State private var avatarPressed = false
     let client: XRPCClient
     @State private var selectedArchivedStory: GrainStory?
     let actor: String
     var isRoot = false
+    @State private var showCopiedToast = false
 
     /// Resolved DID from the loaded profile, or the original actor identifier
     private var did: String {
@@ -35,12 +41,16 @@ struct ProfileView: View {
 
     init(client: XRPCClient, did: String, isRoot: Bool = false) {
         self.client = client
+        let _spid = profileLaunchSignposter.makeSignpostID()
+        let _state = profileLaunchSignposter.beginInterval("ProfileViewModelInit", id: _spid)
         _viewModel = State(initialValue: ProfileDetailViewModel(client: client))
+        profileLaunchSignposter.endInterval("ProfileViewModelInit", _state)
         actor = did
         self.isRoot = isRoot
     }
 
     var body: some View {
+        let _ = profileLaunchSignposter.emitEvent("ProfileViewBodyBegin")
         if isRoot {
             NavigationStack {
                 profileContent
@@ -50,53 +60,57 @@ struct ProfileView: View {
         }
     }
 
+    @ViewBuilder
+    private func avatarButton(profile: GrainProfileDetailed) -> some View {
+        let hasStory = !viewModel.stories.isEmpty
+        StoryRingView(
+            hasStory: hasStory,
+            viewed: did != auth.userDID && viewedStories.hasViewedAll(authorDid: did, latestAt: viewModel.stories.last?.createdAt ?? ""),
+            size: 80
+        ) {
+            AvatarView(url: profile.avatar, size: 80)
+                .liquidGlassCircle()
+        }
+        .overlay(alignment: .bottomTrailing) {
+            if did == auth.userDID {
+                Image(systemName: "plus.circle.fill")
+                    .font(.system(size: 22))
+                    .foregroundStyle(.white, Color("AccentColor"))
+                    .offset(x: 4, y: 4)
+            }
+        }
+        .padding(4)
+        .contentShape(Circle())
+        .onTapGesture {
+            if did == auth.userDID {
+                if hasStory { showStoryViewer = true } else { showStoryCreate = true }
+            } else {
+                if hasStory { showStoryViewer = true }
+                else if profile.avatar != nil { showAvatarOverlay = true }
+            }
+        }
+        .profileContextMenu(
+            handle: profile.handle,
+            hasStory: hasStory,
+            onViewStory: hasStory ? { showStoryViewer = true } : nil,
+            onAddStory: did == auth.userDID ? { showStoryCreate = true } : nil,
+            onViewPhoto: profile.avatar != nil ? { showAvatarOverlay = true } : nil,
+            showSharingActions: false
+        ) {
+            StoryRingView(hasStory: hasStory, viewed: false, size: 120) {
+                AvatarView(url: profile.avatar, size: 120)
+            }
+            .padding(6)
+        }
+    }
+
     private var profileContent: some View {
         ScrollView {
             if let profile = viewModel.profile {
                 VStack(spacing: 12) {
                     // Avatar + stats row
                     HStack(alignment: .center, spacing: 16) {
-                        StoryRingView(hasStory: !viewModel.stories.isEmpty, viewed: did != auth.userDID && viewedStories.hasViewedAll(authorDid: did, latestAt: viewModel.stories.last?.createdAt ?? ""), size: 80) {
-                            AvatarView(url: profile.avatar, size: 80)
-                                .liquidGlassCircle()
-                        }
-                        .overlay(alignment: .bottomTrailing) {
-                            if did == auth.userDID {
-                                Image(systemName: "plus.circle.fill")
-                                    .font(.system(size: 22))
-                                    .foregroundStyle(.white, Color("AccentColor"))
-                                    .offset(x: 4, y: 4)
-                            }
-                        }
-                        .scaleEffect(avatarPressed ? 1.08 : 1.0)
-                        .animation(.spring(response: 0.2, dampingFraction: 0.6), value: avatarPressed)
-                        .contentShape(Circle())
-                        .onTapGesture {
-                            if did == auth.userDID {
-                                if !viewModel.stories.isEmpty {
-                                    showStoryViewer = true
-                                } else {
-                                    showStoryCreate = true
-                                }
-                            } else {
-                                if !viewModel.stories.isEmpty {
-                                    showStoryViewer = true
-                                } else if profile.avatar != nil {
-                                    showAvatarOverlay = true
-                                }
-                            }
-                        }
-                        .onLongPressGesture(minimumDuration: 0.5) {
-                            if did == auth.userDID {
-                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                                showStoryCreate = true
-                            }
-                        }
-                        .simultaneousGesture(
-                            DragGesture(minimumDistance: 0)
-                                .onChanged { _ in if !avatarPressed { avatarPressed = true } }
-                                .onEnded { _ in avatarPressed = false }
-                        )
+                        avatarButton(profile: profile)
 
                         if !viewModel.isBlockHidden {
                             HStack(spacing: 0) {
@@ -139,6 +153,20 @@ struct ProfileView: View {
                             Text("@\(profile.handle)")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
+                                .contextMenu {
+                                    if profile.avatar != nil {
+                                        Button { showAvatarOverlay = true } label: {
+                                            Label("View Profile Photo", systemImage: "person.crop.circle")
+                                        }
+                                        Divider()
+                                    }
+                                    Button { copyText("@\(profile.handle)") } label: {
+                                        Label("Copy Handle", systemImage: "doc.on.doc")
+                                    }
+                                    Button { copyText(did) } label: {
+                                        Label("Copy DID", systemImage: "number")
+                                    }
+                                }
                         }
 
                         if viewModel.isBlockHidden {
@@ -316,6 +344,16 @@ struct ProfileView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if did == auth.userDID {
+                if let handle = viewModel.profile?.handle,
+                   let profileURL = URL(string: "https://grain.social/profile/\(handle)")
+                {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        ShareLink(item: profileURL) {
+                            Image(systemName: "square.and.arrow.up")
+                        }
+                        .tint(.primary)
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     NavigationLink {
                         SettingsView(client: client)
@@ -324,25 +362,36 @@ struct ProfileView: View {
                     }
                     .tint(.primary)
                 }
-            } else if viewModel.profile != nil {
+            } else if let profile = viewModel.profile {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
+                        if let profileURL = URL(string: "https://grain.social/profile/\(profile.handle)") {
+                            ShareLink(item: profileURL) {
+                                Label("Share Profile", systemImage: "square.and.arrow.up")
+                            }
+                            Button {
+                                UIPasteboard.general.string = profile.handle
+                            } label: {
+                                Label("Copy Username", systemImage: "at")
+                            }
+                            Divider()
+                        }
                         if !viewModel.isBlockHidden {
-                            Button(role: viewModel.profile?.viewer?.muted == true ? nil : .destructive) {
+                            Button(role: profile.viewer?.muted == true ? nil : .destructive) {
                                 Task { await viewModel.toggleMute(auth: auth.authContext()) }
                             } label: {
                                 Label(
-                                    viewModel.profile?.viewer?.muted == true ? "Unmute" : "Mute",
-                                    systemImage: viewModel.profile?.viewer?.muted == true ? "speaker.wave.2" : "speaker.slash"
+                                    profile.viewer?.muted == true ? "Unmute" : "Mute",
+                                    systemImage: profile.viewer?.muted == true ? "speaker.wave.2" : "speaker.slash"
                                 )
                             }
                         }
-                        Button(role: viewModel.profile?.viewer?.blocking != nil ? nil : .destructive) {
+                        Button(role: profile.viewer?.blocking != nil ? nil : .destructive) {
                             Task { await viewModel.toggleBlock(auth: auth.authContext()) }
                         } label: {
                             Label(
-                                viewModel.profile?.viewer?.blocking != nil ? "Unblock" : "Block",
-                                systemImage: viewModel.profile?.viewer?.blocking != nil ? "circle" : "nosign"
+                                profile.viewer?.blocking != nil ? "Unblock" : "Block",
+                                systemImage: profile.viewer?.blocking != nil ? "circle" : "nosign"
                             )
                         }
                     } label: {
@@ -457,6 +506,20 @@ struct ProfileView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text("Please sign out and back in to enable blocking. This is a one-time step after the update.")
+        }
+        .overlay(alignment: .center) {
+            if showCopiedToast { CopiedCheckmarkToast() }
+        }
+        .animation(.spring(response: 0.4, dampingFraction: 0.7), value: showCopiedToast)
+        .sensoryFeedback(.impact(weight: .medium), trigger: showCopiedToast)
+    }
+
+    private func copyText(_ text: String) {
+        UIPasteboard.general.string = text
+        showCopiedToast = true
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            showCopiedToast = false
         }
     }
 
@@ -766,30 +829,68 @@ struct ProfileView: View {
     }
 }
 
-private struct AvatarOverlay: View {
+struct AvatarOverlay: View {
     let url: String
     let onDismiss: () -> Void
 
+    @State private var zoomState = ImageZoomState()
+    @State private var dragOffset: CGFloat = 0
+    @State private var circularImage: UIImage?
+
+    private var backgroundOpacity: Double {
+        guard !zoomState.showOverlay else { return 0.92 }
+        return max(0, 0.92 - abs(dragOffset) / 250)
+    }
+
     var body: some View {
         ZStack {
-            Color.black.opacity(0.85)
+            Color.black
+                .opacity(backgroundOpacity)
                 .ignoresSafeArea()
-                .onTapGesture { onDismiss() }
 
-            LazyImage(url: URL(string: url)) { state in
-                if let image = state.image {
-                    image
-                        .resizable()
-                        .scaledToFit()
-                        .clipShape(.circle)
-                        .padding(40)
-                } else {
-                    ProgressView()
-                }
+            if let image = circularImage {
+                ZoomableImage(localImage: image, aspectRatio: 1.0, onSingleTap: {
+                    guard !zoomState.showOverlay else { return }
+                    onDismiss()
+                })
+                .padding(32)
+                .offset(y: dragOffset)
+            } else {
+                ProgressView()
             }
         }
-        .transition(.opacity)
-        .animation(.easeInOut(duration: 0.2), value: true)
+        .gesture(
+            DragGesture()
+                .onChanged { val in
+                    guard !zoomState.showOverlay else { return }
+                    dragOffset = val.translation.height
+                }
+                .onEnded { val in
+                    let shouldDismiss = !zoomState.showOverlay && (
+                        abs(val.translation.height) > 80 ||
+                            abs(val.predictedEndTranslation.height) > 150
+                    )
+                    if shouldDismiss {
+                        onDismiss()
+                    } else {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                            dragOffset = 0
+                        }
+                    }
+                }
+        )
+        .environment(zoomState)
+        .modifier(ImageZoomOverlay(zoomState: zoomState))
+        .task {
+            guard let imageURL = URL(string: url) else { return }
+            let spid = avatarOverlaySignposter.makeSignpostID()
+            let state = avatarOverlaySignposter.beginInterval("LoadCircularAvatar", id: spid, "url=\(url)")
+            avatarOverlayLogger.debug("[LoadCircularAvatar] begin url=\(url)")
+            let request = ImageRequest(url: imageURL, processors: [ImageProcessors.Circle()])
+            circularImage = try? await ImagePipeline.shared.image(for: request)
+            avatarOverlayLogger.debug("[LoadCircularAvatar] end success=\(circularImage != nil)")
+            avatarOverlaySignposter.endInterval("LoadCircularAvatar", state, "success=\(circularImage != nil)")
+        }
     }
 }
 

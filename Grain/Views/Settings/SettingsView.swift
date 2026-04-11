@@ -10,16 +10,31 @@ struct SettingsView: View {
     @State private var includeLocation = true
     @State private var hasLoadedPrefs = false
     @AppStorage("privacy.showSuggestedUsers") private var showSuggestedUsers = true
+    @State private var showCopiedToast = false
 
     var body: some View {
         List {
             Section("Account") {
                 if let handle = auth.userHandle {
-                    LabeledContent("Handle", value: "@\(handle)")
+                    Menu {
+                        Button { copyText("@\(handle)") } label: {
+                            Label("Copy", systemImage: "doc.on.doc")
+                        }
+                    } label: {
+                        LabeledContent("Handle", value: "@\(handle)")
+                    }
+                    .foregroundStyle(.primary)
                 }
                 if let did = auth.userDID {
-                    LabeledContent("DID", value: did)
-                        .font(.caption)
+                    Menu {
+                        Button { copyText(did) } label: {
+                            Label("Copy", systemImage: "doc.on.doc")
+                        }
+                    } label: {
+                        LabeledContent("DID", value: did)
+                            .font(.caption)
+                    }
+                    .foregroundStyle(.primary)
                 }
             }
 
@@ -92,6 +107,11 @@ struct SettingsView: View {
             }
         }
         .navigationTitle("Settings")
+        .overlay(alignment: .center) {
+            if showCopiedToast { CopiedCheckmarkToast() }
+        }
+        .animation(.spring(response: 0.4, dampingFraction: 0.7), value: showCopiedToast)
+        .sensoryFeedback(.impact(weight: .medium), trigger: showCopiedToast)
         .task {
             if let authContext = await auth.authContext(),
                let prefs = try? await client.getPreferences(auth: authContext).preferences
@@ -100,6 +120,15 @@ struct SettingsView: View {
                 if let location = prefs.includeLocation { includeLocation = location }
             }
             hasLoadedPrefs = true
+        }
+    }
+
+    private func copyText(_ text: String) {
+        UIPasteboard.general.string = text
+        showCopiedToast = true
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            showCopiedToast = false
         }
     }
 
@@ -118,6 +147,30 @@ struct SettingsView: View {
             dataCache.removeAll()
         }
         cacheSizeText = "Zero KB"
+    }
+}
+
+struct CopiedCheckmarkToast: View {
+    @State private var checkScale = 0.3
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.subheadline)
+                .scaleEffect(checkScale)
+                .onAppear {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) {
+                        checkScale = 1.0
+                    }
+                }
+            Text("Copied")
+                .font(.subheadline.weight(.medium))
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.ultraThinMaterial, in: Capsule())
+        .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
+        .transition(.scale.combined(with: .opacity))
     }
 }
 
