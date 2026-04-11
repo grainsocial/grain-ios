@@ -249,6 +249,7 @@ private struct FeedTabContent: View {
     @State private var deletedGalleryUri: String?
     @State private var zoomState = ImageZoomState()
     @State private var cardStoryAuthor: GrainStoryAuthor?
+    @State private var commentSheetUri: String?
     @AppStorage("privacy.showSuggestedUsers") private var showSuggestedUsers = true
     @State private var suggestedFollows: [SuggestedItem] = []
     @State private var suggestedLoaded = false
@@ -302,6 +303,8 @@ private struct FeedTabContent: View {
                 ForEach(Array($viewModel.galleries.enumerated()), id: \.element.id) { index, $gallery in
                     GalleryCardView(gallery: $gallery, client: client, onNavigate: {
                         selectedUri = gallery.uri
+                    }, onCommentTap: {
+                        commentSheetUri = gallery.uri
                     }, onProfileTap: { did in
                         selectedProfileDid = did
                     }, onHashtagTap: { tag in
@@ -371,6 +374,35 @@ private struct FeedTabContent: View {
                 onDismiss: { cardStoryAuthor = nil }
             )
             .environment(auth)
+        }
+        .sheet(isPresented: Binding(
+            get: { commentSheetUri != nil },
+            set: { if !$0 { commentSheetUri = nil } }
+        )) {
+            if let uri = commentSheetUri {
+                CommentSheetView(
+                    client: client,
+                    galleryUri: uri,
+                    onDismiss: { commentSheetUri = nil },
+                    onProfileTap: { did in
+                        commentSheetUri = nil
+                        selectedProfileDid = did
+                    },
+                    onHashtagTap: { tag in
+                        commentSheetUri = nil
+                        selectedHashtag = tag
+                    },
+                    onStoryTap: { author in
+                        commentSheetUri = nil
+                        cardStoryAuthor = author
+                    },
+                    onCommentCountChanged: { count in
+                        if let idx = viewModel.galleries.firstIndex(where: { $0.uri == uri }) {
+                            viewModel.galleries[idx].commentCount = count
+                        }
+                    }
+                )
+            }
         }
         .task {
             guard !isPreview else {

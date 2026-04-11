@@ -7,16 +7,11 @@ struct GalleryDetailView: View {
     @State private var selectedProfileDid: String?
     @State private var selectedHashtag: String?
     @State private var selectedLocation: LocationDestination?
-    @State private var commentText = ""
-    @State private var isPostingComment = false
-    @State private var replyingTo: GrainComment?
     @State private var showDeleteConfirmation = false
     @State private var showReportSheet = false
     @State private var showCommentSheet = false
     @State private var zoomState = ImageZoomState()
     @State private var cardStoryAuthor: GrainStoryAuthor?
-    @State private var mentionState = MentionAutocompleteState()
-    @FocusState private var commentFocused: Bool
     @Environment(\.dismiss) private var dismiss
 
     let client: XRPCClient
@@ -30,20 +25,10 @@ struct GalleryDetailView: View {
         _deletedGalleryUri = deletedGalleryUri
     }
 
-    /// Group comments into roots with their replies underneath.
-    private var threadedComments: [(root: GrainComment, replies: [GrainComment])] {
-        let roots = viewModel.comments.filter { $0.replyTo == nil }
-        let replyMap = Dictionary(grouping: viewModel.comments.filter { $0.replyTo != nil }, by: { $0.replyTo! })
-        return roots.map { root in
-            (root: root, replies: replyMap[root.uri] ?? [])
-        }
-    }
-
     var body: some View {
         ScrollView {
             if viewModel.gallery != nil {
                 VStack(spacing: 0) {
-                    // Reuse the feed card
                     GalleryCardView(
                         gallery: Binding(
                             get: { viewModel.gallery! },
@@ -51,7 +36,9 @@ struct GalleryDetailView: View {
                         ),
                         client: client,
                         onNavigate: {
-                            replyingTo = nil
+                            showCommentSheet = true
+                        },
+                        onCommentTap: {
                             showCommentSheet = true
                         },
                         onProfileTap: { did in
@@ -68,54 +55,25 @@ struct GalleryDetailView: View {
                         }
                     )
 
-                    // Add comment button
+                    // View comments button
                     Button {
                         showCommentSheet = true
                     } label: {
                         HStack {
-                            Image(systemName: "bubble.left")
-                            Text("Add a comment...")
-                                .foregroundStyle(.secondary)
+                            let count = viewModel.gallery?.commentCount ?? 0
+                            if count > 0 {
+                                Text("View all \(count) comments")
+                            } else {
+                                Text("Add a comment...")
+                            }
                             Spacer()
                         }
                         .font(.subheadline)
+                        .foregroundStyle(.secondary)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 12)
                     }
                     .buttonStyle(.plain)
-
-                    // Threaded comments
-                    if !viewModel.comments.isEmpty {
-                        LazyVStack(alignment: .leading, spacing: 0) {
-                            ForEach(threadedComments, id: \.root.id) { thread in
-                                CommentRow(
-                                    comment: thread.root,
-                                    userDID: auth.userDID,
-                                    isOwn: thread.root.author.did == auth.userDID,
-                                    isReply: false,
-                                    onProfileTap: { did in selectedProfileDid = did },
-                                    onHashtagTap: { tag in selectedHashtag = tag },
-                                    onStoryTap: { author in cardStoryAuthor = author },
-                                    onReply: { startReply(to: thread.root) },
-                                    onDelete: { Task { await deleteComment(thread.root) } }
-                                )
-
-                                ForEach(thread.replies) { reply in
-                                    CommentRow(
-                                        comment: reply,
-                                        userDID: auth.userDID,
-                                        isOwn: reply.author.did == auth.userDID,
-                                        isReply: true,
-                                        onProfileTap: { did in selectedProfileDid = did },
-                                        onHashtagTap: { tag in selectedHashtag = tag },
-                                        onStoryTap: { author in cardStoryAuthor = author },
-                                        onReply: { startReplyToReply(reply, root: thread.root) },
-                                        onDelete: { Task { await deleteComment(reply) } }
-                                    )
-                                }
-                            }
-                        }
-                    }
                 }
             } else {
                 ProgressView()
@@ -185,65 +143,26 @@ struct GalleryDetailView: View {
             .environment(auth)
         }
         .sheet(isPresented: $showCommentSheet) {
-            NavigationStack {
-                VStack(spacing: 0) {
-                    if let replyTarget = replyingTo {
-                        HStack {
-                            Text("Replying to @\(replyTarget.author.handle)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            Button {
-                                replyingTo = nil
-                            } label: {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        .padding(.horizontal)
-                        .padding(.top, 8)
-                    }
-
-                    TextField(replyingTo != nil ? "Reply..." : "Write a comment...", text: $commentText, axis: .vertical)
-                        .textFieldStyle(.plain)
-                        .font(.body)
-                        .focused($commentFocused)
-                        .padding()
-                        .lineLimit(5 ... 10)
-                        .onChange(of: commentText) { mentionState.update(text: commentText) }
-
-                    Spacer()
+            CommentSheetView(
+                client: client,
+                galleryUri: galleryUri,
+                onDismiss: { showCommentSheet = false },
+                onProfileTap: { did in
+                    showCommentSheet = false
+                    selectedProfileDid = did
+                },
+                onHashtagTap: { tag in
+                    showCommentSheet = false
+                    selectedHashtag = tag
+                },
+                onStoryTap: { author in
+                    showCommentSheet = false
+                    cardStoryAuthor = author
+                },
+                onCommentCountChanged: { count in
+                    viewModel.gallery?.commentCount = count
                 }
-                .safeAreaInset(edge: .bottom) {
-                    MentionSuggestionOverlay(state: mentionState) { suggestion in
-                        mentionState.complete(handle: suggestion.handle, in: &commentText)
-                    }
-                }
-                .navigationTitle(replyingTo != nil ? "Reply" : "Comment")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") {
-                            showCommentSheet = false
-                            commentText = ""
-                            replyingTo = nil
-                        }
-                    }
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Post") {
-                            Task {
-                                await postComment()
-                                showCommentSheet = false
-                            }
-                        }
-                        .disabled(commentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isPostingComment)
-                    }
-                }
-            }
-            .presentationDetents([.medium])
-            .onAppear {
-                commentFocused = true
-            }
+            )
         }
         .task {
             guard !isPreview else {
@@ -257,45 +176,6 @@ struct GalleryDetailView: View {
         }
     }
 
-    private func startReply(to comment: GrainComment) {
-        replyingTo = comment
-        commentText = ""
-        showCommentSheet = true
-    }
-
-    private func startReplyToReply(_ reply: GrainComment, root: GrainComment) {
-        replyingTo = root
-        commentText = "@\(reply.author.handle) "
-        showCommentSheet = true
-    }
-
-    private func postComment() async {
-        let text = commentText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, let authContext = await auth.authContext() else { return }
-
-        isPostingComment = true
-        var recordDict: [String: String] = [
-            "text": text,
-            "subject": galleryUri,
-            "createdAt": DateFormatting.nowISO(),
-        ]
-        if let replyTarget = replyingTo {
-            recordDict["replyTo"] = replyTarget.uri
-        }
-        let record = AnyCodable(recordDict)
-        let repo = TokenStorage.userDID ?? ""
-        do {
-            _ = try await client.createRecord(collection: "social.grain.comment", repo: repo, record: record, auth: authContext)
-            commentText = ""
-            replyingTo = nil
-            commentFocused = false
-            await viewModel.load(uri: galleryUri, auth: authContext)
-        } catch {
-            // Silently fail for now
-        }
-        isPostingComment = false
-    }
-
     private func deleteGallery() async {
         guard let authContext = await auth.authContext() else { return }
         let rkey = galleryUri.split(separator: "/").last.map(String.init) ?? ""
@@ -303,23 +183,11 @@ struct GalleryDetailView: View {
             try await client.deleteGallery(rkey: rkey, auth: authContext)
             deletedGalleryUri = galleryUri
             dismiss()
-        } catch {
-            // Silently fail for now
-        }
-    }
-
-    private func deleteComment(_ comment: GrainComment) async {
-        guard let authContext = await auth.authContext() else { return }
-        let rkey = comment.uri.split(separator: "/").last.map(String.init) ?? ""
-        do {
-            try await client.deleteRecord(collection: "social.grain.comment", rkey: rkey, auth: authContext)
-            viewModel.comments.removeAll { $0.uri == comment.uri }
-        } catch {
-            // Silently fail for now
-        }
+        } catch {}
     }
 }
 
+/// CommentRow stays here since it's shared
 struct CommentRow: View {
     @Environment(StoryStatusCache.self) private var storyStatusCache
     @Environment(ViewedStoryStorage.self) private var viewedStories
@@ -387,7 +255,6 @@ struct CommentRow: View {
                         onHashtagTap: onHashtagTap
                     )
 
-                    // Actions
                     HStack(spacing: 16) {
                         if onReply != nil {
                             Button {

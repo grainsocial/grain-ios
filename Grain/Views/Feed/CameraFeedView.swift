@@ -12,6 +12,7 @@ struct CameraFeedView: View {
     @State private var selectedLocation: LocationDestination?
     @State private var zoomState = ImageZoomState()
     @State private var cardStoryAuthor: GrainStoryAuthor?
+    @State private var commentSheetUri: String?
 
     let client: XRPCClient
     let camera: String
@@ -26,6 +27,8 @@ struct CameraFeedView: View {
                 ForEach($galleries) { $gallery in
                     GalleryCardView(gallery: $gallery, client: client, onNavigate: {
                         selectedUri = gallery.uri
+                    }, onCommentTap: {
+                        commentSheetUri = gallery.uri
                     }, onProfileTap: { did in
                         selectedProfileDid = did
                     }, onHashtagTap: { tag in
@@ -95,6 +98,35 @@ struct CameraFeedView: View {
                 onDismiss: { cardStoryAuthor = nil }
             )
             .environment(auth)
+        }
+        .sheet(isPresented: Binding(
+            get: { commentSheetUri != nil },
+            set: { if !$0 { commentSheetUri = nil } }
+        )) {
+            if let uri = commentSheetUri {
+                CommentSheetView(
+                    client: client,
+                    galleryUri: uri,
+                    onDismiss: { commentSheetUri = nil },
+                    onProfileTap: { did in
+                        commentSheetUri = nil
+                        selectedProfileDid = did
+                    },
+                    onHashtagTap: { tag in
+                        commentSheetUri = nil
+                        selectedHashtag = tag
+                    },
+                    onStoryTap: { author in
+                        commentSheetUri = nil
+                        cardStoryAuthor = author
+                    },
+                    onCommentCountChanged: { count in
+                        if let idx = galleries.firstIndex(where: { $0.uri == uri }) {
+                            galleries[idx].commentCount = count
+                        }
+                    }
+                )
+            }
         }
         .task {
             guard !isPreview else {
