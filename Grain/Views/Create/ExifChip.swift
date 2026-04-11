@@ -6,11 +6,7 @@ enum ExifState: Equatable {
     case absent, inactive, active
 }
 
-/// EXIF camera badge.
-///
-/// - `compact: true`  — icon only, for strip and grid cells where space is tight.
-/// - `compact: false` — icon + camera name (width-capped, truncates with ellipsis),
-///   for the captions list where there's room to read it.
+/// EXIF camera badge shown on photo thumbnails.
 struct ExifChip: View {
     let state: ExifState
 
@@ -19,10 +15,9 @@ struct ExifChip: View {
             let on = state == .active
             Image(systemName: "camera.fill")
                 .font(.system(size: 9, weight: .medium))
-                .padding(.horizontal, 4)
-                .padding(.vertical, 3)
-                .background(.black.opacity(0.6), in: Capsule())
                 .foregroundStyle(.white)
+                .frame(width: 19, height: 19)
+                .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 4))
                 .opacity(on ? 1 : 0.5)
         }
     }

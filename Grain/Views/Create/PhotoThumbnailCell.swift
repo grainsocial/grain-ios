@@ -1,7 +1,4 @@
-import os
 import SwiftUI
-
-private let thumbnailSignposter = OSSignposter(subsystem: "social.grain.grain", category: "Animation.Morph")
 
 /// Shared photo cell used across all three editor modes (strip, grid, captions).
 ///
@@ -39,6 +36,11 @@ struct PhotoThumbnailCell: View {
                 .frame(width: geometry.photoSize.width, height: geometry.photoSize.height)
                 .frame(width: geometry.maskSide, height: geometry.maskSide)
                 .clipShape(RoundedRectangle(cornerRadius: geometry.maskCornerRadius, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: geometry.maskCornerRadius, style: .continuous)
+                        .strokeBorder(Color.accentColor, lineWidth: isSelected ? 2.5 : 0)
+                )
+                .opacity(geometry.mode == .preview && !isSelected && !isDragging ? 0.5 : 1.0)
                 .overlay(alignment: .bottomTrailing) {
                     altPill.opacity(hideDelete ? 0 : 1)
                 }
@@ -49,28 +51,17 @@ struct PhotoThumbnailCell: View {
 
             // X button
             deleteButton
-                .scaleEffect((hideDelete ? 0 : deleteOpacity) / (isDragging ? 1.1 : isSelected ? 1.12 : 1))
+                .scaleEffect((hideDelete ? 0 : deleteOpacity) / (isDragging ? 1.1 : 1))
                 .position(x: geometry.maskSide, y: 0)
                 .allowsHitTesting(!hideDelete && deleteOpacity > 0)
         }
         .frame(width: geometry.maskSide, height: geometry.maskSide)
-        // Selection glow
-        .shadow(color: isSelected && !isDragging ? Color.accentColor.opacity(0.9) : .clear, radius: 5)
-        .shadow(color: isSelected && !isDragging ? Color.accentColor.opacity(0.45) : .clear, radius: 10)
-        .shadow(color: isSelected && !isDragging ? .black.opacity(0.25) : .clear, radius: 8, x: 0, y: 5)
+        .contentShape(Rectangle())
         .animation(
-            isAnimatingMode ? nil
-                : isSelected
-                ? .spring(response: 0.3, dampingFraction: 0.8)
-                : .spring(response: 0.3, dampingFraction: 1.0),
+            isAnimatingMode ? nil : .easeInOut(duration: 0.2),
             value: isSelected
         )
-        // Scale anchored to X button corner
-        .scaleEffect(isDragging ? 1.1 : isSelected ? 1.12 : 1, anchor: .topTrailing)
-        .offset(
-            x: ((isDragging ? 1.1 : isSelected ? 1.12 : 1.0) - 1.0) * geometry.maskSide / 2,
-            y: -((isDragging ? 1.1 : isSelected ? 1.12 : 1.0) - 1.0) * geometry.maskSide / 2
-        )
+        .scaleEffect(isDragging ? 1.1 : 1)
         .opacity(isDragging ? 0.8 : 1)
         .shadow(color: isDragging ? .black.opacity(0.25) : .clear, radius: 10, y: 6)
         .animation(isAnimatingMode ? nil : .spring(response: 0.28, dampingFraction: 0.72), value: isDragging)

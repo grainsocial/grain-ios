@@ -206,7 +206,7 @@ struct PhotoCarouselView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-            .background(Color.black)
+            .background(Color(.secondarySystemBackground))
         }
     }
 
@@ -338,6 +338,7 @@ struct GalleryEditor: View {
     @Binding var isAnimatingMode: Bool
     @Binding var mode: EditorMode
     let sendExif: Bool
+    var onDeleteItem: ((PhotoItem) -> Void)?
     @State private var gridContainerWidth: CGFloat = 0
     @State private var stripState = StripScrollState()
     @State private var reorderState = ReorderDragState()
@@ -578,6 +579,9 @@ struct GalleryEditor: View {
     }
 
     private func handleDelete(itemID: UUID) {
+        if let item = items.first(where: { $0.id == itemID }) {
+            onDeleteItem?(item)
+        }
         if selectedPhotoID == itemID,
            let removedIdx = items.firstIndex(where: { $0.id == itemID })
         {

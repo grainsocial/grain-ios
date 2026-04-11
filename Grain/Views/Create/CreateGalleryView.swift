@@ -62,6 +62,11 @@ struct CreateGalleryView: View {
     @State private var selectedLabels: Set<String> = []
     @State private var selectedPhotoID: UUID?
     @State private var photoLoadTask: Task<Void, Never>?
+    /// Picker item identifiers that the user removed via the editor's X button.
+    /// loadPickerPhotos skips these so deleted photos don't reappear.
+    /// Cleared when the user explicitly re-selects items in the picker.
+    @State private var editorRemovedIDs: Set<String> = []
+    @State private var lastPickerCount = 0
     @State private var photoLocationResult: NominatimResult?
     @State private var sendExif = true
     @State private var includeLocation = true
@@ -108,6 +113,8 @@ struct CreateGalleryView: View {
                 ContentLabelPicker(selectedLabels: $selectedLabels)
                 Section {
                     Toggle("Post to Bluesky", isOn: $postToBluesky)
+                } footer: {
+                    Text("Includes location, description, and the first 4 photos.")
                 }
                 errorSection
             }
@@ -125,6 +132,14 @@ struct CreateGalleryView: View {
             }
         }
         .onChange(of: selectedPhotos) {
+            // If the user added items in the picker, clear any editor-removed
+            // IDs that they re-selected so those photos load again.
+            if selectedPhotos.count > lastPickerCount {
+                let currentIDs = Set(selectedPhotos.compactMap(\.itemIdentifier))
+                editorRemovedIDs.subtract(currentIDs)
+            }
+            lastPickerCount = selectedPhotos.count
+
             createSignposter.emitEvent("TaskSpawned", "source=selectedPhotos,count=\(selectedPhotos.count)")
             photoLoadTask?.cancel()
             photoLoadTask = Task {
@@ -175,7 +190,7 @@ struct CreateGalleryView: View {
                     }
                 } label: {
                     Image(systemName: "xmark")
-                        .foregroundStyle(hasChanges ? .red : .primary)
+                        .foregroundStyle(hasChanges ? Color.accentColor : .primary)
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {
@@ -208,7 +223,9 @@ struct CreateGalleryView: View {
             PhotosPicker(
                 selection: $selectedPhotos,
                 maxSelectionCount: 20,
-                matching: .images
+                selectionBehavior: .continuousAndOrdered,
+                matching: .images,
+                photoLibrary: .shared()
             ) {
                 Label("Select Photos", systemImage: "photo.on.rectangle.angled")
             }
@@ -230,7 +247,13 @@ struct CreateGalleryView: View {
                 isReordering: $isReordering,
                 isAnimatingMode: $isAnimatingMode,
                 mode: $editorMode,
-                sendExif: sendExif
+                sendExif: sendExif,
+                onDeleteItem: { item in
+                    guard case let .picker(pickerItem) = item.source,
+                          let id = pickerItem.itemIdentifier else { return }
+                    editorRemovedIDs.insert(id)
+                    selectedPhotos.removeAll { $0.itemIdentifier == id }
+                }
             )
         }
     }
@@ -249,7 +272,7 @@ struct CreateGalleryView: View {
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.black)
             } header: {
-                Text("Post Preview")
+                Text("Preview")
             }
             .transition(.opacity)
         }
@@ -341,7 +364,9 @@ struct CreateGalleryView: View {
         })
 
         let newSelections = selectedPhotos.filter {
-            !($0.itemIdentifier.map { existingIDs.contains($0) } ?? false)
+            let isExisting = $0.itemIdentifier.map { existingIDs.contains($0) } ?? false
+            let isRemoved = $0.itemIdentifier.map { editorRemovedIDs.contains($0) } ?? false
+            return !isExisting && !isRemoved
         }
         guard !newSelections.isEmpty else { return }
 
@@ -378,7 +403,17 @@ struct CreateGalleryView: View {
         }
         createSignposter.endInterval("LoadPickerBatch", batchState, "loaded=\(loaded.count)")
 
-        photoItems += loaded.sorted(by: { $0.index < $1.index }).map(\.item)
+        // Dedup: with .continuousAndOrdered the picker fires onChange per-item,
+        // so a previous load may have already added some of these.
+        let alreadyLoaded = Set(photoItems.compactMap { item -> String? in
+            guard case let .picker(p) = item.source else { return nil }
+            return p.itemIdentifier
+        })
+        let deduped = loaded.sorted(by: { $0.index < $1.index }).map(\.item).filter { item in
+            guard case let .picker(p) = item.source else { return true }
+            return !(p.itemIdentifier.map { alreadyLoaded.contains($0) } ?? false)
+        }
+        photoItems += deduped
     }
 
     private func detectLocation() async {

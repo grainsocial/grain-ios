@@ -13,6 +13,7 @@ struct FeedView: View {
     @State private var deepLinkGalleryUri: String?
     @State private var deepLinkStoryAuthor: GrainStoryAuthor?
     @State private var showFeedsManagement = false
+    @State private var feedRefreshID = UUID()
 
     let client: XRPCClient
     @Binding var pendingDeepLink: DeepLink?
@@ -47,6 +48,7 @@ struct FeedView: View {
                         },
                         prefsViewModel: prefsViewModel
                     )
+                    .id(feedRefreshID)
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
@@ -112,6 +114,7 @@ struct FeedView: View {
                 NavigationStack {
                     CreateGalleryView(client: client) {
                         showCreate = false
+                        feedRefreshID = UUID()
                     }
                 }
             }
