@@ -50,8 +50,9 @@ final class ProfileDetailViewModel {
         let isOwnProfile = viewer != nil && viewer == did
         if isOwnProfile, favoriteGalleries.isEmpty {
             let cached = FeedCache.shared.load(key: Self.favoritesCacheKey(did: did))
-            if !cached.isEmpty {
-                favoriteGalleries = cached
+            let hydrated = Self.hydratedFavorites(cached)
+            if !hydrated.isEmpty {
+                favoriteGalleries = hydrated
             }
         }
 
@@ -129,7 +130,7 @@ final class ProfileDetailViewModel {
         profileLogger.info("loadFavorites start did=\(did, privacy: .public) hasAuth=\(auth != nil, privacy: .public)")
         do {
             let response = try await client.getActorFavorites(actor: did, auth: auth)
-            favoriteGalleries = response.items ?? []
+            favoriteGalleries = Self.hydratedFavorites(response.items ?? [])
             favoritesCursor = response.cursor
             hasMoreFavorites = response.cursor != nil
             profileLogger.info("loadFavorites ok count=\(favoriteGalleries.count, privacy: .public)")
@@ -150,12 +151,20 @@ final class ProfileDetailViewModel {
         "favorites_\(did)"
     }
 
+    /// Drops favorites whose underlying gallery has no photos — either an
+    /// empty/deleted gallery the server couldn't hydrate, or a dangling
+    /// favorite pointing at a since-deleted record. Without this, the grid
+    /// shows a black void where the thumbnail would be.
+    private static func hydratedFavorites(_ galleries: [GrainGallery]) -> [GrainGallery] {
+        galleries.filter { !($0.items?.isEmpty ?? true) }
+    }
+
     func loadMoreFavorites(did: String, auth: AuthContext? = nil) async {
         guard !isLoading, hasMoreFavorites, let cursor = favoritesCursor else { return }
         isLoading = true
         do {
             let response = try await client.getActorFavorites(actor: did, cursor: cursor, auth: auth)
-            favoriteGalleries.append(contentsOf: response.items ?? [])
+            favoriteGalleries.append(contentsOf: Self.hydratedFavorites(response.items ?? []))
             favoritesCursor = response.cursor
             hasMoreFavorites = response.cursor != nil
         } catch {}
