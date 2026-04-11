@@ -23,6 +23,11 @@ final class ProfileDetailViewModel {
     var favoritesLoaded = false
     var isLoadingFavorites = false
     var favoritesError: Error?
+    /// URIs of favorites whose thumbnail failed to load this session — usually
+    /// dangling refs to since-deleted blobs. Populated by the grid's LazyImage
+    /// completion handler; applied on the next favorites load so the current
+    /// view doesn't reflow.
+    var brokenFavoriteUris: Set<String> = []
 
     private var galleryCursor: String?
     private(set) var hasMoreGalleries = true
@@ -50,7 +55,7 @@ final class ProfileDetailViewModel {
         let isOwnProfile = viewer != nil && viewer == did
         if isOwnProfile, favoriteGalleries.isEmpty {
             let cached = FeedCache.shared.load(key: Self.favoritesCacheKey(did: did))
-            let hydrated = Self.hydratedFavorites(cached)
+            let hydrated = hydratedFavorites(cached)
             if !hydrated.isEmpty {
                 favoriteGalleries = hydrated
             }
@@ -130,7 +135,7 @@ final class ProfileDetailViewModel {
         profileLogger.info("loadFavorites start did=\(did, privacy: .public) hasAuth=\(auth != nil, privacy: .public)")
         do {
             let response = try await client.getActorFavorites(actor: did, auth: auth)
-            favoriteGalleries = Self.hydratedFavorites(response.items ?? [])
+            favoriteGalleries = hydratedFavorites(response.items ?? [])
             favoritesCursor = response.cursor
             hasMoreFavorites = response.cursor != nil
             profileLogger.info("loadFavorites ok count=\(favoriteGalleries.count, privacy: .public)")
@@ -151,12 +156,14 @@ final class ProfileDetailViewModel {
         "favorites_\(did)"
     }
 
-    /// Drops favorites whose underlying gallery has no photos — either an
-    /// empty/deleted gallery the server couldn't hydrate, or a dangling
-    /// favorite pointing at a since-deleted record. Without this, the grid
-    /// shows a black void where the thumbnail would be.
-    private static func hydratedFavorites(_ galleries: [GrainGallery]) -> [GrainGallery] {
-        galleries.filter { !($0.items?.isEmpty ?? true) }
+    /// Drops favorites that would render empty: galleries with no photos
+    /// (deleted or never-populated), and galleries whose thumbnail already
+    /// failed to load this session (tracked in `brokenFavoriteUris`). Applied
+    /// on every load path so the dangling ones disappear on the next refresh.
+    private func hydratedFavorites(_ galleries: [GrainGallery]) -> [GrainGallery] {
+        galleries.filter {
+            !($0.items?.isEmpty ?? true) && !brokenFavoriteUris.contains($0.uri)
+        }
     }
 
     func loadMoreFavorites(did: String, auth: AuthContext? = nil) async {
@@ -164,7 +171,7 @@ final class ProfileDetailViewModel {
         isLoading = true
         do {
             let response = try await client.getActorFavorites(actor: did, cursor: cursor, auth: auth)
-            favoriteGalleries.append(contentsOf: Self.hydratedFavorites(response.items ?? []))
+            favoriteGalleries.append(contentsOf: hydratedFavorites(response.items ?? []))
             favoritesCursor = response.cursor
             hasMoreFavorites = response.cursor != nil
         } catch {}

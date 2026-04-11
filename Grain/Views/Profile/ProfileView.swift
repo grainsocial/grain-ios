@@ -26,6 +26,7 @@ struct ProfileView: View {
     @State private var viewMode: ProfileViewMode = .grid
     @State private var tabPageWidth: CGFloat = 0
     @State private var tabScrollOffsetX: CGFloat = 0
+    @State private var tabHeights: [ProfileViewMode: CGFloat] = [:]
     @State private var tabSectionViewportMinY: CGFloat = .infinity
     @State private var zoomState = ImageZoomState()
     @State private var cardStoryAuthor: GrainStoryAuthor?
@@ -645,16 +646,22 @@ struct ProfileView: View {
             ScrollView(.horizontal) {
                 HStack(alignment: .top, spacing: 0) {
                     galleriesGrid
-                        .frame(maxHeight: .infinity, alignment: .top)
                         .containerRelativeFrame(.horizontal)
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { h in
+                            tabHeights[.grid] = h
+                        }
                         .id(ProfileViewMode.grid)
                     favoritesGrid
-                        .frame(maxHeight: .infinity, alignment: .top)
                         .containerRelativeFrame(.horizontal)
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { h in
+                            tabHeights[.favorites] = h
+                        }
                         .id(ProfileViewMode.favorites)
                     storyArchiveGrid
-                        .frame(maxHeight: .infinity, alignment: .top)
                         .containerRelativeFrame(.horizontal)
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { h in
+                            tabHeights[.stories] = h
+                        }
                         .id(ProfileViewMode.stories)
                 }
                 .scrollTargetLayout()
@@ -670,8 +677,23 @@ struct ProfileView: View {
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { newWidth in
                 if newWidth > 0 { tabPageWidth = newWidth }
             }
-            .frame(minHeight: 500)
+            .frame(height: interpolatedTabHeight(modes: modes))
         }
+    }
+
+    private func interpolatedTabHeight(modes: [ProfileViewMode]) -> CGFloat {
+        let fallback: CGFloat = 200
+        let heights = modes.map { tabHeights[$0] ?? fallback }
+        guard tabPageWidth > 0 else {
+            let idx = modes.firstIndex(of: viewMode) ?? 0
+            return max(heights[idx], fallback)
+        }
+        let raw = tabScrollOffsetX / tabPageWidth
+        let clamped = max(0, min(raw, CGFloat(modes.count - 1)))
+        let lower = Int(clamped.rounded(.down))
+        let upper = min(lower + 1, modes.count - 1)
+        let t = clamped - CGFloat(lower)
+        return max(heights[lower] * (1 - t) + heights[upper] * t, fallback)
     }
 
     @ViewBuilder
@@ -848,7 +870,9 @@ struct ProfileView: View {
                         Color.clear
                             .aspectRatio(3.0 / 4.0, contentMode: .fit)
                             .overlay {
-                                if let photo = gallery.items?.first {
+                                if viewModel.brokenFavoriteUris.contains(gallery.uri) {
+                                    DeletedGalleryCard()
+                                } else if let photo = gallery.items?.first {
                                     LazyImage(url: URL(string: photo.thumb)) { state in
                                         if let image = state.image {
                                             image
@@ -858,6 +882,18 @@ struct ProfileView: View {
                                             Rectangle().fill(.quaternary)
                                         }
                                     }
+                                    // Dangling blob refs (server returns an item
+                                    // but the CID 404s on the CDN) — mark the uri
+                                    // so the next render swaps in the deleted
+                                    // card, and the next favorites load filters
+                                    // it out entirely.
+                                    .onCompletion { result in
+                                        if case .failure = result {
+                                            viewModel.brokenFavoriteUris.insert(gallery.uri)
+                                        }
+                                    }
+                                } else {
+                                    DeletedGalleryCard()
                                 }
                             }
                             .clipped()
@@ -881,6 +917,42 @@ struct ProfileView: View {
                     }
                 }
             }
+            // Eagerly probe the first few thumbs so broken ones above the
+            // LazyVGrid fold get marked before the user scrolls to them.
+            // Keyed on the top-N uris so it reruns when the list head changes.
+            .task(id: viewModel.favoriteGalleries.prefix(9).map(\.uri).joined(separator: "|")) {
+                await probeTopFavoriteThumbs(limit: 9)
+            }
+        }
+    }
+
+    private func probeTopFavoriteThumbs(limit: Int) async {
+        let targets: [(uri: String, thumb: String?)] = viewModel.favoriteGalleries
+            .prefix(limit)
+            .map { ($0.uri, $0.items?.first?.thumb) }
+        var broken: [String] = []
+        await withTaskGroup(of: (String, Bool).self) { group in
+            for target in targets {
+                let uri = target.uri
+                let thumb = target.thumb
+                group.addTask {
+                    guard let thumb, let url = URL(string: thumb) else {
+                        return (uri, false)
+                    }
+                    do {
+                        _ = try await ImagePipeline.shared.image(for: url)
+                        return (uri, true)
+                    } catch {
+                        return (uri, false)
+                    }
+                }
+            }
+            for await (uri, ok) in group where !ok {
+                broken.append(uri)
+            }
+        }
+        for uri in broken {
+            viewModel.brokenFavoriteUris.insert(uri)
         }
     }
 
@@ -1049,6 +1121,23 @@ struct StatView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
+    }
+}
+
+private struct DeletedGalleryCard: View {
+    var body: some View {
+        Rectangle()
+            .fill(.quaternary)
+            .overlay {
+                VStack(spacing: 6) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 18, weight: .regular))
+                        .foregroundStyle(.secondary)
+                    Text("Deleted")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
     }
 }
 
