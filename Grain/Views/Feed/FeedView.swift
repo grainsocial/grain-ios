@@ -3,6 +3,7 @@ import os
 import SwiftUI
 
 private let fvLogger = Logger(subsystem: "social.grain.grain", category: "FeedView")
+private let feedLaunchSignposter = OSSignposter(subsystem: "social.grain.grain", category: "AppLaunch")
 
 struct FeedView: View {
     @Environment(AuthManager.self) private var auth
@@ -27,11 +28,15 @@ struct FeedView: View {
         self.client = client
         _pendingDeepLink = pendingDeepLink
         _showCreate = showCreate
+        let _spid = feedLaunchSignposter.makeSignpostID()
+        let _state = feedLaunchSignposter.beginInterval("FeedViewModelInit", id: _spid)
         _prefsViewModel = State(initialValue: FeedPreferencesViewModel(client: client))
         _storyViewModel = State(initialValue: StoryStripViewModel(client: client))
+        feedLaunchSignposter.endInterval("FeedViewModelInit", _state)
     }
 
     var body: some View {
+        let _ = feedLaunchSignposter.emitEvent("FeedViewBodyBegin")
         let storySortVersion = storyViewModel.version
         let _ = fvLogger.info("[body] eval storyViewerDid=\(storyViewerDid ?? "nil") authors.count=\(storyViewModel.authors.count) version=\(storySortVersion)")
         NavigationStack {
@@ -72,7 +77,10 @@ struct FeedView: View {
             }
             .task {
                 guard !isPreview else { return }
+                let _spid = feedLaunchSignposter.makeSignpostID()
+                let _state = feedLaunchSignposter.beginInterval("FeedPrefsLoad", id: _spid)
                 await prefsViewModel.loadIfNeeded(auth: auth.authContext())
+                feedLaunchSignposter.endInterval("FeedPrefsLoad", _state)
                 await storyViewModel.load(auth: auth.authContext(), storyStatusCache: storyStatusCache)
             }
             .onAppear {
@@ -277,6 +285,7 @@ private struct FeedTabContent: View {
     @State private var deletedGalleryUri: String?
     @State private var zoomState = ImageZoomState()
     @State private var cardStoryAuthor: GrainStoryAuthor?
+    @State private var avatarOverlayURL: String?
     @State private var commentSheetUri: String?
     @State private var reportGallery: GrainGallery?
     @State private var deleteGalleryUri: String?
@@ -328,6 +337,7 @@ private struct FeedTabContent: View {
                     sortVersion: storySortVersion,
                     onAuthorTap: onStoryAuthorTap,
                     onAuthorLongPress: { did in selectedProfileDid = did },
+                    onViewPhoto: { url in avatarOverlayURL = url },
                     onCreateTap: onStoryCreateTap
                 )
 
@@ -414,6 +424,14 @@ private struct FeedTabContent: View {
             )
             .environment(auth)
         }
+        .fullScreenCover(isPresented: Binding(
+            get: { avatarOverlayURL != nil },
+            set: { if !$0 { avatarOverlayURL = nil } }
+        )) {
+            if let url = avatarOverlayURL {
+                AvatarOverlay(url: url) { avatarOverlayURL = nil }
+            }
+        }
         .sheet(isPresented: Binding(
             get: { commentSheetUri != nil },
             set: { if !$0 { commentSheetUri = nil } }
@@ -469,8 +487,15 @@ private struct FeedTabContent: View {
                 #endif
                 return
             }
-            if viewModel.galleries.isEmpty {
-                await viewModel.loadInitial(auth: auth.authContext())
+            feedLaunchSignposter.emitEvent("FeedTaskBegin")
+            if !viewModel.hasFetchedInitial {
+                let _authCtx = await auth.authContext()
+                feedLaunchSignposter.emitEvent("FeedAuthResolved")
+                let _spid = feedLaunchSignposter.makeSignpostID()
+                let _state = feedLaunchSignposter.beginInterval("FeedInitialLoad", id: _spid)
+                await viewModel.loadInitial(auth: _authCtx)
+                feedLaunchSignposter.endInterval("FeedInitialLoad", _state)
+                feedLaunchSignposter.emitEvent("FeedGalleriesReady")
                 lastLoadTime = .now
             }
             if showSuggestedUsers, !suggestedLoaded, let did = auth.userDID {

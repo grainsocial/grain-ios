@@ -24,6 +24,8 @@ struct MainTabView: View {
     @Binding var pendingDeepLink: DeepLink?
 
     @MainActor static let badgeAppearanceConfigured: Bool = MainActor.assumeIsolated {
+        let _spid = launchSignposter.makeSignpostID()
+        let _state = launchSignposter.beginInterval("BadgeAppearanceSetup", id: _spid)
         let color = UIColor(named: "AccentColor")
         let textAttrs: [NSAttributedString.Key: Any] = [.foregroundColor: UIColor.white]
         let appearance = UITabBarAppearance()
@@ -38,11 +40,14 @@ struct MainTabView: View {
         apply(appearance.compactInlineLayoutAppearance)
         UITabBar.appearance().standardAppearance = appearance
         UITabBar.appearance().scrollEdgeAppearance = appearance
+        launchSignposter.endInterval("BadgeAppearanceSetup", _state)
         return true
     }
 
     var body: some View {
+        let _ = launchSignposter.emitEvent("MainTabViewBodyBegin")
         let _ = Self.badgeAppearanceConfigured
+        let _ = launchSignposter.emitEvent("TabViewBodyBegin")
         TabView(selection: $selectedTab) {
             Tab("Feed", systemImage: "photo.on.rectangle", value: AppTab.feed) {
                 FeedView(client: client, pendingDeepLink: $pendingDeepLink, showCreate: $showCreate)
@@ -144,6 +149,11 @@ struct MainTabView: View {
                     try? await auth.refreshIfNeeded()
                     await notificationsVM.fetchUnseenCount(auth: auth.authContext())
                     await labelDefsCache.loadIfNeeded(client: client, auth: auth.authContext())
+                }
+            } else if scenePhase == .background {
+                Task {
+                    viewedStories.cleanup()
+                    storyStatusCache.purgeExpired()
                 }
             }
         }

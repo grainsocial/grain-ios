@@ -1,5 +1,8 @@
 import Nuke
+import os
 import SwiftUI
+
+private let notificationsLaunchSignposter = OSSignposter(subsystem: "social.grain.grain", category: "AppLaunch")
 
 struct NotificationsView: View {
     @Environment(AuthManager.self) private var auth
@@ -14,9 +17,11 @@ struct NotificationsView: View {
     init(client: XRPCClient, viewModel: NotificationsViewModel) {
         self.client = client
         self.viewModel = viewModel
+        notificationsLaunchSignposter.emitEvent("NotificationsViewInit")
     }
 
     var body: some View {
+        let _ = notificationsLaunchSignposter.emitEvent("NotificationsViewBodyBegin")
         NavigationStack {
             NotificationListContent(
                 viewModel: viewModel,
