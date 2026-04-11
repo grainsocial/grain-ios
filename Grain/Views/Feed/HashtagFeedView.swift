@@ -2,6 +2,7 @@ import SwiftUI
 
 struct HashtagFeedView: View {
     @Environment(AuthManager.self) private var auth
+    @Environment(\.dismiss) private var dismiss
     @State private var galleries: [GrainGallery] = []
     @State private var cursor: String?
     @State private var isLoading = false
@@ -37,6 +38,20 @@ struct HashtagFeedView: View {
                 }
             }
         }
+        .gesture(
+            // Rightward swipe outside the carousel pops the nav. Exclusive
+            // .gesture so the child TabView in GalleryCardView claims swipes
+            // on the image area first.
+            DragGesture(minimumDistance: 30)
+                .onEnded { value in
+                    let dx = value.translation.width
+                    let dy = value.translation.height
+                    let predicted = value.predictedEndTranslation.width
+                    if dx > 80, abs(dy) < 60, predicted > 120 {
+                        dismiss()
+                    }
+                }
+        )
         .environment(zoomState)
         .modifier(ImageZoomOverlay(zoomState: zoomState))
         .navigationTitle("#\(tag)")
