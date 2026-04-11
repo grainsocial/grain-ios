@@ -1,11 +1,23 @@
 import SwiftUI
 
+enum ProfileGalleryFeedSource: Hashable {
+    case galleries
+    case favorites
+}
+
+struct ProfileGallerySelection: Hashable {
+    let uri: String
+    let source: ProfileGalleryFeedSource
+}
+
 struct ProfileGalleryFeedView: View {
     @Environment(AuthManager.self) private var auth
+    @Environment(\.dismiss) private var dismiss
     @Bindable var viewModel: ProfileDetailViewModel
     let client: XRPCClient
     let did: String
     let initialUri: String
+    let source: ProfileGalleryFeedSource
 
     @State private var didExpand = false
     @State private var scrollAnchor: String?
@@ -19,33 +31,92 @@ struct ProfileGalleryFeedView: View {
     @State private var deleteGalleryUri: String?
     @State private var showDeleteConfirmation = false
 
-    init(viewModel: ProfileDetailViewModel, client: XRPCClient, did: String, initialUri: String) {
+    init(
+        viewModel: ProfileDetailViewModel,
+        client: XRPCClient,
+        did: String,
+        initialUri: String,
+        source: ProfileGalleryFeedSource = .galleries
+    ) {
         self.viewModel = viewModel
         self.client = client
         self.did = did
         self.initialUri = initialUri
+        self.source = source
         _scrollAnchor = State(initialValue: initialUri)
     }
 
+    private var items: [GrainGallery] {
+        switch source {
+        case .galleries: viewModel.galleries
+        case .favorites: viewModel.favoriteGalleries
+        }
+    }
+
+    private var itemsBinding: Binding<[GrainGallery]> {
+        switch source {
+        case .galleries: $viewModel.galleries
+        case .favorites: $viewModel.favoriteGalleries
+        }
+    }
+
+    private var hasMore: Bool {
+        switch source {
+        case .galleries: viewModel.hasMoreGalleries
+        case .favorites: viewModel.hasMoreFavorites
+        }
+    }
+
     private var tappedIndex: Int {
-        viewModel.galleries.firstIndex(where: { $0.uri == initialUri }) ?? 0
+        items.firstIndex(where: { $0.uri == initialUri }) ?? 0
     }
 
     private var renderStartIndex: Int {
         didExpand ? 0 : tappedIndex
     }
 
+    private func loadMore() async {
+        switch source {
+        case .galleries:
+            await viewModel.loadMoreGalleries(did: did, auth: auth.authContext())
+        case .favorites:
+            await viewModel.loadMoreFavorites(did: did, auth: auth.authContext())
+        }
+    }
+
+    private func updateCommentCount(uri: String, count: Int) {
+        switch source {
+        case .galleries:
+            if let idx = viewModel.galleries.firstIndex(where: { $0.uri == uri }) {
+                viewModel.galleries[idx].commentCount = count
+            }
+        case .favorites:
+            if let idx = viewModel.favoriteGalleries.firstIndex(where: { $0.uri == uri }) {
+                viewModel.favoriteGalleries[idx].commentCount = count
+            }
+        }
+    }
+
+    private func removeAfterDelete(uri: String) {
+        switch source {
+        case .galleries:
+            viewModel.galleries.removeAll { $0.uri == uri }
+        case .favorites:
+            viewModel.favoriteGalleries.removeAll { $0.uri == uri }
+        }
+    }
+
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
-                ForEach(Array($viewModel.galleries.enumerated()), id: \.element.id) { index, $gallery in
+                ForEach(Array(itemsBinding.enumerated()), id: \.element.id) { index, $gallery in
                     if index >= renderStartIndex {
                         galleryCard(gallery: $gallery, index: index)
                             .id(gallery.uri)
                     }
                 }
 
-                if viewModel.isLoading {
+                if viewModel.isLoading, hasMore {
                     ProgressView()
                         .padding()
                 }
@@ -53,7 +124,23 @@ struct ProfileGalleryFeedView: View {
             .scrollTargetLayout()
         }
         .scrollPosition(id: $scrollAnchor, anchor: .top)
-        .contentMargins(.top, 16, for: .scrollContent)
+        .scrollTargetBehavior(.viewAligned)
+        .contentMargins(.top, 24, for: .scrollContent)
+        .gesture(
+            // Rightward swipe anywhere outside the carousel pops the nav.
+            // Using exclusive .gesture (not simultaneous) so the child TabView
+            // in GalleryCardView claims swipes inside the image area first;
+            // ours only fires for touches that miss the carousel.
+            DragGesture(minimumDistance: 30)
+                .onEnded { value in
+                    let dx = value.translation.width
+                    let dy = value.translation.height
+                    let predicted = value.predictedEndTranslation.width
+                    if dx > 80, abs(dy) < 60, predicted > 120 {
+                        dismiss()
+                    }
+                }
+        )
         .environment(zoomState)
         .modifier(ImageZoomOverlay(zoomState: zoomState))
         .navigationBarTitleDisplayMode(.inline)
@@ -100,9 +187,7 @@ struct ProfileGalleryFeedView: View {
                         cardStoryAuthor = author
                     },
                     onCommentCountChanged: { count in
-                        if let idx = viewModel.galleries.firstIndex(where: { $0.uri == uri }) {
-                            viewModel.galleries[idx].commentCount = count
-                        }
+                        updateCommentCount(uri: uri, count: count)
                     }
                 )
             }
@@ -117,7 +202,7 @@ struct ProfileGalleryFeedView: View {
                         guard let authContext = await auth.authContext() else { return }
                         let rkey = uri.split(separator: "/").last.map(String.init) ?? ""
                         try? await client.deleteRecord(collection: "social.grain.gallery", rkey: rkey, auth: authContext)
-                        viewModel.galleries.removeAll { $0.uri == uri }
+                        removeAfterDelete(uri: uri)
                     }
                     deleteGalleryUri = nil
                 }
@@ -147,8 +232,8 @@ struct ProfileGalleryFeedView: View {
             if g.uri == initialUri, !didExpand {
                 didExpand = true
             }
-            if index == viewModel.galleries.count - 1 {
-                Task { await viewModel.loadMoreGalleries(did: did, auth: auth.authContext()) }
+            if index == items.count - 1 {
+                Task { await loadMore() }
             }
         }
     }

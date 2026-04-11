@@ -1,5 +1,8 @@
 import Foundation
+import OSLog
 import UIKit
+
+private let profileLogger = Logger(subsystem: "social.grain.grain", category: "Profile")
 
 @Observable
 @MainActor
@@ -19,14 +22,15 @@ final class ProfileDetailViewModel {
     /// not the same as a confirmed empty list.
     var favoritesLoaded = false
     var isLoadingFavorites = false
+    var favoritesError: Error?
 
     private var galleryCursor: String?
-    private var hasMoreGalleries = true
+    private(set) var hasMoreGalleries = true
     private var archiveCursor: String?
     private var hasMoreArchive = true
     private var archiveLoaded = false
     private var favoritesCursor: String?
-    private var hasMoreFavorites = true
+    private(set) var hasMoreFavorites = true
     private let client: XRPCClient
 
     /// Max favorites persisted to disk. Enough for an instant top-of-list on
@@ -121,17 +125,23 @@ final class ProfileDetailViewModel {
     func loadFavorites(did: String, auth: AuthContext? = nil) async {
         guard !favoritesLoaded, !isLoadingFavorites else { return }
         isLoadingFavorites = true
+        favoritesError = nil
+        profileLogger.info("loadFavorites start did=\(did, privacy: .public) hasAuth=\(auth != nil, privacy: .public)")
         do {
             let response = try await client.getActorFavorites(actor: did, auth: auth)
             favoriteGalleries = response.items ?? []
             favoritesCursor = response.cursor
             hasMoreFavorites = response.cursor != nil
+            profileLogger.info("loadFavorites ok count=\(favoriteGalleries.count, privacy: .public)")
             let toCache = Array(favoriteGalleries.prefix(Self.favoritesDiskCacheLimit))
             let key = Self.favoritesCacheKey(did: did)
             Task.detached(priority: .utility) {
                 FeedCache.shared.save(toCache, key: key)
             }
-        } catch {}
+        } catch {
+            favoritesError = error
+            profileLogger.error("loadFavorites failed: \(error, privacy: .public)")
+        }
         favoritesLoaded = true
         isLoadingFavorites = false
     }

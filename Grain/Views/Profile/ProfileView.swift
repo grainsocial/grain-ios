@@ -803,6 +803,25 @@ struct ProfileView: View {
             ProgressView()
                 .frame(maxWidth: .infinity)
                 .padding(.top, 60)
+        } else if viewModel.favoriteGalleries.isEmpty, let err = viewModel.favoritesError {
+            VStack(spacing: 8) {
+                Text("Couldn't load favorites")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Text(String(describing: err))
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+                Button("Retry") {
+                    viewModel.favoritesLoaded = false
+                    Task { await viewModel.loadFavorites(did: did, auth: auth.authContext()) }
+                }
+                .font(.subheadline)
+                .buttonStyle(.bordered)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 60)
         } else if viewModel.favoriteGalleries.isEmpty {
             Text("No favorites yet")
                 .font(.subheadline)
