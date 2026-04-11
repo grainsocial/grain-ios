@@ -7,8 +7,11 @@ private enum AppTab: Hashable {
 struct MainTabView: View {
     @Environment(AuthManager.self) private var auth
     @Environment(LabelDefinitionsCache.self) private var labelDefsCache
+    @Environment(StoryStatusCache.self) private var storyStatusCache
+    @Environment(ViewedStoryStorage.self) private var viewedStories
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedTab: AppTab = .feed
+    @State private var commentPresenter = StoryCommentPresenter()
     @State private var client = XRPCClient(baseURL: AuthManager.serverURL)
     @State private var showCreate = false
     @State private var avatarTabImage: UIImage?
@@ -69,7 +72,13 @@ struct MainTabView: View {
             }
         }
         .tint(Color("AccentColor"))
+        .environment(commentPresenter)
         .task {
+            commentPresenter.configure(
+                auth: auth,
+                storyStatusCache: storyStatusCache,
+                viewedStories: viewedStories
+            )
             let c = auth.makeClient()
             client = c
             notificationsVM.updateClient(c)

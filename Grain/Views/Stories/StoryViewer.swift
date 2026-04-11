@@ -6,6 +6,12 @@ import SwiftUI
 private let svLogger = Logger(subsystem: "social.grain.grain", category: "StoryViewer")
 private let svSignposter = OSSignposter(subsystem: "social.grain.grain", category: "StoryViewer")
 
+@MainActor private var svInstanceCounter: Int = 0
+@MainActor private func svNextInstanceID() -> Int {
+    svInstanceCounter += 1
+    return svInstanceCounter
+}
+
 @Observable
 @MainActor
 private final class StoryTimer {
@@ -17,14 +23,27 @@ private final class StoryTimer {
     func start() {
         svLogger.info("[timer.start] called")
         svSignposter.emitEvent("timer.start")
-        stop()
         progress = 0
-        isRunning = true
         quarterFired = false
+        run(fromProgress: 0)
+    }
+
+    func resume() {
+        guard !isRunning else { return }
+        guard progress < 1.0 else { start(); return }
+        svLogger.info("[timer.resume] called progress=\(progress)")
+        svSignposter.emitEvent("timer.resume", "progress=\(progress)")
+        run(fromProgress: progress)
+    }
+
+    private func run(fromProgress start: CGFloat) {
+        stop()
+        isRunning = true
+        let tickInterval: TimeInterval = 0.05
+        let totalTicks = Int(duration / tickInterval)
+        let startTick = max(Int(start * CGFloat(totalTicks)), 0)
         task = Task {
-            let tickInterval: TimeInterval = 0.05
-            let totalTicks = Int(duration / tickInterval)
-            for tick in 0 ... totalTicks {
+            for tick in startTick ... totalTicks {
                 do {
                     try await Task.sleep(for: .milliseconds(Int(tickInterval * 1000)))
                 } catch { return }
@@ -75,6 +94,7 @@ struct StoryViewer: View {
     @Environment(ViewedStoryStorage.self) private var viewedStories
     @Environment(StoryStatusCache.self) private var storyStatusCache
     @Environment(StoryFavoriteCache.self) private var storyFavoriteCache
+    @Environment(StoryCommentPresenter.self) private var commentPresenter
     let authors: [GrainStoryAuthor]
     let client: XRPCClient
     var onProfileTap: ((String) -> Void)?
@@ -104,13 +124,17 @@ struct StoryViewer: View {
     // MARK: - Comments & Likes
 
     @State private var commentsViewModel: StoryCommentsViewModel
-    @State private var showCommentSheet = false
-    @State private var commentSheetFocusInput = false
-    @State private var sheetStoryUri: String?
+    /// Local mirror of the presenter's sheet state. Driven by the `onDidClose`
+    /// callback passed to `commentPresenter.open(...)`. Do NOT replace this
+    /// with a read of `commentPresenter.presentedStoryUri` — that read would
+    /// re-evaluate the body on every open/close and cascade into a storyContent
+    /// re-render (black flash on sheet transitions).
+    @State private var isCommentSheetOpen = false
     @State private var hasLoadedInitialStories = false
     @State private var hearts: [HeartAnimationState] = []
     @State private var isFavoriting = false
     @State private var likeParticleBursts: [UUID] = []
+    @State private var instanceID: Int = 0
 
     init(authors: [GrainStoryAuthor], startAuthorDid: String? = nil, initialStories: [GrainStory]? = nil, startStoryIndex: Int? = nil, client: XRPCClient, onProfileTap: ((String) -> Void)? = nil, onDismiss: (() -> Void)? = nil) {
         self.authors = authors
@@ -127,6 +151,9 @@ struct StoryViewer: View {
                 _currentStoryIndex = State(initialValue: startStoryIndex)
             }
         }
+        let id = svNextInstanceID()
+        _instanceID = State(initialValue: id)
+        svLogger.info("[init] StoryViewer.init id=\(id) startAuthorDid=\(startAuthorDid ?? "nil") authors.count=\(authors.count)")
     }
 
     private var currentStory: GrainStory? {
@@ -147,7 +174,7 @@ struct StoryViewer: View {
     }
 
     var body: some View {
-        let _ = svLogger.debug("[body] eval showCommentSheet=\(showCommentSheet) storiesCount=\(stories.count) currentIdx=\(currentStoryIndex) imageLoaded=\(imageLoaded)")
+        let _ = svLogger.info("[body] eval id=\(instanceID) storiesCount=\(stories.count) currentIdx=\(currentStoryIndex) imageLoaded=\(imageLoaded) hasLoaded=\(hasLoadedInitialStories)")
         return ZStack {
             if let pendingIdx = pendingTransition.authorIndex {
                 pendingFaceView(authorIdx: pendingIdx)
@@ -167,8 +194,8 @@ struct StoryViewer: View {
                     .transition(.identity)
             }
         }
-        .onAppear { svLogger.info("[body] onAppear") }
-        .onDisappear { svLogger.info("[body] onDisappear") }
+        .onAppear { svLogger.info("[body] onAppear id=\(instanceID)") }
+        .onDisappear { svLogger.info("[body] onDisappear id=\(instanceID)") }
         .clipped()
         .background(Color.black.ignoresSafeArea())
         .background(
@@ -182,7 +209,7 @@ struct StoryViewer: View {
                 onHorizontalDragStart: { forward in beginSwipe(forward: forward) },
                 onSwipeDragging: { tx in updateSwipeDrag(tx) },
                 onHorizontalDragCancel: { cancelSwipe() },
-                isEnabled: !showCommentSheet
+                isEnabled: !isCommentSheetOpen
             )
         )
         .confirmationDialog("Delete this story?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
@@ -202,33 +229,6 @@ struct StoryViewer: View {
         .onChange(of: reportTarget?.uri) {
             if reportTarget == nil { timer.start() }
         }
-        .sheet(isPresented: $showCommentSheet) {
-            let _ = svLogger.info("[sheet.content] body eval sheetStoryUri=\(sheetStoryUri ?? "nil") currentStoryURI=\(currentStory?.uri ?? "nil")")
-            if let uri = sheetStoryUri {
-                StoryCommentSheet(
-                    viewModel: commentsViewModel,
-                    storyUri: uri,
-                    client: client,
-                    focusInput: commentSheetFocusInput,
-                    onProfileTap: { did in
-                        showCommentSheet = false
-                        close()
-                        onProfileTap?(did)
-                    },
-                    onDismiss: { showCommentSheet = false }
-                )
-                .environment(auth)
-                .environment(storyStatusCache)
-                .environment(viewedStories)
-                .onAppear { svLogger.info("[sheet.content] onAppear uri=\(uri)") }
-                .onDisappear { svLogger.info("[sheet.content] onDisappear") }
-            } else {
-                let _ = svLogger.info("[sheet.content] EMPTY (sheetStoryUri nil)")
-            }
-        }
-        .onChange(of: showCommentSheet) { old, new in
-            svLogger.info("[onChange showCommentSheet] \(old) → \(new) sheetStoryUri=\(sheetStoryUri ?? "nil")")
-        }
         .onChange(of: imageLoaded) { old, new in
             svLogger.info("[onChange imageLoaded] \(old) → \(new)")
         }
@@ -239,8 +239,8 @@ struct StoryViewer: View {
             svLogger.info("[onChange stories.count] \(old) → \(new)")
         }
         .task {
-            svLogger.info("[task] fired hasLoadedInitialStories=\(hasLoadedInitialStories) showCommentSheet=\(showCommentSheet)")
-            svSignposter.emitEvent("task.fired", "hasLoaded=\(hasLoadedInitialStories),sheetOpen=\(showCommentSheet)")
+            svLogger.info("[task] fired id=\(instanceID) hasLoadedInitialStories=\(hasLoadedInitialStories)")
+            svSignposter.emitEvent("task.fired", "id=\(instanceID) hasLoaded=\(hasLoadedInitialStories)")
             // Guard against re-runs: .task can re-fire when the view re-enters the
             // hierarchy (e.g. after sheet presentation cycles), and we only want to
             // load stories once per StoryViewer instance.
@@ -349,23 +349,6 @@ struct StoryViewer: View {
                 .padding(.vertical, 8)
 
                 Spacer().allowsHitTesting(false)
-
-                if let story, let locationText = storyLocationText(story) {
-                    HStack {
-                        HStack(spacing: 4) {
-                            Image(systemName: "location.fill")
-                            Text(locationText)
-                        }
-                        .font(.caption)
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(.ultraThinMaterial, in: Capsule())
-                        Spacer()
-                    }
-                    .padding(.horizontal)
-                    .padding(.bottom, 32)
-                }
             }
         }
     }
@@ -416,7 +399,7 @@ struct StoryViewer: View {
                                 //     Text("fullsize · cache").font(.caption2.bold()).padding(6).background(.black.opacity(0.5)).foregroundStyle(.white).padding(8)
                                 // }
                                 .onAppear {
-                                    svLogger.info("[image.onAppear cached-fullsize] imageLoaded=\(imageLoaded) showCommentSheet=\(showCommentSheet)")
+                                    svLogger.info("[image.onAppear cached-fullsize] imageLoaded=\(imageLoaded)")
                                     if !imageLoaded {
                                         imageLoaded = true
                                         startTimerIfSafe()
@@ -439,7 +422,7 @@ struct StoryViewer: View {
                                         //     Text("fullsize · network").font(.caption2.bold()).padding(6).background(.black.opacity(0.5)).foregroundStyle(.white).padding(8)
                                         // }
                                         .onAppear {
-                                            svLogger.info("[image.onAppear lazy-fullsize] imageLoaded=\(imageLoaded) showCommentSheet=\(showCommentSheet)")
+                                            svLogger.info("[image.onAppear lazy-fullsize] imageLoaded=\(imageLoaded)")
                                             if !imageLoaded {
                                                 imageLoaded = true
                                                 startTimerIfSafe()
@@ -518,7 +501,7 @@ struct StoryViewer: View {
                         .frame(height: 80)
                         .allowsHitTesting(false)
                 }
-                .allowsHitTesting(reportTarget == nil && !showDeleteConfirm && !showCommentSheet && (labelRevealed || storyLabelResult.action == .none || storyLabelResult.action == .badge))
+                .allowsHitTesting(reportTarget == nil && !showDeleteConfirm && !isCommentSheetOpen && (labelRevealed || storyLabelResult.action == .none || storyLabelResult.action == .badge))
 
                 // Double-tap heart animations
                 ForEach(hearts) { heart in
@@ -598,52 +581,52 @@ struct StoryViewer: View {
                 Spacer()
                     .allowsHitTesting(false)
 
-                if let story, let locationText = storyLocationText(story) {
-                    HStack {
-                        HStack(spacing: 4) {
-                            Image(systemName: showLocationCopied ? "checkmark" : "location.fill")
-                            Text(showLocationCopied ? "Copied" : locationText)
-                        }
-                        .font(.caption)
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(.ultraThinMaterial, in: Capsule())
-                        .contentTransition(.symbolEffect(.replace))
-                        .id(story.uri)
-                        .onTapGesture {
-                            UIPasteboard.general.string = locationText
-                            withAnimation(.easeInOut(duration: 0.15)) { showLocationCopied = true }
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                                withAnimation(.easeInOut(duration: 0.15)) { showLocationCopied = false }
-                            }
-                        }
-                        Spacer()
-                    }
-                    .padding(.horizontal)
-                    .padding(.bottom, 8)
-                }
-
                 // MARK: Comment preview + input bar
 
-                if currentStory != nil {
-                    // Latest comment preview
-                    if let latest = commentsViewModel.latestComment {
-                        Button {
-                            openCommentSheet(focusInput: false)
-                        } label: {
-                            HStack(spacing: 6) {
-                                AvatarView(url: latest.author.avatar, size: 20, animated: false)
-                                Text("**\(latest.author.displayName ?? latest.author.handle)** \(latest.text)")
-                                    .font(.caption)
-                                    .foregroundStyle(.white)
-                                    .lineLimit(1)
-                                Spacer(minLength: 0)
+                if let currentStory {
+                    let locationText = storyLocationText(currentStory)
+
+                    if commentsViewModel.latestComment != nil || locationText != nil {
+                        HStack(spacing: 6) {
+                            if let latest = commentsViewModel.latestComment {
+                                Button {
+                                    openCommentSheet(focusInput: false)
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        AvatarView(url: latest.author.avatar, size: 20, animated: false)
+                                            .padding(.leading, 8)
+                                        Text("**\(latest.author.displayName ?? latest.author.handle)** \(latest.text)")
+                                            .font(.caption)
+                                            .foregroundStyle(.white)
+                                            .lineLimit(1)
+                                    }
+                                }
+                                .buttonStyle(.plain)
                             }
-                            .padding(.horizontal)
-                            .padding(.bottom, 4)
+                            Spacer(minLength: 8)
+                            if let locationText {
+                                HStack(spacing: 4) {
+                                    Image(systemName: showLocationCopied ? "checkmark" : "location.fill")
+                                    Text(showLocationCopied ? "Copied" : locationText)
+                                }
+                                .font(.caption)
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(.ultraThinMaterial, in: Capsule())
+                                .contentTransition(.symbolEffect(.replace))
+                                .id(currentStory.uri)
+                                .onTapGesture {
+                                    UIPasteboard.general.string = locationText
+                                    withAnimation(.easeInOut(duration: 0.15)) { showLocationCopied = true }
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                                        withAnimation(.easeInOut(duration: 0.15)) { showLocationCopied = false }
+                                    }
+                                }
+                            }
                         }
-                        .buttonStyle(.plain)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 4)
                     }
 
                     storyInputBar
@@ -662,7 +645,7 @@ struct StoryViewer: View {
     private func canNavigate() -> Bool {
         !isLoadingStories && !stories.isEmpty
             && reportTarget == nil && !showDeleteConfirm
-            && !showCommentSheet
+            && !isCommentSheetOpen
             && !isDragging
             && Date().timeIntervalSince(lastNavTime) > 0.3
     }
@@ -672,9 +655,27 @@ struct StoryViewer: View {
             svLogger.info("[startTimerIfSafe] skipped (imageLoaded=false)")
             return
         }
+        guard !isCommentSheetOpen else {
+            svLogger.info("[startTimerIfSafe] skipped (sheet open)")
+            return
+        }
         let action = storyLabelResult.action
-        svLogger.info("[startTimerIfSafe] action=\(String(describing: action)) showCommentSheet=\(showCommentSheet)")
+        svLogger.info("[startTimerIfSafe] action=\(String(describing: action))")
         if action == .none || action == .badge { timer.start() }
+    }
+
+    private func resumeTimerIfSafe() {
+        guard imageLoaded else {
+            svLogger.info("[resumeTimerIfSafe] skipped (imageLoaded=false)")
+            return
+        }
+        guard !isCommentSheetOpen else {
+            svLogger.info("[resumeTimerIfSafe] skipped (sheet open)")
+            return
+        }
+        let action = storyLabelResult.action
+        svLogger.info("[resumeTimerIfSafe] action=\(String(describing: action)) progress=\(timer.progress)")
+        if action == .none || action == .badge { timer.resume() }
     }
 
     private func isFullsizeCached(_ story: GrainStory?) -> Bool {
@@ -926,8 +927,8 @@ struct StoryViewer: View {
     }
 
     private func presentStories(_ fetched: [GrainStory], resumeIndex: Int? = nil) {
-        svLogger.info("[presentStories] enter count=\(fetched.count) resumeIndex=\(resumeIndex ?? -1) showCommentSheet=\(showCommentSheet)")
-        svSignposter.emitEvent("presentStories.enter", "count=\(fetched.count),sheetOpen=\(showCommentSheet)")
+        svLogger.info("[presentStories] enter count=\(fetched.count) resumeIndex=\(resumeIndex ?? -1)")
+        svSignposter.emitEvent("presentStories.enter", "count=\(fetched.count)")
         let targetIndex: Int
         if let resume = resumeIndex {
             targetIndex = min(resume, max(fetched.count - 1, 0))
@@ -1052,9 +1053,6 @@ struct StoryViewer: View {
 
     // MARK: - Comments & Likes
 
-    /// Open the comment sheet, pinning the URI at open time so the sheet
-    /// content doesn't depend on a live reading of `currentStory` (which can
-    /// flicker to nil during view re-renders).
     private func openCommentSheet(focusInput: Bool) {
         guard let uri = currentStory?.uri else {
             svLogger.info("[openCommentSheet] SKIPPED (currentStory nil)")
@@ -1063,9 +1061,24 @@ struct StoryViewer: View {
         svLogger.info("[openCommentSheet] uri=\(uri) focusInput=\(focusInput)")
         svSignposter.emitEvent("openCommentSheet", "focusInput=\(focusInput)")
         timer.stop()
-        sheetStoryUri = uri
-        commentSheetFocusInput = focusInput
-        showCommentSheet = true
+        isCommentSheetOpen = true
+        let onProfileTap = onProfileTap
+        commentPresenter.open(
+            storyUri: uri,
+            focusInput: focusInput,
+            commentsViewModel: commentsViewModel,
+            client: client,
+            onProfileTap: { [commentPresenter, fadeDismissHandle] did in
+                commentPresenter.close()
+                fadeDismissHandle.fadeDismiss()
+                onProfileTap?(did)
+            },
+            onDidClose: {
+                svSignposter.emitEvent("onDidClose")
+                isCommentSheetOpen = false
+                resumeTimerIfSafe()
+            }
+        )
     }
 
     private var isFavorited: Bool {
@@ -1079,18 +1092,11 @@ struct StoryViewer: View {
             Button {
                 openCommentSheet(focusInput: false)
             } label: {
-                VStack(spacing: 2) {
-                    Image(systemName: "bubble.left")
-                        .font(.body)
-                    if commentsViewModel.totalCount > 0 {
-                        Text("\(commentsViewModel.totalCount)")
-                            .font(.caption2)
-                            .monospacedDigit()
-                    }
-                }
-                .foregroundStyle(.white)
-                .frame(width: 36)
-                .contentShape(Rectangle())
+                Image(systemName: "bubble")
+                    .font(.body)
+                    .foregroundStyle(.white)
+                    .frame(width: 36, height: 36)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
@@ -1245,33 +1251,5 @@ private struct StoryProgressBars: View {
     .environment(ViewedStoryStorage())
     .environment(StoryStatusCache())
     .environment(StoryFavoriteCache())
-}
-
-#Preview("Story Viewer + Comment Sheet") {
-    let vm = StoryCommentsViewModel(client: XRPCClient(baseURL: AuthManager.serverURL))
-    vm.comments = PreviewData.storyComments
-    vm.latestComment = PreviewData.storyComments.first
-    vm.totalCount = PreviewData.storyComments.count
-
-    return StoryViewer(
-        authors: PreviewData.storyAuthors,
-        startAuthorDid: "did:plc:prevuser1",
-        initialStories: PreviewData.stories,
-        client: XRPCClient(baseURL: AuthManager.serverURL)
-    )
-    .environment(AuthManager())
-    .environment(LabelDefinitionsCache())
-    .environment(ViewedStoryStorage())
-    .environment(StoryStatusCache())
-    .environment(StoryFavoriteCache())
-    .sheet(isPresented: .constant(true)) {
-        StoryCommentSheet(
-            viewModel: vm,
-            storyUri: PreviewData.stories[0].uri,
-            client: XRPCClient(baseURL: AuthManager.serverURL)
-        )
-        .environment(AuthManager())
-        .environment(StoryStatusCache())
-        .environment(ViewedStoryStorage())
-    }
+    .environment(StoryCommentPresenter())
 }
