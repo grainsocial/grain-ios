@@ -677,7 +677,8 @@ struct ProfileView: View {
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { newWidth in
                 if newWidth > 0 { tabPageWidth = newWidth }
             }
-            .frame(height: interpolatedTabHeight(modes: modes))
+            .frame(height: interpolatedTabHeight(modes: modes), alignment: .top)
+            .clipped()
         }
     }
 
