@@ -46,6 +46,7 @@ struct MainTabView: View {
 
     var body: some View {
         let _ = launchSignposter.emitEvent("MainTabViewBodyBegin")
+        let _ = LaunchMetrics.endPreBodyOnce()
         let _ = Self.badgeAppearanceConfigured
         Group {
             if let client {

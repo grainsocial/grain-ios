@@ -8,6 +8,8 @@ private let appLogger = Logger(subsystem: "social.grain.grain", category: "AppLa
 @main
 struct GrainApp: App {
     init() {
+        LaunchMetrics.beginTFP()
+        LaunchMetrics.beginPreBody()
         appSignposter.emitEvent("GrainAppInitBegin")
         // Defer Nuke DataCache setup off the main-thread init path — no images
         // load during the ~800ms before MainTabView.task fires, so this is safe.

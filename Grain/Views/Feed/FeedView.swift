@@ -71,7 +71,10 @@ struct FeedView: View {
             }
             .task {
                 guard !isPreview else { return }
+                let prefsSpid = launchSignposter.makeSignpostID()
+                let prefsState = launchSignposter.beginInterval("FeedPrefsLoad", id: prefsSpid)
                 await prefsViewModel.loadIfNeeded(auth: auth.authContext())
+                launchSignposter.endInterval("FeedPrefsLoad", prefsState)
                 launchSignposter.emitEvent("FeedPrefsReady")
                 await storyViewModel.load(auth: auth.authContext(), storyStatusCache: storyStatusCache)
             }
@@ -469,8 +472,13 @@ private struct FeedTabContent: View {
                 return
             }
             if !viewModel.hasFetchedInitial {
+                let initialSpid = launchSignposter.makeSignpostID()
+                let initialState = launchSignposter.beginInterval("FeedInitialLoad", id: initialSpid)
+                launchSignposter.emitEvent("FeedInitialLoadStart")
                 await viewModel.loadInitial(auth: auth.authContext())
+                launchSignposter.endInterval("FeedInitialLoad", initialState)
                 launchSignposter.emitEvent("FeedFirstContent")
+                LaunchMetrics.endTFPOnce()
                 lastLoadTime = .now
             }
             if showSuggestedUsers, !suggestedLoaded, let did = auth.userDID {
