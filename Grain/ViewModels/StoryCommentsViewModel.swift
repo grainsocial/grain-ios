@@ -8,12 +8,13 @@ private let scvmSignposter = OSSignposter(subsystem: "social.grain.grain", categ
 @MainActor
 final class StoryCommentsViewModel {
     var comments: [GrainComment] = []
-    // latestComment is set to response.comments.first (oldest/chronological).
-    // Ideally this would prefer comments from followed users, then fall back to most-liked,
-    // but the getGalleryThread endpoint doesn't return viewer state on authors or likeCount
-    // on comments. Bumping the preview fetch from limit=1 to support client-side selection
-    // also adds ~100ms per request. Revisit when the backend hydrates those fields.
-    var latestComment: GrainComment?
+    // `firstComment` is `response.comments.first`, which is the oldest/chronological
+    // comment on the story. Ideally this would prefer comments from followed users,
+    // then fall back to most-liked, but the getGalleryThread endpoint doesn't return
+    // viewer state on authors or likeCount on comments. Bumping the preview fetch
+    // from limit=1 to support client-side selection also adds ~100ms per request.
+    // Revisit when the backend hydrates those fields.
+    var firstComment: GrainComment?
     var totalCount: Int = 0
     var isLoading = false
     var isPostingComment = false
@@ -38,10 +39,10 @@ final class StoryCommentsViewModel {
         hasMoreComments = true
 
         if let cached = previewCache[uri] {
-            latestComment = cached.comment
+            firstComment = cached.comment
             totalCount = cached.count
         } else {
-            latestComment = nil
+            firstComment = nil
             totalCount = 0
             Task { await loadPreview(storyUri: uri, auth: auth) }
         }
@@ -59,7 +60,7 @@ final class StoryCommentsViewModel {
     func loadPreview(storyUri: String, auth: AuthContext? = nil) async {
         if let cached = previewCache[storyUri] {
             if activeStoryUri == nil || activeStoryUri == storyUri {
-                latestComment = cached.comment
+                firstComment = cached.comment
                 totalCount = cached.count
             }
             return
@@ -73,7 +74,7 @@ final class StoryCommentsViewModel {
             )
             previewCache[storyUri] = preview
             if activeStoryUri == nil || activeStoryUri == storyUri {
-                latestComment = preview.comment
+                firstComment = preview.comment
                 totalCount = preview.count
             }
         } catch {
@@ -104,7 +105,7 @@ final class StoryCommentsViewModel {
             let latest = response.comments.first
             previewCache[storyUri] = CachedPreview(comment: latest, count: totalCount)
             if storyUri == activeStoryUri {
-                latestComment = latest
+                firstComment = latest
             }
             let count = response.comments.count
             scvmSignposter.endInterval("loadComments", state, "count=\(count)")
@@ -163,7 +164,7 @@ final class StoryCommentsViewModel {
             let latest = comments.first
             previewCache[storyUri] = CachedPreview(comment: latest, count: totalCount)
             if storyUri == activeStoryUri {
-                latestComment = latest
+                firstComment = latest
             }
         } catch {
             logger.error("Failed to delete comment: \(error)")

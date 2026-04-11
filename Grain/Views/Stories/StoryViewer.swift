@@ -131,7 +131,7 @@ struct StoryViewer: View {
     @State private var isCommentSheetOpen = false
     @State private var hasLoadedInitialStories = false
     @State private var hearts: [HeartAnimationState] = []
-    @State private var isFavoriting = false
+    @State private var favoritingStoryUris: Set<String> = []
     @State private var heartBeatTrigger = 0
     @State private var instanceID: Int = 0
 
@@ -468,7 +468,9 @@ struct StoryViewer: View {
                 }
                 .id(story.uri)
 
-                // Tap zones — with a bottom inset so they don't cover the comment input bar
+                // Tap zones — with a bottom inset so they don't cover the comment input bar.
+                // Double-tap reports its location in the "storyHearts" coordinate space
+                // (declared on the outer ZStack below) so the heart lands under the finger.
                 VStack(spacing: 0) {
                     Color.clear
                         .frame(height: 80)
@@ -477,12 +479,16 @@ struct StoryViewer: View {
                         HStack(spacing: 0) {
                             Color.clear
                                 .contentShape(Rectangle())
-                                .onTapGesture(count: 2) { doubleTapLike(at: CGPoint(x: geo.size.width / 6, y: geo.size.height / 2)) }
+                                .onTapGesture(count: 2, coordinateSpace: .named("storyHearts")) { location in
+                                    doubleTapLike(at: location)
+                                }
                                 .onTapGesture { goToPrevious() }
                                 .frame(width: geo.size.width / 3)
                             Color.clear
                                 .contentShape(Rectangle())
-                                .onTapGesture(count: 2) { doubleTapLike(at: CGPoint(x: geo.size.width * 2 / 3, y: geo.size.height / 2)) }
+                                .onTapGesture(count: 2, coordinateSpace: .named("storyHearts")) { location in
+                                    doubleTapLike(at: location)
+                                }
                                 .onTapGesture { goToNext() }
                                 .frame(maxWidth: .infinity)
                         }
@@ -581,7 +587,7 @@ struct StoryViewer: View {
 
                 if let currentStory {
                     Group {
-                        if let latest = commentsViewModel.latestComment,
+                        if let latest = commentsViewModel.firstComment,
                            commentsViewModel.activeStoryUri == currentStory.uri
                         {
                             Button {
@@ -604,12 +610,13 @@ struct StoryViewer: View {
                             .transition(.opacity)
                         }
                     }
-                    .animation(.easeInOut(duration: 0.2), value: commentsViewModel.latestComment?.uri)
+                    .animation(.easeInOut(duration: 0.2), value: commentsViewModel.firstComment?.uri)
 
                     bottomInputBar(interactive: true, story: currentStory)
                 }
             }
         }
+        .coordinateSpace(.named("storyHearts"))
     }
 
     // MARK: - Navigation
@@ -1137,51 +1144,110 @@ struct StoryViewer: View {
     private func doubleTapLike(at point: CGPoint) {
         hearts.append(HeartAnimationState(position: point))
         heartBeatTrigger &+= 1
-        guard !isFavorited, !isFavoriting else { return }
+        guard !isFavorited else { return }
         triggerFavoriteToggle()
     }
 
     private func triggerFavoriteToggle() {
-        isFavoriting = true
+        guard let storyUri = currentStory?.uri else { return }
+        guard !favoritingStoryUris.contains(storyUri) else {
+            svLogger.info("[triggerFavoriteToggle] SKIPPED — toggle already in flight uri=\(storyUri)")
+            svSignposter.emitEvent("toggleStoryFavorite.skipped", "reason=inFlight")
+            return
+        }
+        favoritingStoryUris.insert(storyUri)
         Task {
-            await toggleStoryFavorite()
-            isFavoriting = false
+            await toggleStoryFavorite(storyUri: storyUri)
+            favoritingStoryUris.remove(storyUri)
         }
     }
 
-    private func toggleStoryFavorite() async {
-        guard let authContext = await auth.authContext(),
-              currentStoryIndex < stories.count else { return }
+    /// Toggle the favorite state for the *story that was visible when the user tapped*,
+    /// not whichever story happens to be current when the network request returns.
+    /// The story timer or a tap can advance `currentStoryIndex` across the `await`,
+    /// so every mutation must look up the story by its captured URI.
+    private func toggleStoryFavorite(storyUri: String) async {
+        guard let authContext = await auth.authContext() else {
+            svLogger.info("[toggleStoryFavorite] BAIL — no authContext")
+            return
+        }
 
-        let story = stories[currentStoryIndex]
-        // Resolve the favUri from either server state or session cache
-        let existingFavUri = story.viewer?.fav ?? storyFavoriteCache.favUri(for: story.uri)
+        let capturedViewer = stories.first(where: { $0.uri == storyUri })?.viewer
+        let existingFavUri = capturedViewer?.fav ?? storyFavoriteCache.favUri(for: storyUri)
+        let op = existingFavUri == nil ? "like" : "unlike"
+
+        let toggleState = svSignposter.beginInterval(
+            "toggleStoryFavorite",
+            id: svSignposter.makeSignpostID(),
+            "op=\(op) uri=\(storyUri)"
+        )
+        defer { svSignposter.endInterval("toggleStoryFavorite", toggleState) }
+        svLogger.info("[toggleStoryFavorite] enter op=\(op) uri=\(storyUri)")
+
+        func indexOfCapturedStory() -> Int? {
+            stories.firstIndex { $0.uri == storyUri }
+        }
 
         if let favUri = existingFavUri {
             // Unfavorite — optimistic
-            let prevViewer = stories[currentStoryIndex].viewer
-            stories[currentStoryIndex].viewer = nil
-            storyFavoriteCache.unlike(story.uri)
+            let prevViewer: StoryViewerState?
+            if let idx = indexOfCapturedStory() {
+                prevViewer = stories[idx].viewer
+                stories[idx].viewer = nil
+            } else {
+                prevViewer = nil
+            }
+            storyFavoriteCache.unlike(storyUri)
+            svSignposter.emitEvent("toggleStoryFavorite.optimistic", "op=unlike uri=\(storyUri)")
             do {
                 try await FavoriteService.delete(favoriteUri: favUri, client: client, auth: authContext)
+                svSignposter.emitEvent("toggleStoryFavorite.success", "op=unlike uri=\(storyUri)")
+                svLogger.info("[toggleStoryFavorite] success op=unlike uri=\(storyUri)")
             } catch {
-                stories[currentStoryIndex].viewer = prevViewer
-                storyFavoriteCache.like(story.uri, favUri: favUri)
+                svSignposter.emitEvent("toggleStoryFavorite.error", "op=unlike uri=\(storyUri)")
+                svLogger.error("[toggleStoryFavorite] unlike error: \(error); rolling back uri=\(storyUri)")
+                if let idx = indexOfCapturedStory() {
+                    stories[idx].viewer = prevViewer
+                }
+                storyFavoriteCache.like(storyUri, favUri: favUri)
             }
         } else {
-            // Favorite — optimistic
-            let prevViewer = stories[currentStoryIndex].viewer
-            stories[currentStoryIndex].viewer = StoryViewerState(fav: "pending")
+            // Favorite — optimistic on the in-memory story only. We intentionally do
+            // NOT write a "pending" favUri into storyFavoriteCache because the cache
+            // persists to UserDefaults; a backgrounded/killed app would leave the
+            // bogus "pending" URI behind and break the next unfavorite attempt.
+            let prevViewer: StoryViewerState?
+            if let idx = indexOfCapturedStory() {
+                prevViewer = stories[idx].viewer
+                stories[idx].viewer = StoryViewerState(fav: "pending")
+            } else {
+                prevViewer = nil
+            }
+            svSignposter.emitEvent("toggleStoryFavorite.optimistic", "op=like uri=\(storyUri)")
             do {
-                let response = try await FavoriteService.create(subject: story.uri, client: client, auth: authContext)
+                let response = try await FavoriteService.create(subject: storyUri, client: client, auth: authContext)
                 if let newFavUri = response.uri {
-                    stories[currentStoryIndex].viewer = StoryViewerState(fav: newFavUri)
-                    storyFavoriteCache.like(story.uri, favUri: newFavUri)
+                    if let idx = indexOfCapturedStory() {
+                        stories[idx].viewer = StoryViewerState(fav: newFavUri)
+                    }
+                    storyFavoriteCache.like(storyUri, favUri: newFavUri)
+                    svSignposter.emitEvent("toggleStoryFavorite.success", "op=like uri=\(storyUri)")
+                    svLogger.info("[toggleStoryFavorite] success op=like uri=\(storyUri)")
                 } else {
-                    stories[currentStoryIndex].viewer = prevViewer
+                    svSignposter.emitEvent("toggleStoryFavorite.error", "op=like reason=nilUri uri=\(storyUri)")
+                    svLogger.error("[toggleStoryFavorite] create returned nil uri; rolling back uri=\(storyUri)")
+                    if let idx = indexOfCapturedStory() {
+                        stories[idx].viewer = prevViewer
+                    }
+                    storyFavoriteCache.unlike(storyUri)
                 }
             } catch {
-                stories[currentStoryIndex].viewer = prevViewer
+                svSignposter.emitEvent("toggleStoryFavorite.error", "op=like uri=\(storyUri)")
+                svLogger.error("[toggleStoryFavorite] like error: \(error); rolling back uri=\(storyUri)")
+                if let idx = indexOfCapturedStory() {
+                    stories[idx].viewer = prevViewer
+                }
+                storyFavoriteCache.unlike(storyUri)
             }
         }
     }

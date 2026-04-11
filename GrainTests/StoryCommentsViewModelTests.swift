@@ -46,7 +46,7 @@ final class StoryCommentsViewModelTests: XCTestCase {
         """)
 
         await vm.loadPreview(storyUri: storyA)
-        XCTAssertEqual(vm.latestComment?.text, "Great shot!")
+        XCTAssertEqual(vm.firstComment?.text, "Great shot!")
         XCTAssertEqual(vm.totalCount, 5)
     }
 
@@ -132,7 +132,7 @@ final class StoryCommentsViewModelTests: XCTestCase {
         {"comments": [{"uri": "at://did:plc:a/social.grain.comment/old", "cid": "cold", "author": {"cid": "ca", "did": "did:plc:a", "handle": "alice.test"}, "text": "Old", "createdAt": "2024-06-15T12:00:00Z"}], "totalCount": 1}
         """)
         await vm.loadPreview(storyUri: storyA)
-        XCTAssertEqual(vm.latestComment?.text, "Old")
+        XCTAssertEqual(vm.firstComment?.text, "Old")
 
         // Post triggers createRecord then loadComments refresh
         var requestPaths: [String] = []
@@ -153,7 +153,7 @@ final class StoryCommentsViewModelTests: XCTestCase {
         let auth = makeDummyAuth()
         vm.switchToStory(uri: storyA)
         await vm.postComment(text: "Hello", storyUri: storyA, auth: auth)
-        XCTAssertEqual(vm.latestComment?.text, "Fresh")
+        XCTAssertEqual(vm.firstComment?.text, "Fresh")
         XCTAssertEqual(vm.totalCount, 2)
     }
 
@@ -198,7 +198,7 @@ final class StoryCommentsViewModelTests: XCTestCase {
         // Wait for the background task to complete
         try? await Task.sleep(for: .milliseconds(100))
         XCTAssertEqual(requestCount, 1)
-        XCTAssertEqual(vm.latestComment?.text, "Story A comment")
+        XCTAssertEqual(vm.firstComment?.text, "Story A comment")
 
         // Switch to story B
         vm.switchToStory(uri: storyB)
@@ -209,6 +209,6 @@ final class StoryCommentsViewModelTests: XCTestCase {
         vm.switchToStory(uri: storyA)
         // No sleep needed — cache is synchronous
         XCTAssertEqual(requestCount, 2, "Switching back to A should use cache")
-        XCTAssertEqual(vm.latestComment?.text, "Story A comment")
+        XCTAssertEqual(vm.firstComment?.text, "Story A comment")
     }
 }
