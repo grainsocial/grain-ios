@@ -226,7 +226,7 @@ private struct FeedTabContent: View {
     @State private var selectedHashtag: String?
     @State private var selectedLocation: LocationDestination?
     @State private var deletedGalleryUri: String?
-    @State private var zoomState = ImageZoaomState()
+    @State private var zoomState = ImageZoomState()
     @State private var cardStoryAuthor: GrainStoryAuthor?
     @AppStorage("privacy.showSuggestedUsers") private var showSuggestedUsers = true
     @State private var suggestedFollows: [SuggestedItem] = []

@@ -12,7 +12,6 @@ enum ProfileViewMode: String, CaseIterable {
 struct ProfileView: View {
     @Namespace private var viewModeNS
     @Namespace private var galleryZoomNS
-    @Namespace private var avatarZoomNS
     @Environment(AuthManager.self) private var auth
     @Environment(ViewedStoryStorage.self) private var viewedStories
     @Environment(LabelDefinitionsCache.self) private var labelDefsCache
@@ -29,10 +28,6 @@ struct ProfileView: View {
     @State private var tabScrollOffsetX: CGFloat = 0
     @State private var tabSectionViewportMinY: CGFloat = .infinity
     @State private var zoomState = ImageZoomState()
-    // Flipped on during a dismiss so the overlay disappears via a plain opacity
-    // transition instead of morphing back to the avatar anchor. Reset after the
-    // overlay is gone so the next open can morph again.
-    @State private var suppressAvatarMorph = false
     @State private var cardStoryAuthor: GrainStoryAuthor?
     let client: XRPCClient
     @State private var selectedArchivedStory: GrainStory?
@@ -67,14 +62,10 @@ struct ProfileView: View {
             }
 
             if showAvatarOverlay, let avatar = viewModel.profile?.avatar {
-                AvatarOverlay(
-                    url: avatar,
-                    namespace: suppressAvatarMorph ? nil : avatarZoomNS,
-                    onDismiss: dismissAvatarOverlay
-                )
-                .ignoresSafeArea()
-                .zIndex(999)
-                .transition(.asymmetric(insertion: .identity, removal: .opacity))
+                AvatarOverlay(url: avatar, onDismiss: dismissAvatarOverlay)
+                    .ignoresSafeArea()
+                    .zIndex(999)
+                    .transition(.opacity)
             }
         }
     }
@@ -89,7 +80,6 @@ struct ProfileView: View {
         ) {
             AvatarView(url: profile.avatar, size: 80)
                 .liquidGlassCircle()
-                .matchedGeometryEffect(id: "avatar", in: avatarZoomNS, isSource: !showAvatarOverlay)
         }
         .overlay(alignment: .bottomTrailing) {
             if did == auth.userDID {
@@ -911,30 +901,20 @@ struct ProfileView: View {
     }
 
     private func openAvatarOverlay() {
-        suppressAvatarMorph = false
-        withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
+        withAnimation(.easeOut(duration: 0.2)) {
             showAvatarOverlay = true
         }
     }
 
     private func dismissAvatarOverlay() {
-        // Detach matchedGeometryEffect before the removal transition so the overlay
-        // fades instead of morphing back into the avatar anchor. The flag resets
-        // after the transition so the next open still animates from the avatar.
-        suppressAvatarMorph = true
         withAnimation(.easeOut(duration: 0.25)) {
             showAvatarOverlay = false
-        }
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(300))
-            suppressAvatarMorph = false
         }
     }
 }
 
 struct AvatarOverlay: View {
     let url: String
-    var namespace: Namespace.ID?
     let onDismiss: () -> Void
 
     @State private var zoomState = ImageZoomState()
@@ -946,15 +926,17 @@ struct AvatarOverlay: View {
         dragOffset + dragDelta
     }
 
-    private var backgroundOpacity: Double {
-        guard !zoomState.showOverlay else { return 0.92 }
-        return max(0, 0.92 - abs(liveDrag) / 250)
+    /// Fades both the background dim and the image itself as the user swipes
+    /// the overlay away. At 250pt of drag, everything is fully transparent.
+    private var dragProgress: Double {
+        guard !zoomState.showOverlay else { return 0 }
+        return min(1, Double(abs(liveDrag)) / 250)
     }
 
     var body: some View {
         ZStack {
             Color.black
-                .opacity(backgroundOpacity)
+                .opacity(0.92 * (1 - dragProgress))
                 .ignoresSafeArea()
                 .contentShape(Rectangle())
                 .onTapGesture { onDismiss() }
@@ -982,9 +964,7 @@ struct AvatarOverlay: View {
                 }
                 .position(x: geo.size.width / 2, y: geo.size.height / 2)
                 .offset(y: liveDrag)
-                .if(namespace != nil) { view in
-                    view.matchedGeometryEffect(id: "avatar", in: namespace!, isSource: false)
-                }
+                .opacity(1 - dragProgress)
             }
             .ignoresSafeArea()
         }
@@ -1002,6 +982,12 @@ struct AvatarOverlay: View {
                     let shouldDismiss = abs(val.translation.height) > 80
                         || abs(val.predictedEndTranslation.height) > 150
                     if shouldDismiss {
+                        // Commit the drag translation to @State so the image stays
+                        // at its dragged opacity while the removal transition runs —
+                        // otherwise @GestureState dragDelta resets to 0 in the same
+                        // frame and the image pops back to full opacity for a beat
+                        // before fading out.
+                        dragOffset = val.translation.height
                         onDismiss()
                     } else {
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
