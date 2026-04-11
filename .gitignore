@@ -41,4 +41,5 @@ logo-options/
 # Zed personal config
 .zed/keymap.json
 .zed/tasks.json
+.zed/sim
 buildServer.json
