@@ -80,6 +80,7 @@ struct SuggestedFollowsView: View {
     }
 
     private func followUser(_ item: SuggestedItem) {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         followingInProgress.insert(item.did)
         Task {
             guard let authContext = await auth.authContext() else { return }

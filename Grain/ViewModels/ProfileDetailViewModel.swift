@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 @Observable
 @MainActor
@@ -185,6 +186,7 @@ final class ProfileDetailViewModel {
 
         if let followUri {
             // Optimistic unfollow
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
             profile?.viewer?.following = nil
             profile?.followersCount = max((prevCount ?? 1) - 1, 0)
 
@@ -197,6 +199,7 @@ final class ProfileDetailViewModel {
             }
         } else {
             // Optimistic follow — preserve existing block/mute state
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
             profile?.viewer?.following = "pending"
             profile?.followersCount = (prevCount ?? 0) + 1
 
