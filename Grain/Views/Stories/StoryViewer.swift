@@ -417,7 +417,7 @@ struct StoryViewer: View {
                             LazyImage(request: {
                                 guard lr.action != .hide || labelRevealed,
                                       let url = URL(string: story.fullsize) else { return ImageRequest(url: nil) }
-                                return ImageRequest(url: url, priority: .veryHigh)
+                                return ImageRequest(url: url, priority: .veryHigh, options: .disableDiskCacheWrites)
                             }()) { state in
                                 if let image = state.image {
                                     image

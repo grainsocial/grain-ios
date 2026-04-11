@@ -294,7 +294,7 @@ struct ZoomableImage: View {
     private var sourceView: some View {
         switch source {
         case let .url(url, thumbURL):
-            LazyImage(request: ImageRequest(url: URL(string: url), priority: .veryHigh)) { state in
+            LazyImage(request: ImageRequest(url: URL(string: url), priority: .veryHigh, options: .disableDiskCacheWrites)) { state in
                 if let image = state.image {
                     image
                         .resizable()
@@ -305,7 +305,6 @@ struct ZoomableImage: View {
                             thumb
                                 .resizable()
                                 .aspectRatio(aspectRatio, contentMode: .fit)
-                                .blur(radius: 20)
                                 .clipped()
                         } else {
                             Rectangle()

@@ -35,13 +35,13 @@ enum ImagePrefetchPlanning {
             // Prefetch first 2 fullsize
             for i in 0 ..< min(2, photos.count) {
                 if let url = URL(string: photos[i].fullsize) {
-                    high.append(ImageRequest(url: url, priority: .high))
+                    high.append(ImageRequest(url: url, priority: .high, options: .disableDiskCacheWrites))
                 }
             }
         } else if currentPage == 1 {
             // Fullsize #2 at high
             if photos.count > 2, let url = URL(string: photos[2].fullsize) {
-                high.append(ImageRequest(url: url, priority: .high))
+                high.append(ImageRequest(url: url, priority: .high, options: .disableDiskCacheWrites))
             }
             // All thumbs at normal
             for photo in photos {
@@ -55,9 +55,9 @@ enum ImagePrefetchPlanning {
                 if let url = URL(string: photos[i].fullsize) {
                     let priority: ImageRequest.Priority = i == currentPage + 1 ? .high : .normal
                     if priority == .high {
-                        high.append(ImageRequest(url: url, priority: .high))
+                        high.append(ImageRequest(url: url, priority: .high, options: .disableDiskCacheWrites))
                     } else {
-                        normal.append(ImageRequest(url: url, priority: .normal))
+                        normal.append(ImageRequest(url: url, priority: .normal, options: .disableDiskCacheWrites))
                     }
                 }
             }
@@ -98,11 +98,11 @@ enum ImagePrefetchPlanning {
             if let fullsize = gallery.firstFullsize, let url = URL(string: fullsize) {
                 switch offset {
                 case 1:
-                    high.append(ImageRequest(url: url, priority: .high))
+                    high.append(ImageRequest(url: url, priority: .high, options: .disableDiskCacheWrites))
                 case 2:
-                    normal.append(ImageRequest(url: url, priority: .normal))
+                    normal.append(ImageRequest(url: url, priority: .normal, options: .disableDiskCacheWrites))
                 default:
-                    low.append(ImageRequest(url: url, priority: .low))
+                    low.append(ImageRequest(url: url, priority: .low, options: .disableDiskCacheWrites))
                 }
             }
         }
@@ -150,13 +150,13 @@ enum ImagePrefetchPlanning {
         let storyEnd = min(currentStoryIndex + 3, currentStories.count)
         for i in stride(from: currentStoryIndex + 1, to: storyEnd, by: 1) where i < currentStories.count {
             if let url = URL(string: currentStories[i].fullsize) {
-                high.append(ImageRequest(url: url, priority: .high))
+                high.append(ImageRequest(url: url, priority: .high, options: .disableDiskCacheWrites))
             }
         }
 
         // 2. First story of next author — high
         if let first = nextAuthorStories?.first, let url = URL(string: first.fullsize) {
-            high.append(ImageRequest(url: url, priority: .high))
+            high.append(ImageRequest(url: url, priority: .high, options: .disableDiskCacheWrites))
         }
 
         // 3. Rest of current author's stack — normal
@@ -164,7 +164,7 @@ enum ImagePrefetchPlanning {
         if restStart < currentStories.count {
             for i in restStart ..< currentStories.count {
                 if let url = URL(string: currentStories[i].fullsize) {
-                    normal.append(ImageRequest(url: url, priority: .normal))
+                    normal.append(ImageRequest(url: url, priority: .normal, options: .disableDiskCacheWrites))
                 }
             }
         }
@@ -173,17 +173,17 @@ enum ImagePrefetchPlanning {
         if let stories = secondNextAuthorStories {
             for i in 0 ..< min(2, stories.count) {
                 if let url = URL(string: stories[i].fullsize) {
-                    normal.append(ImageRequest(url: url, priority: .normal))
+                    normal.append(ImageRequest(url: url, priority: .normal, options: .disableDiskCacheWrites))
                 }
             }
         }
 
         // 5. First story of next 2 authors beyond — low
         if let story = thirdNextFirstStory, let url = URL(string: story.fullsize) {
-            low.append(ImageRequest(url: url, priority: .low))
+            low.append(ImageRequest(url: url, priority: .low, options: .disableDiskCacheWrites))
         }
         if let story = fourthNextFirstStory, let url = URL(string: story.fullsize) {
-            low.append(ImageRequest(url: url, priority: .low))
+            low.append(ImageRequest(url: url, priority: .low, options: .disableDiskCacheWrites))
         }
 
         return PrioritizedRequests(high: high, normal: normal, low: low)
