@@ -162,7 +162,7 @@ struct CommentSheetContent: View {
                         .onChange(of: commentText) { mentionState.update(text: commentText) }
                         .padding(.horizontal, 18)
                         .padding(.vertical, 12)
-                        .glassEffect(.regular, in: .capsule)
+                        .glassEffect(.regular.tint(.primary.opacity(0.1)), in: .capsule)
 
                     let isEmpty = commentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                     if !isEmpty {
