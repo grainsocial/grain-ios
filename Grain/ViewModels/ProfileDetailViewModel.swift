@@ -138,7 +138,8 @@ final class ProfileDetailViewModel {
             favoriteGalleries = hydratedFavorites(response.items ?? [])
             favoritesCursor = response.cursor
             hasMoreFavorites = response.cursor != nil
-            profileLogger.info("loadFavorites ok count=\(favoriteGalleries.count, privacy: .public)")
+            let loadedCount = favoriteGalleries.count
+            profileLogger.info("loadFavorites ok count=\(loadedCount, privacy: .public)")
             let toCache = Array(favoriteGalleries.prefix(Self.favoritesDiskCacheLimit))
             let key = Self.favoritesCacheKey(did: did)
             Task.detached(priority: .utility) {
