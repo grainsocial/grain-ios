@@ -1,5 +1,8 @@
 import Nuke
+import os
 import SwiftUI
+
+private let fvLogger = Logger(subsystem: "social.grain.grain", category: "FeedView")
 
 struct FeedView: View {
     @Environment(AuthManager.self) private var auth
@@ -29,6 +32,7 @@ struct FeedView: View {
 
     var body: some View {
         let storySortVersion = storyViewModel.version
+        let _ = fvLogger.info("[body] eval storyViewerDid=\(storyViewerDid ?? "nil") authors.count=\(storyViewModel.authors.count) version=\(storySortVersion)")
         NavigationStack {
             ForEach(prefsViewModel.pinnedFeeds) { feed in
                 if feed.id == prefsViewModel.selectedFeedId {
@@ -82,6 +86,7 @@ struct FeedView: View {
                 get: { storyViewerDid != nil },
                 set: { if !$0 { storyViewerDid = nil } }
             )) {
+                let _ = fvLogger.info("[cover.content] closure invoked storyViewerDid=\(storyViewerDid ?? "nil")")
                 if let did = storyViewerDid {
                     StoryViewer(
                         authors: storyViewModel.authors,
