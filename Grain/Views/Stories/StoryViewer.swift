@@ -86,6 +86,21 @@ private struct FaceOffsets {
     var pending: CGFloat = 0
 }
 
+/// Reference-typed memo for the current story's fullsize cache lookup.
+/// Why: `cachedFullsizeImage` is read from the view body. Computing it
+/// inline re-checks Nuke's memory cache on every body eval, so if a
+/// `@State` write (e.g. `imageLoaded = true` from LazyImage's onAppear)
+/// fires AFTER LazyImage has delivered, the next body re-eval sees a
+/// sudden cache hit and swaps the if/else branch from LazyImage → sync
+/// `Image(uiImage:)`. The branch swap tears down the LazyImage subtree,
+/// which visibly flashes the blurred thumb placeholder for one frame.
+/// Holding the lookup in a class means we can memoize per-URI without
+/// triggering view invalidation on update.
+@MainActor private final class FullsizeMemo {
+    var uri: String?
+    var image: UIImage?
+}
+
 struct StoryViewer: View {
     @Environment(AuthManager.self) private var auth
     @Environment(LabelDefinitionsCache.self) private var labelDefsCache
@@ -116,6 +131,7 @@ struct StoryViewer: View {
     @State private var authorHistory: [(authorIndex: Int, storyIndex: Int)] = []
     @State private var imagePrefetcher = ImagePrefetcher()
     @State private var isDragging = false
+    @State private var fullsizeMemo = FullsizeMemo()
 
     // MARK: - Comments & Likes
 
@@ -368,14 +384,15 @@ struct StoryViewer: View {
             if let story = currentStory {
                 let lr = storyLabelResult
 
-                // Story image — check memory cache before creating LazyImage so
-                // we never get a two-state view swap (sync Image → LazyImage-delivered
-                // Image) for the same pixel content, which causes a flash.
-                let cachedFullsize: UIImage? = (lr.action != .hide || labelRevealed)
-                    ? URL(string: story.fullsize).flatMap {
-                        ImagePipeline.shared.cache.cachedImage(for: ImageRequest(url: $0))?.image
-                    }
-                    : nil
+                // Memoized per-URI. Computing this inline would re-check Nuke's
+                // memory cache on every body eval; once LazyImage delivers and
+                // writes `imageLoaded`, the resulting re-eval would flip a
+                // miss→hit and swap the if/else branch, tearing down LazyImage
+                // and briefly flashing the blurred thumb placeholder.
+                let cachedFullsize = cachedFullsizeImage(
+                    for: story,
+                    blocked: lr.action == .hide && !labelRevealed
+                )
                 ZStack {
                     Group {
                         if let cached = cachedFullsize {
@@ -389,6 +406,8 @@ struct StoryViewer: View {
                                 //     Text("fullsize · cache").font(.caption2.bold()).padding(6).background(.black.opacity(0.5)).foregroundStyle(.white).padding(8)
                                 // }
                                 .onAppear {
+                                    svSignposter.emitEvent("storyImage.syncHit.appear")
+                                    svLogger.info("[storyImage] sync-hit onAppear uri=\(story.uri)")
                                     if !imageLoaded {
                                         imageLoaded = true
                                         startTimerIfSafe()
@@ -411,6 +430,8 @@ struct StoryViewer: View {
                                         //     Text("fullsize · network").font(.caption2.bold()).padding(6).background(.black.opacity(0.5)).foregroundStyle(.white).padding(8)
                                         // }
                                         .onAppear {
+                                            svSignposter.emitEvent("storyImage.lazyDelivered.appear")
+                                            svLogger.info("[storyImage] lazy-delivered onAppear uri=\(story.uri)")
                                             if !imageLoaded {
                                                 imageLoaded = true
                                                 startTimerIfSafe()
@@ -648,6 +669,25 @@ struct StoryViewer: View {
 
     private func isFullsizeCached(_ story: GrainStory?) -> Bool {
         storyFullsizeCached(story)
+    }
+
+    /// Returns the fullsize image for `story` if Nuke has it in the memory
+    /// cache, memoized per story URI. Only re-checks the pipeline when the
+    /// URI changes; otherwise returns the previously-recorded result so
+    /// view-body re-evals don't swap the image branch mid-render.
+    private func cachedFullsizeImage(for story: GrainStory, blocked: Bool) -> UIImage? {
+        if blocked { return nil }
+        if fullsizeMemo.uri == story.uri {
+            return fullsizeMemo.image
+        }
+        let image = URL(string: story.fullsize).flatMap {
+            ImagePipeline.shared.cache.cachedImage(for: ImageRequest(url: $0))?.image
+        }
+        fullsizeMemo.uri = story.uri
+        fullsizeMemo.image = image
+        svSignposter.emitEvent("fullsizeMemo.update", "hit=\(image != nil)")
+        svLogger.info("[fullsizeMemo] update uri=\(story.uri) hit=\(image != nil)")
+        return image
     }
 
     private func goToNext() {
