@@ -358,7 +358,7 @@ private struct FeedTabContent: View {
                 #endif
                 return
             }
-            if viewModel.galleries.isEmpty {
+            if !viewModel.hasFetchedInitial {
                 await viewModel.loadInitial(auth: auth.authContext())
                 lastLoadTime = .now
             }
