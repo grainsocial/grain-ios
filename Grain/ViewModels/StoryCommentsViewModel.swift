@@ -2,6 +2,7 @@ import Foundation
 import os
 
 private let logger = Logger(subsystem: "social.grain.grain", category: "StoryComments")
+private let scvmSignposter = OSSignposter(subsystem: "social.grain.grain", category: "StoryComments")
 
 @Observable
 @MainActor
@@ -83,7 +84,11 @@ final class StoryCommentsViewModel {
     // MARK: - Full Comment Loading
 
     func loadComments(storyUri: String, auth: AuthContext? = nil) async {
-        guard !isLoading else { return }
+        guard !isLoading else {
+            scvmSignposter.emitEvent("loadComments.skipped", "reason=already-loading")
+            return
+        }
+        let state = scvmSignposter.beginInterval("loadComments", "uri=\(storyUri)")
         isLoading = true
         commentCursor = nil
         hasMoreComments = true
@@ -101,8 +106,11 @@ final class StoryCommentsViewModel {
             if storyUri == activeStoryUri {
                 latestComment = latest
             }
+            let count = response.comments.count
+            scvmSignposter.endInterval("loadComments", state, "count=\(count)")
         } catch {
             logger.error("Failed to load comments: \(error)")
+            scvmSignposter.endInterval("loadComments", state, "error")
         }
         isLoading = false
     }

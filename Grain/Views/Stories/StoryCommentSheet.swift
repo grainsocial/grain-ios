@@ -1,4 +1,8 @@
+import os
 import SwiftUI
+
+private let scsLogger = Logger(subsystem: "social.grain.grain", category: "StoryCommentSheet")
+private let scsSignposter = OSSignposter(subsystem: "social.grain.grain", category: "StoryCommentSheet")
 
 struct StoryCommentSheet: View {
     @Environment(AuthManager.self) private var auth
@@ -10,6 +14,8 @@ struct StoryCommentSheet: View {
     var focusInput: Bool = false
     var onProfileTap: ((String) -> Void)?
     var onDismiss: (() -> Void)?
+
+    @State private var selectedDetent: PresentationDetent = .medium
 
     var body: some View {
         CommentSheetContent(
@@ -29,9 +35,23 @@ struct StoryCommentSheet: View {
             dismissStyle: .done,
             focusOnAppear: focusInput
         )
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.medium, .large], selection: $selectedDetent)
+        .onAppear {
+            scsLogger.info("[onAppear] uri=\(storyUri) focusInput=\(focusInput)")
+            scsSignposter.emitEvent("sheet.onAppear", "focusInput=\(focusInput)")
+        }
+        .onDisappear {
+            scsLogger.info("[onDisappear] uri=\(storyUri) lastDetent=\(String(describing: selectedDetent))")
+            scsSignposter.emitEvent("sheet.onDisappear", "detent=\(String(describing: selectedDetent))")
+        }
+        .onChange(of: selectedDetent) { _, newValue in
+            scsLogger.info("[detent.change] now=\(String(describing: newValue))")
+            scsSignposter.emitEvent("detent.change", "detent=\(String(describing: newValue))")
+        }
         .task {
+            scsSignposter.emitEvent("task.load.begin")
             await viewModel.loadComments(storyUri: storyUri, auth: auth.authContext())
+            scsSignposter.emitEvent("task.load.end")
         }
     }
 }
