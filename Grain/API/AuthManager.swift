@@ -316,9 +316,12 @@ final class AuthManager {
         TokenStorage.userHandle = response.handle
         TokenStorage.tokenExpiresAt = Date().addingTimeInterval(TimeInterval(response.expiresIn))
 
-        isAuthenticated = true
-        userDID = response.sub
-        userHandle = response.handle
+        // Guard each @Observable assignment: the macro's setter always fires the
+        // observation registrar even when the value is unchanged, so token refreshes
+        // would otherwise invalidate every observer (including GrainApp.body).
+        if !isAuthenticated { isAuthenticated = true }
+        if userDID != response.sub { userDID = response.sub }
+        if userHandle != response.handle { userHandle = response.handle }
     }
 
     func fetchAvatarIfNeeded() async {
@@ -339,8 +342,10 @@ final class AuthManager {
         let client = XRPCClient(baseURL: Self.serverURL)
         do {
             let profile = try await client.getActorProfile(actor: did)
-            userAvatar = profile.avatar
-            TokenStorage.userAvatar = profile.avatar
+            if userAvatar != profile.avatar {
+                userAvatar = profile.avatar
+                TokenStorage.userAvatar = profile.avatar
+            }
         } catch {
             logger.error("Avatar fetch failed: \(error)")
         }
