@@ -106,7 +106,6 @@ struct StoryViewer: View {
     @State private var timer = StoryTimer()
     @State private var showDeleteConfirm = false
     @State private var reportTarget: GrainStory?
-    @State private var showLocationCopied = false
     @State private var lastNavTime: Date = .distantPast
     @State private var labelRevealed = false
     @State private var imageLoaded = false
@@ -321,14 +320,20 @@ struct StoryViewer: View {
                 HStack(alignment: .center, spacing: 8) {
                     AvatarView(url: authors[authorIdx].profile.avatar, size: 32, animated: false)
                     VStack(alignment: .leading, spacing: 0) {
-                        Text(story?.creator.displayName ?? story?.creator.handle ?? authors[authorIdx].profile.displayName ?? authors[authorIdx].profile.handle)
-                            .font(.subheadline.bold())
-                            .foregroundStyle(.white)
-                        if let story {
-                            Text(relativeTime(story.createdAt))
+                        HStack(alignment: .firstTextBaseline, spacing: 5) {
+                            Text(story?.creator.displayName ?? story?.creator.handle ?? authors[authorIdx].profile.displayName ?? authors[authorIdx].profile.handle)
+                                .font(.subheadline.bold())
+                                .foregroundStyle(.white)
+                            Text(story.map { relativeTime($0.createdAt) } ?? " ")
                                 .font(.caption2)
-                                .foregroundStyle(.white.opacity(0.7))
+                                .foregroundStyle(.white.opacity(story != nil ? 0.7 : 0))
+                                .animation(.easeIn(duration: 0.12), value: story != nil)
                         }
+                        Text(story.flatMap { storyLocationText($0) } ?? " ")
+                            .font(.caption2)
+                            .foregroundStyle(.white.opacity(story.flatMap { storyLocationText($0) } != nil ? 0.7 : 0))
+                            .lineLimit(1)
+                            .animation(.easeIn(duration: 0.12), value: story.flatMap { storyLocationText($0) } != nil)
                     }
                     Spacer()
                     if authors[authorIdx].profile.did == auth.userDID {
@@ -349,6 +354,8 @@ struct StoryViewer: View {
                 .padding(.vertical, 8)
 
                 Spacer().allowsHitTesting(false)
+
+                bottomInputBar(interactive: false)
             }
         }
     }
@@ -533,14 +540,20 @@ struct StoryViewer: View {
                         HStack(alignment: .center, spacing: 8) {
                             storyAvatarView(url: story?.creator.avatar ?? author.avatar)
                             VStack(alignment: .leading, spacing: 0) {
-                                Text(story?.creator.displayName ?? story?.creator.handle ?? author.displayName ?? author.handle)
-                                    .font(.subheadline.bold())
-                                    .foregroundStyle(.white)
-                                if let story {
-                                    Text(relativeTime(story.createdAt))
+                                HStack(alignment: .firstTextBaseline, spacing: 5) {
+                                    Text(story?.creator.displayName ?? story?.creator.handle ?? author.displayName ?? author.handle)
+                                        .font(.subheadline.bold())
+                                        .foregroundStyle(.white)
+                                    Text(story.map { relativeTime($0.createdAt) } ?? " ")
                                         .font(.caption2)
-                                        .foregroundStyle(.white.opacity(0.7))
+                                        .foregroundStyle(.white.opacity(story != nil ? 0.7 : 0))
+                                        .animation(.easeIn(duration: 0.12), value: story != nil)
                                 }
+                                Text(story.flatMap { storyLocationText($0) } ?? " ")
+                                    .font(.caption2)
+                                    .foregroundStyle(.white.opacity(story.flatMap { storyLocationText($0) } != nil ? 0.7 : 0))
+                                    .lineLimit(1)
+                                    .animation(.easeIn(duration: 0.12), value: story.flatMap { storyLocationText($0) } != nil)
                             }
                         }
                     }
@@ -584,52 +597,33 @@ struct StoryViewer: View {
                 // MARK: Comment preview + input bar
 
                 if let currentStory {
-                    let locationText = storyLocationText(currentStory)
-
-                    if commentsViewModel.latestComment != nil || locationText != nil {
-                        HStack(spacing: 6) {
-                            if let latest = commentsViewModel.latestComment {
-                                Button {
-                                    openCommentSheet(focusInput: false)
-                                } label: {
-                                    HStack(spacing: 6) {
-                                        AvatarView(url: latest.author.avatar, size: 20, animated: false)
-                                            .padding(.leading, 8)
-                                        Text("**\(latest.author.displayName ?? latest.author.handle)** \(latest.text)")
-                                            .font(.caption)
-                                            .foregroundStyle(.white)
-                                            .lineLimit(1)
-                                    }
-                                }
-                                .buttonStyle(.plain)
-                            }
-                            Spacer(minLength: 8)
-                            if let locationText {
-                                HStack(spacing: 4) {
-                                    Image(systemName: showLocationCopied ? "checkmark" : "location.fill")
-                                    Text(showLocationCopied ? "Copied" : locationText)
-                                }
-                                .font(.caption)
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(.ultraThinMaterial, in: Capsule())
-                                .contentTransition(.symbolEffect(.replace))
-                                .id(currentStory.uri)
-                                .onTapGesture {
-                                    UIPasteboard.general.string = locationText
-                                    withAnimation(.easeInOut(duration: 0.15)) { showLocationCopied = true }
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                                        withAnimation(.easeInOut(duration: 0.15)) { showLocationCopied = false }
-                                    }
+                    Group {
+                        if let latest = commentsViewModel.latestComment,
+                           commentsViewModel.activeStoryUri == currentStory.uri
+                        {
+                            Button {
+                                openCommentSheet(focusInput: false)
+                            } label: {
+                                HStack(spacing: 6) {
+                                    AvatarView(url: latest.author.avatar, size: 20, animated: false)
+                                        .padding(.leading, 8)
+                                    Text("**\(latest.author.displayName ?? latest.author.handle)** \(latest.text)")
+                                        .font(.caption)
+                                        .foregroundStyle(.white)
+                                        .lineLimit(1)
+                                    Spacer(minLength: 0)
                                 }
                             }
+                            .buttonStyle(.plain)
+                            .padding(.leading, 16)
+                            .padding(.trailing, 64)
+                            .padding(.bottom, 4)
+                            .transition(.opacity)
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 4)
                     }
+                    .animation(.easeInOut(duration: 0.25), value: commentsViewModel.latestComment?.uri)
 
-                    storyInputBar
+                    bottomInputBar(interactive: true)
                 }
             }
         }
@@ -718,7 +712,6 @@ struct StoryViewer: View {
             imageLoaded = false
         }
         labelRevealed = false
-        showLocationCopied = false
         prefetchStoryImages()
         if let uri = nextStory?.uri {
             Task { await commentsViewModel.switchToStory(uri: uri, auth: auth.authContext()) }
@@ -938,7 +931,6 @@ struct StoryViewer: View {
         }
         let targetStory = fetched.indices.contains(targetIndex) ? fetched[targetIndex] : nil
         if !isFullsizeCached(targetStory) { imageLoaded = false }
-        showLocationCopied = false
         stories = fetched
         currentStoryIndex = targetIndex
         labelRevealed = false
@@ -1086,53 +1078,77 @@ struct StoryViewer: View {
         return story.viewer?.fav != nil || storyFavoriteCache.isLiked(story.uri)
     }
 
-    private var storyInputBar: some View {
+    private func bottomInputBar(interactive: Bool) -> some View {
         HStack(spacing: 12) {
             // Comment bubble — opens comment list
-            Button {
-                openCommentSheet(focusInput: false)
-            } label: {
+            if interactive {
+                Button {
+                    openCommentSheet(focusInput: false)
+                } label: {
+                    Image(systemName: "bubble")
+                        .font(.body)
+                        .foregroundStyle(.white)
+                        .frame(width: 36, height: 36)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            } else {
                 Image(systemName: "bubble")
                     .font(.body)
                     .foregroundStyle(.white)
                     .frame(width: 36, height: 36)
-                    .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
 
             // "Add a comment..." — opens sheet with keyboard
-            Button {
-                openCommentSheet(focusInput: true)
-            } label: {
+            if interactive {
+                Button {
+                    openCommentSheet(focusInput: true)
+                } label: {
+                    Text("Add a comment...")
+                        .font(.subheadline)
+                        .foregroundStyle(.white.opacity(0.6))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 12)
+                }
+                .buttonStyle(.plain)
+                .glassEffect(.regular, in: .capsule)
+            } else {
                 Text("Add a comment...")
                     .font(.subheadline)
                     .foregroundStyle(.white.opacity(0.6))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 18)
                     .padding(.vertical, 12)
+                    .glassEffect(.regular, in: .capsule)
             }
-            .buttonStyle(.plain)
-            .glassEffect(.regular, in: .capsule)
 
             // Heart — like/unlike
-            Button {
-                if !isFavorited { addLikeParticleBurst() }
-                triggerFavoriteToggle()
-            } label: {
-                Image(systemName: isFavorited ? "heart.fill" : "heart")
-                    .font(.title3)
-                    .foregroundStyle(isFavorited ? Color("AccentColor") : .white)
-                    .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isFavorited)
-                    .frame(width: 36, height: 36)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .overlay {
-                ForEach(likeParticleBursts, id: \.self) { _ in
-                    ForEach(0 ..< 5) { i in
-                        LikeParticleView(index: i)
+            if interactive {
+                Button {
+                    if !isFavorited { addLikeParticleBurst() }
+                    triggerFavoriteToggle()
+                } label: {
+                    Image(systemName: isFavorited ? "heart.fill" : "heart")
+                        .font(.title3)
+                        .foregroundStyle(isFavorited ? Color("AccentColor") : .white)
+                        .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isFavorited)
+                        .frame(width: 36, height: 36)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .overlay {
+                    ForEach(likeParticleBursts, id: \.self) { _ in
+                        ForEach(0 ..< 5) { i in
+                            LikeParticleView(index: i)
+                        }
                     }
                 }
+            } else {
+                Image(systemName: "heart")
+                    .font(.title3)
+                    .foregroundStyle(.white)
+                    .frame(width: 36, height: 36)
             }
         }
         .padding(.horizontal, 16)

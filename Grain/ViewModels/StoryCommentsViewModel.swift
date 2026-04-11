@@ -7,6 +7,11 @@ private let logger = Logger(subsystem: "social.grain.grain", category: "StoryCom
 @MainActor
 final class StoryCommentsViewModel {
     var comments: [GrainComment] = []
+    // latestComment is set to response.comments.first (oldest/chronological).
+    // Ideally this would prefer comments from followed users, then fall back to most-liked,
+    // but the getGalleryThread endpoint doesn't return viewer state on authors or likeCount
+    // on comments. Bumping the preview fetch from limit=1 to support client-side selection
+    // also adds ~100ms per request. Revisit when the backend hydrates those fields.
     var latestComment: GrainComment?
     var totalCount: Int = 0
     var isLoading = false

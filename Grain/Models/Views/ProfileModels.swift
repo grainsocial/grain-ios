@@ -10,7 +10,6 @@ struct GrainProfile: Codable, Sendable, Identifiable {
     var labels: [ATLabel]?
     var avatar: String?
     var createdAt: String?
-    var viewer: ActorViewerState?
 
     var id: String {
         did
