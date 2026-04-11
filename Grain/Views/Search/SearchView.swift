@@ -1,7 +1,4 @@
-import os
 import SwiftUI
-
-private let searchLaunchSignposter = OSSignposter(subsystem: "social.grain.grain", category: "AppLaunch")
 
 struct SearchView: View {
     @Environment(AuthManager.self) private var auth
@@ -25,15 +22,11 @@ struct SearchView: View {
 
     init(client: XRPCClient) {
         self.client = client
-        let _spid = searchLaunchSignposter.makeSignpostID()
-        let _state = searchLaunchSignposter.beginInterval("SearchViewModelInit", id: _spid)
         _viewModel = State(initialValue: SearchViewModel(client: client))
         _recentSearches = State(initialValue: RecentSearchStorage())
-        searchLaunchSignposter.endInterval("SearchViewModelInit", _state)
     }
 
     var body: some View {
-        let _ = searchLaunchSignposter.emitEvent("SearchViewBodyBegin")
         NavigationStack {
             Group {
                 if viewModel.searchText.isEmpty {

@@ -1,9 +1,6 @@
 import Nuke
 import NukeUI
-import OSLog
 import SwiftUI
-
-private let profileLaunchSignposter = OSSignposter(subsystem: "social.grain.grain", category: "AppLaunch")
 
 enum ProfileViewMode: String, CaseIterable {
     case grid, favorites, stories
@@ -43,16 +40,12 @@ struct ProfileView: View {
 
     init(client: XRPCClient, did: String, isRoot: Bool = false) {
         self.client = client
-        let _spid = profileLaunchSignposter.makeSignpostID()
-        let _state = profileLaunchSignposter.beginInterval("ProfileViewModelInit", id: _spid)
         _viewModel = State(initialValue: ProfileDetailViewModel(client: client))
-        profileLaunchSignposter.endInterval("ProfileViewModelInit", _state)
         actor = did
         self.isRoot = isRoot
     }
 
     var body: some View {
-        let _ = profileLaunchSignposter.emitEvent("ProfileViewBodyBegin")
         ZStack {
             if isRoot {
                 NavigationStack {
