@@ -9,6 +9,8 @@ struct GrainNotification: Codable, Sendable, Identifiable {
     var galleryUri: String?
     var galleryTitle: String?
     var galleryThumb: String?
+    var storyUri: String?
+    var storyThumb: String?
     var commentText: String?
     var replyToText: String?
 
@@ -26,6 +28,8 @@ enum NotificationReason: String, Sendable {
     case galleryComment = "gallery-comment"
     case galleryCommentMention = "gallery-comment-mention"
     case galleryMention = "gallery-mention"
+    case storyFavorite = "story-favorite"
+    case storyComment = "story-comment"
     case reply
     case follow
     case unknown

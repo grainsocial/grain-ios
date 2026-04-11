@@ -11,7 +11,7 @@ struct GetGalleryResponse: Codable, Sendable {
     let gallery: GrainGallery
 }
 
-struct GetGalleryThreadResponse: Codable, Sendable {
+struct GetCommentThreadResponse: Codable, Sendable {
     let comments: [GrainComment]
     var cursor: String?
     var totalCount: Int?
@@ -91,15 +91,15 @@ extension XRPCClient {
         try await query("social.grain.unspecced.getGallery", params: ["gallery": uri], auth: auth, as: GetGalleryResponse.self)
     }
 
-    func getGalleryThread(
-        gallery: String,
+    func getCommentThread(
+        subject: String,
         limit: Int = 20,
         cursor: String? = nil,
         auth: AuthContext? = nil
-    ) async throws -> GetGalleryThreadResponse {
-        var params = ["gallery": gallery, "limit": String(limit)]
+    ) async throws -> GetCommentThreadResponse {
+        var params = ["subject": subject, "limit": String(limit)]
         if let cursor { params["cursor"] = cursor }
-        return try await query("social.grain.unspecced.getGalleryThread", params: params, auth: auth, as: GetGalleryThreadResponse.self)
+        return try await query("social.grain.unspecced.getCommentThread", params: params, auth: auth, as: GetCommentThreadResponse.self)
     }
 
     func putPinnedFeeds(_ feeds: [PinnedFeed], auth: AuthContext? = nil) async throws {

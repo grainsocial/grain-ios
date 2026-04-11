@@ -31,8 +31,6 @@ private final class StoryTimer {
     func resume() {
         guard !isRunning else { return }
         guard progress < 1.0 else { start(); return }
-        svLogger.info("[timer.resume] called progress=\(progress)")
-        svSignposter.emitEvent("timer.resume", "progress=\(progress)")
         run(fromProgress: progress)
     }
 
@@ -93,7 +91,6 @@ struct StoryViewer: View {
     @Environment(LabelDefinitionsCache.self) private var labelDefsCache
     @Environment(ViewedStoryStorage.self) private var viewedStories
     @Environment(StoryStatusCache.self) private var storyStatusCache
-    @Environment(StoryFavoriteCache.self) private var storyFavoriteCache
     @Environment(StoryCommentPresenter.self) private var commentPresenter
     let authors: [GrainStoryAuthor]
     let client: XRPCClient
@@ -585,7 +582,7 @@ struct StoryViewer: View {
 
                 // MARK: Comment preview + input bar
 
-                if let currentStory {
+                if let currentStory, currentStory.expired != true {
                     Group {
                         if let latest = commentsViewModel.firstComment,
                            commentsViewModel.activeStoryUri == currentStory.uri
@@ -595,19 +592,20 @@ struct StoryViewer: View {
                             } label: {
                                 HStack(spacing: 6) {
                                     AvatarView(url: latest.author.avatar, size: 20, animated: false)
-                                        .padding(.leading, 8)
-                                    Text("**\(latest.author.displayName ?? latest.author.handle)** \(latest.text)")
+                                    Text(latest.text)
                                         .font(.caption)
                                         .foregroundStyle(.white)
                                         .lineLimit(1)
-                                    Spacer(minLength: 0)
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 5)
+                                        .background(.white.opacity(0.15), in: .capsule)
                                 }
                             }
                             .buttonStyle(.plain)
                             .padding(.leading, 16)
                             .padding(.trailing, 64)
                             .padding(.bottom, 4)
-                            .transition(.opacity)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
                         }
                     }
                     .animation(.easeInOut(duration: 0.2), value: commentsViewModel.firstComment?.uri)
@@ -1049,35 +1047,11 @@ struct StoryViewer: View {
 
     private var isFavorited: Bool {
         guard let story = currentStory else { return false }
-        return story.viewer?.fav != nil || storyFavoriteCache.isLiked(story.uri)
+        return story.viewer?.fav != nil
     }
 
-    private func bottomInputBar(interactive: Bool, story: GrainStory?) -> some View {
-        let isFavorited: Bool = {
-            guard let story else { return false }
-            return story.viewer?.fav != nil || storyFavoriteCache.isLiked(story.uri)
-        }()
-
-        return HStack(spacing: 12) {
-            // Comment bubble — opens comment list
-            if interactive {
-                Button {
-                    openCommentSheet(focusInput: false)
-                } label: {
-                    Image(systemName: "bubble")
-                        .font(.body)
-                        .foregroundStyle(.white)
-                        .frame(width: 36, height: 36)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            } else {
-                Image(systemName: "bubble")
-                    .font(.body)
-                    .foregroundStyle(.white)
-                    .frame(width: 36, height: 36)
-            }
-
+    private func bottomInputBar(interactive: Bool, story _: GrainStory?) -> some View {
+        HStack(spacing: 12) {
             // "Add a comment..." — opens sheet with keyboard
             if interactive {
                 Button {
@@ -1089,6 +1063,7 @@ struct StoryViewer: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 18)
                         .padding(.vertical, 12)
+                        .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
                 .glassEffect(.regular, in: .capsule)
@@ -1173,7 +1148,7 @@ struct StoryViewer: View {
         }
 
         let capturedViewer = stories.first(where: { $0.uri == storyUri })?.viewer
-        let existingFavUri = capturedViewer?.fav ?? storyFavoriteCache.favUri(for: storyUri)
+        let existingFavUri = capturedViewer?.fav
         let op = existingFavUri == nil ? "like" : "unlike"
 
         let toggleState = svSignposter.beginInterval(
@@ -1197,7 +1172,6 @@ struct StoryViewer: View {
             } else {
                 prevViewer = nil
             }
-            storyFavoriteCache.unlike(storyUri)
             svSignposter.emitEvent("toggleStoryFavorite.optimistic", "op=unlike uri=\(storyUri)")
             do {
                 try await FavoriteService.delete(favoriteUri: favUri, client: client, auth: authContext)
@@ -1209,13 +1183,9 @@ struct StoryViewer: View {
                 if let idx = indexOfCapturedStory() {
                     stories[idx].viewer = prevViewer
                 }
-                storyFavoriteCache.like(storyUri, favUri: favUri)
             }
         } else {
-            // Favorite — optimistic on the in-memory story only. We intentionally do
-            // NOT write a "pending" favUri into storyFavoriteCache because the cache
-            // persists to UserDefaults; a backgrounded/killed app would leave the
-            // bogus "pending" URI behind and break the next unfavorite attempt.
+            // Favorite — optimistic
             let prevViewer: StoryViewerState?
             if let idx = indexOfCapturedStory() {
                 prevViewer = stories[idx].viewer
@@ -1230,7 +1200,6 @@ struct StoryViewer: View {
                     if let idx = indexOfCapturedStory() {
                         stories[idx].viewer = StoryViewerState(fav: newFavUri)
                     }
-                    storyFavoriteCache.like(storyUri, favUri: newFavUri)
                     svSignposter.emitEvent("toggleStoryFavorite.success", "op=like uri=\(storyUri)")
                     svLogger.info("[toggleStoryFavorite] success op=like uri=\(storyUri)")
                 } else {
@@ -1239,7 +1208,6 @@ struct StoryViewer: View {
                     if let idx = indexOfCapturedStory() {
                         stories[idx].viewer = prevViewer
                     }
-                    storyFavoriteCache.unlike(storyUri)
                 }
             } catch {
                 svSignposter.emitEvent("toggleStoryFavorite.error", "op=like uri=\(storyUri)")
@@ -1247,7 +1215,6 @@ struct StoryViewer: View {
                 if let idx = indexOfCapturedStory() {
                     stories[idx].viewer = prevViewer
                 }
-                storyFavoriteCache.unlike(storyUri)
             }
         }
     }
@@ -1303,6 +1270,5 @@ private struct StoryProgressBars: View {
     .environment(LabelDefinitionsCache())
     .environment(ViewedStoryStorage())
     .environment(StoryStatusCache())
-    .environment(StoryFavoriteCache())
     .environment(StoryCommentPresenter())
 }

@@ -18,7 +18,6 @@ struct GrainApp: App {
     @State private var storyStatusCache = StoryStatusCache()
     @State private var viewedStoryStorage = ViewedStoryStorage()
     @State private var labelDefsCache = LabelDefinitionsCache()
-    @State private var storyFavoriteCache = StoryFavoriteCache()
     @State private var pendingDeepLink: DeepLink?
 
     var body: some Scene {
@@ -31,7 +30,6 @@ struct GrainApp: App {
                         .environment(storyStatusCache)
                         .environment(viewedStoryStorage)
                         .environment(labelDefsCache)
-                        .environment(storyFavoriteCache)
                         .tint(Color("AccentColor"))
                         .onAppear {
                             viewedStoryStorage.cleanup()

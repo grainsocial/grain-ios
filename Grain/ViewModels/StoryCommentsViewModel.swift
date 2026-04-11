@@ -10,7 +10,7 @@ final class StoryCommentsViewModel {
     var comments: [GrainComment] = []
     // `firstComment` is `response.comments.first`, which is the oldest/chronological
     // comment on the story. Ideally this would prefer comments from followed users,
-    // then fall back to most-liked, but the getGalleryThread endpoint doesn't return
+    // then fall back to most-liked, but the getCommentThread endpoint doesn't return
     // viewer state on authors or likeCount on comments. Bumping the preview fetch
     // from limit=1 to support client-side selection also adds ~100ms per request.
     // Revisit when the backend hydrates those fields.
@@ -67,7 +67,7 @@ final class StoryCommentsViewModel {
         }
 
         do {
-            let response = try await client.getGalleryThread(gallery: storyUri, limit: 1, auth: auth)
+            let response = try await client.getCommentThread(subject: storyUri, limit: 1, auth: auth)
             let preview = CachedPreview(
                 comment: response.comments.first,
                 count: response.totalCount ?? response.comments.count
@@ -95,7 +95,7 @@ final class StoryCommentsViewModel {
         hasMoreComments = true
 
         do {
-            let response = try await client.getGalleryThread(gallery: storyUri, auth: auth)
+            let response = try await client.getCommentThread(subject: storyUri, auth: auth)
             comments = response.comments
             commentCursor = response.cursor
             hasMoreComments = response.cursor != nil
@@ -121,7 +121,7 @@ final class StoryCommentsViewModel {
         isLoading = true
 
         do {
-            let response = try await client.getGalleryThread(gallery: storyUri, cursor: cursor, auth: auth)
+            let response = try await client.getCommentThread(subject: storyUri, cursor: cursor, auth: auth)
             comments.append(contentsOf: response.comments)
             commentCursor = response.cursor
             hasMoreComments = response.cursor != nil

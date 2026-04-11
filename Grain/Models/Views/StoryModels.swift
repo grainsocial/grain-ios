@@ -12,6 +12,7 @@ struct GrainStory: Codable, Sendable, Identifiable {
     var address: Address?
     let createdAt: String
     var labels: [ATLabel]?
+    var expired: Bool?
     var crossPost: CrossPostInfo?
     var viewer: StoryViewerState?
 

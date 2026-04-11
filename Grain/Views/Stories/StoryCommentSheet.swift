@@ -15,8 +15,6 @@ struct StoryCommentSheet: View {
     var onProfileTap: ((String) -> Void)?
     var onDismiss: (() -> Void)?
 
-    @State private var selectedDetent: PresentationDetent = .medium
-
     var body: some View {
         CommentSheetContent(
             comments: viewModel.comments,
@@ -33,20 +31,16 @@ struct StoryCommentSheet: View {
             onDismiss: { onDismiss?() },
             onProfileTap: onProfileTap,
             dismissStyle: .done,
-            focusOnAppear: focusInput
+            focusOnAppear: false
         )
-        .presentationDetents([.medium, .large], selection: $selectedDetent)
+        .presentationDetents([.large])
         .onAppear {
             scsLogger.info("[onAppear] uri=\(storyUri) focusInput=\(focusInput)")
             scsSignposter.emitEvent("sheet.onAppear", "focusInput=\(focusInput)")
         }
         .onDisappear {
-            scsLogger.info("[onDisappear] uri=\(storyUri) lastDetent=\(String(describing: selectedDetent))")
-            scsSignposter.emitEvent("sheet.onDisappear", "detent=\(String(describing: selectedDetent))")
-        }
-        .onChange(of: selectedDetent) { _, newValue in
-            scsLogger.info("[detent.change] now=\(String(describing: newValue))")
-            scsSignposter.emitEvent("detent.change", "detent=\(String(describing: newValue))")
+            scsLogger.info("[onDisappear] uri=\(storyUri)")
+            scsSignposter.emitEvent("sheet.onDisappear")
         }
         .task {
             scsSignposter.emitEvent("task.load.begin")

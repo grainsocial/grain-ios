@@ -15,6 +15,7 @@ struct FeedView: View {
     @State private var deepLinkProfileDid: String?
     @State private var deepLinkGalleryUri: String?
     @State private var deepLinkStoryAuthor: GrainStoryAuthor?
+    @State private var deepLinkStory: GrainStory?
     @State private var showFeedsManagement = false
     @State private var feedRefreshID = UUID()
 
@@ -138,6 +139,23 @@ struct FeedView: View {
                 )
                 .environment(auth)
             }
+            .fullScreenCover(item: $deepLinkStory) { story in
+                StoryViewer(
+                    authors: [GrainStoryAuthor(
+                        profile: story.creator,
+                        storyCount: 1,
+                        latestAt: story.createdAt
+                    )],
+                    initialStories: [story],
+                    client: client,
+                    onProfileTap: { did in
+                        deepLinkStory = nil
+                        deepLinkProfileDid = did
+                    },
+                    onDismiss: { deepLinkStory = nil }
+                )
+                .environment(auth)
+            }
             .task {
                 consumeDeepLink()
             }
@@ -217,12 +235,12 @@ struct FeedView: View {
             deepLinkProfileDid = did
         case .gallery:
             deepLinkGalleryUri = link.galleryUri
-        case let .story(did, _):
-            Task { await openStoryDeepLink(did: did) }
+        case let .story(did, rkey):
+            Task { await openStoryDeepLink(did: did, rkey: rkey) }
         }
     }
 
-    private func openStoryDeepLink(did: String) async {
+    private func openStoryDeepLink(did: String, rkey: String) async {
         do {
             let response = try await client.getStories(actor: did, auth: auth.authContext())
             let count = response.stories.count
@@ -233,11 +251,15 @@ struct FeedView: View {
                     latestAt: response.stories.last?.createdAt ?? ""
                 )
             } else {
-                // Story expired — fall back to profile
-                deepLinkProfileDid = did
+                // Story expired — fetch the specific story
+                let storyUri = "at://\(did)/social.grain.story/\(rkey)"
+                if let story = try await client.getStory(uri: storyUri, auth: auth.authContext()).story {
+                    deepLinkStory = story
+                } else {
+                    deepLinkProfileDid = did
+                }
             }
         } catch {
-            // Fall back to profile on error
             deepLinkProfileDid = did
         }
     }

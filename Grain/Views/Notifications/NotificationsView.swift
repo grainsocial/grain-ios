@@ -3,10 +3,12 @@ import SwiftUI
 
 struct NotificationsView: View {
     @Environment(AuthManager.self) private var auth
+    @Environment(StoryStatusCache.self) private var storyStatusCache
     var viewModel: NotificationsViewModel
     @State private var selectedGalleryUri: String?
     @State private var selectedProfileDid: String?
     @State private var cardStoryAuthor: GrainStoryAuthor?
+    @State private var selectedStory: GrainStory?
     let client: XRPCClient
 
     init(client: XRPCClient, viewModel: NotificationsViewModel) {
@@ -27,6 +29,16 @@ struct NotificationsView: View {
                     .onTapGesture {
                         if notification.reasonType == .follow {
                             selectedProfileDid = notification.author.did
+                        } else if notification.reasonType == .storyFavorite || notification.reasonType == .storyComment {
+                            if let storyUri = notification.storyUri {
+                                Task {
+                                    if let story = try? await client.getStory(uri: storyUri, auth: auth.authContext()).story {
+                                        selectedStory = story
+                                    }
+                                }
+                            } else {
+                                selectedProfileDid = notification.author.did
+                            }
                         } else if let galleryUri = notification.galleryUri {
                             selectedGalleryUri = galleryUri
                         }
@@ -73,6 +85,23 @@ struct NotificationsView: View {
                         selectedProfileDid = did
                     },
                     onDismiss: { cardStoryAuthor = nil }
+                )
+                .environment(auth)
+            }
+            .fullScreenCover(item: $selectedStory) { story in
+                StoryViewer(
+                    authors: [GrainStoryAuthor(
+                        profile: story.creator,
+                        storyCount: 1,
+                        latestAt: story.createdAt
+                    )],
+                    initialStories: [story],
+                    client: client,
+                    onProfileTap: { did in
+                        selectedStory = nil
+                        selectedProfileDid = did
+                    },
+                    onDismiss: { selectedStory = nil }
                 )
                 .environment(auth)
             }
@@ -129,7 +158,7 @@ struct NotificationRow: View {
 
             Spacer()
 
-            if let thumb = notification.galleryThumb, let url = URL(string: thumb) {
+            if let thumb = notification.galleryThumb ?? notification.storyThumb, let url = URL(string: thumb) {
                 LazyImage(url: url) { state in
                     if let image = state.image {
                         image.resizable()
@@ -149,6 +178,8 @@ struct NotificationRow: View {
         case .galleryComment: "commented on your gallery"
         case .galleryCommentMention: "mentioned you in a comment"
         case .galleryMention: "mentioned you"
+        case .storyFavorite: "favorited your story"
+        case .storyComment: "commented on your story"
         case .reply: "replied to your comment"
         case .follow: "followed you"
         case .unknown: ""

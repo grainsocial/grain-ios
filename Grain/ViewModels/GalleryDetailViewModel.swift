@@ -22,7 +22,7 @@ final class GalleryDetailViewModel {
 
         do {
             let galleryResult = try await client.getGallery(uri: uri, auth: auth)
-            let commentsResult = try await client.getGalleryThread(gallery: uri, auth: auth)
+            let commentsResult = try await client.getCommentThread(subject: uri, auth: auth)
             gallery = galleryResult.gallery
             comments = commentsResult.comments
             commentCursor = commentsResult.cursor
@@ -38,7 +38,7 @@ final class GalleryDetailViewModel {
         isLoading = true
 
         do {
-            let response = try await client.getGalleryThread(gallery: galleryUri, cursor: cursor, auth: auth)
+            let response = try await client.getCommentThread(subject: galleryUri, cursor: cursor, auth: auth)
             comments.append(contentsOf: response.comments)
             commentCursor = response.cursor
             hasMoreComments = response.cursor != nil
