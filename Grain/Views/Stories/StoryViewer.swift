@@ -355,7 +355,7 @@ struct StoryViewer: View {
 
                 Spacer().allowsHitTesting(false)
 
-                bottomInputBar(interactive: false)
+                bottomInputBar(interactive: false, story: story)
             }
         }
     }
@@ -621,9 +621,9 @@ struct StoryViewer: View {
                             .transition(.opacity)
                         }
                     }
-                    .animation(.easeInOut(duration: 0.25), value: commentsViewModel.latestComment?.uri)
+                    .animation(.easeInOut(duration: 0.2), value: commentsViewModel.latestComment?.uri)
 
-                    bottomInputBar(interactive: true)
+                    bottomInputBar(interactive: true, story: currentStory)
                 }
             }
         }
@@ -1078,8 +1078,13 @@ struct StoryViewer: View {
         return story.viewer?.fav != nil || storyFavoriteCache.isLiked(story.uri)
     }
 
-    private func bottomInputBar(interactive: Bool) -> some View {
-        HStack(spacing: 12) {
+    private func bottomInputBar(interactive: Bool, story: GrainStory?) -> some View {
+        let isFavorited: Bool = {
+            guard let story else { return false }
+            return story.viewer?.fav != nil || storyFavoriteCache.isLiked(story.uri)
+        }()
+
+        return HStack(spacing: 12) {
             // Comment bubble — opens comment list
             if interactive {
                 Button {
@@ -1123,36 +1128,43 @@ struct StoryViewer: View {
                     .glassEffect(.regular, in: .capsule)
             }
 
-            // Heart — like/unlike
+            // Heart — favorite/unfavorite
             if interactive {
                 Button {
                     if !isFavorited { addLikeParticleBurst() }
                     triggerFavoriteToggle()
                 } label: {
-                    Image(systemName: isFavorited ? "heart.fill" : "heart")
-                        .font(.title3)
-                        .foregroundStyle(isFavorited ? Color("AccentColor") : .white)
-                        .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isFavorited)
-                        .frame(width: 36, height: 36)
+                    heartIcon(isFavorited: isFavorited)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .overlay {
-                    ForEach(likeParticleBursts, id: \.self) { _ in
-                        ForEach(0 ..< 5) { i in
-                            LikeParticleView(index: i)
-                        }
-                    }
-                }
+                .overlay { particleBurstOverlay }
             } else {
-                Image(systemName: "heart")
-                    .font(.title3)
-                    .foregroundStyle(.white)
-                    .frame(width: 36, height: 36)
+                heartIcon(isFavorited: isFavorited)
+                    .overlay { particleBurstOverlay }
+                    .onChange(of: isFavorited) { oldValue, newValue in
+                        if !oldValue, newValue { addLikeParticleBurst() }
+                    }
             }
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 16)
+    }
+
+    private func heartIcon(isFavorited: Bool) -> some View {
+        Image(systemName: isFavorited ? "heart.fill" : "heart")
+            .font(.title3)
+            .foregroundStyle(isFavorited ? Color("AccentColor") : .white)
+            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isFavorited)
+            .frame(width: 36, height: 36)
+    }
+
+    private var particleBurstOverlay: some View {
+        ForEach(likeParticleBursts, id: \.self) { _ in
+            ForEach(0 ..< 5) { i in
+                LikeParticleView(index: i)
+            }
+        }
     }
 
     private func doubleTapLike(at point: CGPoint) {
