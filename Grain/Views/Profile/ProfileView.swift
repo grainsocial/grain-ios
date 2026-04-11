@@ -856,12 +856,13 @@ struct ProfileView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.top, 60)
         } else {
+            let visible = viewModel.visibleFavorites
             LazyVGrid(columns: [
                 GridItem(.flexible(), spacing: 2),
                 GridItem(.flexible(), spacing: 2),
                 GridItem(.flexible(), spacing: 2),
             ], spacing: 2) {
-                ForEach(viewModel.favoriteGalleries) { gallery in
+                ForEach(visible) { gallery in
                     Button {
                         selectedGallery = nil
                         DispatchQueue.main.async {
@@ -871,10 +872,8 @@ struct ProfileView: View {
                         Color.clear
                             .aspectRatio(3.0 / 4.0, contentMode: .fit)
                             .overlay {
-                                if viewModel.brokenFavoriteUris.contains(gallery.uri) {
-                                    DeletedGalleryCard()
-                                } else if let photo = gallery.items?.first {
-                                    LazyImage(url: URL(string: photo.thumb)) { state in
+                                if let photo = gallery.items?.first, let url = URL(string: photo.thumb) {
+                                    LazyImage(url: url) { state in
                                         if let image = state.image {
                                             image
                                                 .resizable()
@@ -883,18 +882,8 @@ struct ProfileView: View {
                                             Rectangle().fill(.quaternary)
                                         }
                                     }
-                                    // Dangling blob refs (server returns an item
-                                    // but the CID 404s on the CDN) — mark the uri
-                                    // so the next render swaps in the deleted
-                                    // card, and the next favorites load filters
-                                    // it out entirely.
-                                    .onCompletion { result in
-                                        if case .failure = result {
-                                            viewModel.brokenFavoriteUris.insert(gallery.uri)
-                                        }
-                                    }
                                 } else {
-                                    DeletedGalleryCard()
+                                    Rectangle().fill(.quaternary)
                                 }
                             }
                             .clipped()
@@ -912,48 +901,77 @@ struct ProfileView: View {
                     .buttonStyle(.plain)
                     .matchedTransitionSource(id: gallery.uri, in: galleryZoomNS)
                     .onAppear {
-                        if gallery.id == viewModel.favoriteGalleries.last?.id {
+                        if gallery.id == visible.last?.id {
                             Task { await viewModel.loadMoreFavorites(did: did, auth: auth.authContext()) }
                         }
                     }
                 }
             }
-            // Eagerly probe the first few thumbs so broken ones above the
-            // LazyVGrid fold get marked before the user scrolls to them.
-            // Keyed on the top-N uris so it reruns when the list head changes.
-            .task(id: viewModel.favoriteGalleries.prefix(9).map(\.uri).joined(separator: "|")) {
-                await probeTopFavoriteThumbs(limit: 9)
+            // HEAD-probe every loaded favorite thumb so dangling CDN refs get
+            // marked before render. Keyed on the full uri list so new batches
+            // from loadMore trigger a re-probe; probeFavoriteThumbs itself
+            // skips uris already checked this session.
+            .task(id: viewModel.favoriteGalleries.map(\.uri).joined(separator: "|")) {
+                await probeFavoriteThumbs()
             }
         }
     }
 
-    private func probeTopFavoriteThumbs(limit: Int) async {
-        let targets: [(uri: String, thumb: String?)] = viewModel.favoriteGalleries
-            .prefix(limit)
-            .map { ($0.uri, $0.items?.first?.thumb) }
+    private func probeFavoriteThumbs() async {
+        let targets: [(uri: String, thumb: String)] = viewModel.favoriteGalleries.compactMap { gallery in
+            guard !viewModel.brokenFavoriteUris.contains(gallery.uri),
+                  !viewModel.probedFavoriteUris.contains(gallery.uri),
+                  let thumb = gallery.items?.first?.thumb,
+                  !thumb.isEmpty
+            else { return nil }
+            return (gallery.uri, thumb)
+        }
+        guard !targets.isEmpty else { return }
+
         var broken: [String] = []
-        await withTaskGroup(of: (String, Bool).self) { group in
+        var probed: [String] = []
+        await withTaskGroup(of: FavoriteThumbProbe.self) { group in
             for target in targets {
                 let uri = target.uri
                 let thumb = target.thumb
                 group.addTask {
-                    guard let thumb, let url = URL(string: thumb) else {
-                        return (uri, false)
+                    guard let url = URL(string: thumb) else {
+                        return FavoriteThumbProbe(uri: uri, result: .broken)
                     }
+                    var req = URLRequest(url: url)
+                    req.httpMethod = "HEAD"
+                    req.timeoutInterval = 10
                     do {
-                        _ = try await ImagePipeline.shared.image(for: url)
-                        return (uri, true)
+                        let (_, response) = try await URLSession.shared.data(for: req)
+                        guard let http = response as? HTTPURLResponse else {
+                            return FavoriteThumbProbe(uri: uri, result: .unknown)
+                        }
+                        if http.statusCode == 404 || http.statusCode == 410 {
+                            return FavoriteThumbProbe(uri: uri, result: .broken)
+                        }
+                        return FavoriteThumbProbe(uri: uri, result: .ok)
                     } catch {
-                        return (uri, false)
+                        return FavoriteThumbProbe(uri: uri, result: .unknown)
                     }
                 }
             }
-            for await (uri, ok) in group where !ok {
-                broken.append(uri)
+            for await probe in group {
+                switch probe.result {
+                case .broken:
+                    broken.append(probe.uri)
+                    probed.append(probe.uri)
+                case .ok:
+                    probed.append(probe.uri)
+                case .unknown:
+                    break
+                }
             }
         }
         for uri in broken {
             viewModel.brokenFavoriteUris.insert(uri)
+        }
+        for uri in probed {
+            viewModel.probedFavoriteUris.insert(uri)
         }
     }
 
@@ -1125,21 +1143,15 @@ struct StatView: View {
     }
 }
 
-private struct DeletedGalleryCard: View {
-    var body: some View {
-        Rectangle()
-            .fill(.quaternary)
-            .overlay {
-                VStack(spacing: 6) {
-                    Image(systemName: "trash")
-                        .font(.system(size: 18, weight: .regular))
-                        .foregroundStyle(.secondary)
-                    Text("Deleted")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
-    }
+private enum FavoriteThumbProbeResult {
+    case ok
+    case broken
+    case unknown
+}
+
+private struct FavoriteThumbProbe {
+    let uri: String
+    let result: FavoriteThumbProbeResult
 }
 
 #Preview {

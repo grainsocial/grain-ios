@@ -23,11 +23,24 @@ final class ProfileDetailViewModel {
     var favoritesLoaded = false
     var isLoadingFavorites = false
     var favoritesError: Error?
-    /// URIs of favorites whose thumbnail failed to load this session — usually
-    /// dangling refs to since-deleted blobs. Populated by the grid's LazyImage
-    /// completion handler; applied on the next favorites load so the current
-    /// view doesn't reflow.
+    /// URIs whose thumb a HEAD probe has confirmed is gone (404/410) — usually
+    /// dangling refs to since-deleted blobs. `visibleFavorites` filters these
+    /// out at render time so they vanish without a "deleted" placeholder, and
+    /// `hydratedFavorites` strips them on the next load so they stay gone.
     var brokenFavoriteUris: Set<String> = []
+    /// URIs whose thumb has already been probed this session (either confirmed
+    /// reachable or confirmed broken). Used to skip redundant HEAD requests
+    /// when new favorite batches come in. Transient probe failures don't add
+    /// here so they're retried next pass.
+    var probedFavoriteUris: Set<String> = []
+
+    /// Favorites currently safe to render — drops anything a probe has
+    /// confirmed broken. `favoriteGalleries` keeps the raw list so broken
+    /// items can be retried if they come back; this computed view is what the
+    /// grid iterates.
+    var visibleFavorites: [GrainGallery] {
+        favoriteGalleries.filter { !brokenFavoriteUris.contains($0.uri) }
+    }
 
     private var galleryCursor: String?
     private(set) var hasMoreGalleries = true
@@ -158,12 +171,19 @@ final class ProfileDetailViewModel {
     }
 
     /// Drops favorites that would render empty: galleries with no photos
-    /// (deleted or never-populated), and galleries whose thumbnail already
-    /// failed to load this session (tracked in `brokenFavoriteUris`). Applied
-    /// on every load path so the dangling ones disappear on the next refresh.
+    /// (deleted or never-populated), galleries whose thumb URL is missing or
+    /// unparseable (LazyImage can't attempt a load so it'd sit blank forever),
+    /// and galleries whose thumbnail was already confirmed broken this session
+    /// (tracked in `brokenFavoriteUris`). Applied on every load path.
     private func hydratedFavorites(_ galleries: [GrainGallery]) -> [GrainGallery] {
-        galleries.filter {
-            !($0.items?.isEmpty ?? true) && !brokenFavoriteUris.contains($0.uri)
+        galleries.filter { gallery in
+            guard !(gallery.items?.isEmpty ?? true) else { return false }
+            guard !brokenFavoriteUris.contains(gallery.uri) else { return false }
+            guard let thumb = gallery.items?.first?.thumb,
+                  !thumb.isEmpty,
+                  URL(string: thumb) != nil
+            else { return false }
+            return true
         }
     }
 
