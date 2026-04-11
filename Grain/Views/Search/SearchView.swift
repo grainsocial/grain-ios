@@ -13,6 +13,9 @@ struct SearchView: View {
     @State private var zoomState = ImageZoomState()
     @State private var cardStoryAuthor: GrainStoryAuthor?
     @State private var commentSheetUri: String?
+    @State private var reportGallery: GrainGallery?
+    @State private var deleteGalleryUri: String?
+    @State private var showDeleteConfirmation = false
     @State private var recentSearches = RecentSearchStorage()
     @State private var searchIsPresented = false
     let client: XRPCClient
@@ -37,6 +40,14 @@ struct SearchView: View {
                             switch viewModel.selectedTab {
                             case .galleries:
                                 ForEach($viewModel.galleryResults) { $gallery in
+                                    let isOwner = gallery.creator.did == auth.userDID
+                                    let reportAction: (() -> Void)? = !isOwner ? {
+                                        reportGallery = gallery
+                                    } : nil
+                                    let deleteAction: (() -> Void)? = isOwner ? {
+                                        showDeleteConfirmation = true
+                                        deleteGalleryUri = gallery.uri
+                                    } : nil
                                     GalleryCardView(gallery: $gallery, client: client, onNavigate: {
                                         searchNavigationUri = gallery.uri
                                     }, onCommentTap: {
@@ -49,7 +60,7 @@ struct SearchView: View {
                                         selectedLocation = LocationDestination(h3Index: h3, name: name)
                                     }, onStoryTap: { author in
                                         cardStoryAuthor = author
-                                    })
+                                    }, onReport: reportAction, onDelete: deleteAction)
                                 }
                             case .profiles:
                                 ForEach(viewModel.profileResults) { profile in
@@ -159,6 +170,25 @@ struct SearchView: View {
                         }
                     )
                 }
+            }
+            .sheet(item: $reportGallery) { gallery in
+                ReportView(client: client, subjectUri: gallery.uri, subjectCid: gallery.cid ?? "")
+            }
+            .alert("Delete Gallery?", isPresented: $showDeleteConfirmation) {
+                Button("Delete", role: .destructive) {
+                    if let uri = deleteGalleryUri {
+                        Task {
+                            guard let authContext = await auth.authContext() else { return }
+                            let rkey = uri.split(separator: "/").last.map(String.init) ?? ""
+                            try? await client.deleteRecord(collection: "social.grain.gallery", rkey: rkey, auth: authContext)
+                            viewModel.galleryResults.removeAll { $0.uri == uri }
+                        }
+                        deleteGalleryUri = nil
+                    }
+                }
+                Button("Cancel", role: .cancel) { deleteGalleryUri = nil }
+            } message: {
+                Text("This will permanently delete this gallery and all its photos.")
             }
         }
     }

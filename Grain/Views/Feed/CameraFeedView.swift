@@ -13,6 +13,9 @@ struct CameraFeedView: View {
     @State private var zoomState = ImageZoomState()
     @State private var cardStoryAuthor: GrainStoryAuthor?
     @State private var commentSheetUri: String?
+    @State private var reportGallery: GrainGallery?
+    @State private var deleteGalleryUri: String?
+    @State private var showDeleteConfirmation = false
 
     let client: XRPCClient
     let camera: String
@@ -25,24 +28,7 @@ struct CameraFeedView: View {
         ScrollView {
             LazyVStack(spacing: 0) {
                 ForEach($galleries) { $gallery in
-                    GalleryCardView(gallery: $gallery, client: client, onNavigate: {
-                        selectedUri = gallery.uri
-                    }, onCommentTap: {
-                        commentSheetUri = gallery.uri
-                    }, onProfileTap: { did in
-                        selectedProfileDid = did
-                    }, onHashtagTap: { tag in
-                        selectedHashtag = tag
-                    }, onLocationTap: { h3, name in
-                        selectedLocation = LocationDestination(h3Index: h3, name: name)
-                    }, onStoryTap: { author in
-                        cardStoryAuthor = author
-                    })
-                    .onAppear {
-                        if gallery.id == galleries.last?.id {
-                            Task { await loadMore() }
-                        }
-                    }
+                    galleryCard(gallery: $gallery)
                 }
 
                 if isLoading {
@@ -128,6 +114,25 @@ struct CameraFeedView: View {
                 )
             }
         }
+        .sheet(item: $reportGallery) { gallery in
+            ReportView(client: client, subjectUri: gallery.uri, subjectCid: gallery.cid ?? "")
+        }
+        .alert("Delete Gallery?", isPresented: $showDeleteConfirmation) {
+            Button("Delete", role: .destructive) {
+                if let uri = deleteGalleryUri {
+                    Task {
+                        guard let authContext = await auth.authContext() else { return }
+                        let rkey = uri.split(separator: "/").last.map(String.init) ?? ""
+                        try? await client.deleteRecord(collection: "social.grain.gallery", rkey: rkey, auth: authContext)
+                        galleries.removeAll { $0.uri == uri }
+                    }
+                    deleteGalleryUri = nil
+                }
+            }
+            Button("Cancel", role: .cancel) { deleteGalleryUri = nil }
+        } message: {
+            Text("This will permanently delete this gallery and all its photos.")
+        }
         .task {
             guard !isPreview else {
                 #if DEBUG
@@ -137,6 +142,36 @@ struct CameraFeedView: View {
             }
             if galleries.isEmpty {
                 await loadInitial()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func galleryCard(gallery: Binding<GrainGallery>) -> some View {
+        let g = gallery.wrappedValue
+        let isOwner = g.creator.did == auth.userDID
+        let reportAction: (() -> Void)? = !isOwner ? {
+            reportGallery = g
+        } : nil
+        let deleteAction: (() -> Void)? = isOwner ? {
+            showDeleteConfirmation = true
+            deleteGalleryUri = g.uri
+        } : nil
+        GalleryCardView(
+            gallery: gallery,
+            client: client,
+            onNavigate: { selectedUri = g.uri },
+            onCommentTap: { commentSheetUri = g.uri },
+            onProfileTap: { did in selectedProfileDid = did },
+            onHashtagTap: { tag in selectedHashtag = tag },
+            onLocationTap: { h3, name in selectedLocation = LocationDestination(h3Index: h3, name: name) },
+            onStoryTap: { author in cardStoryAuthor = author },
+            onReport: reportAction,
+            onDelete: deleteAction
+        )
+        .onAppear {
+            if g.id == galleries.last?.id {
+                Task { await loadMore() }
             }
         }
     }

@@ -200,7 +200,10 @@ struct GalleryCardView: View {
     var onHashtagTap: ((String) -> Void)?
     var onLocationTap: ((String, String) -> Void)?
     var onStoryTap: ((GrainStoryAuthor) -> Void)?
+    var onReport: (() -> Void)?
+    var onDelete: (() -> Void)?
     @State private var isFavoriting = false
+    @State private var showCardActions = false
     @State private var likeParticleBursts: [UUID] = []
     @State private var currentPage = 0
     @State private var showingAlt = false
@@ -292,11 +295,25 @@ struct GalleryCardView: View {
             }
 
             Spacer()
+
+            if onReport != nil || onDelete != nil {
+                Button { showCardActions = true } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.primary)
+                        .frame(width: 32, height: 32)
+                }
+                .buttonStyle(.plain)
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .contentShape(Rectangle())
         .onTapGesture { onProfileTap?(gallery.creator.did) }
+        .sheet(isPresented: $showCardActions) {
+            GalleryActionsSheet(onReport: onReport, onDelete: onDelete)
+                .presentationDetents([.height(200)])
+        }
     }
 
     @ViewBuilder
@@ -620,4 +637,34 @@ struct GalleryCardView: View {
     .preferredColorScheme(.dark)
     .tint(Color("AccentColor"))
     .frame(maxHeight: .infinity, alignment: .top)
+}
+
+private struct GalleryActionsSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    var onReport: (() -> Void)?
+    var onDelete: (() -> Void)?
+
+    var body: some View {
+        List {
+            if let onReport {
+                Button {
+                    dismiss()
+                    onReport()
+                } label: {
+                    Label("Report", systemImage: "flag")
+                        .foregroundStyle(.primary)
+                }
+            }
+            if let onDelete {
+                Button {
+                    dismiss()
+                    onDelete()
+                } label: {
+                    Label("Delete Gallery", systemImage: "trash")
+                        .foregroundStyle(.primary)
+                }
+            }
+        }
+        .tint(.primary)
+    }
 }
