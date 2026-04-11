@@ -157,10 +157,11 @@ struct NotificationRow: View {
 }
 
 #Preview {
-    let client = XRPCClient(baseURL: AuthManager.serverURL)
+    let client = XRPCClient.preview
     let vm = NotificationsViewModel(client: client)
     vm.notifications = PreviewData.notifications
     vm.unseenCount = 3
     return NotificationsView(client: client, viewModel: vm)
-        .environment(AuthManager())
+        .previewEnvironments()
+        .frame(maxHeight: .infinity, alignment: .top)
 }

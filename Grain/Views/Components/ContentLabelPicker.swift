@@ -53,9 +53,24 @@ struct ContentLabelPicker: View {
 }
 
 #Preview {
-    @Previewable @State var labels = Set<String>()
+    // Pre-select "sexual" so the disclosure group auto-expands on first render
+    // and the checkmark row is immediately visible. The cache has no network
+    // definitions, so labels fall back to .capitalized ("Nudity", "Sexual", "Gore").
+    @Previewable @State var labelsWithSelection: Set = ["sexual"]
+    @Previewable @State var labelsEmpty: Set<String> = []
+
     Form {
-        ContentLabelPicker(selectedLabels: $labels)
+        // Expanded — one item pre-checked
+        Section(header: Text("Pre-selected (expanded)")) {
+            ContentLabelPicker(selectedLabels: $labelsWithSelection)
+        }
+
+        // Collapsed — nothing selected
+        Section(header: Text("Empty (collapsed)")) {
+            ContentLabelPicker(selectedLabels: $labelsEmpty)
+        }
     }
-    .environment(LabelDefinitionsCache())
+    .previewEnvironments()
+    .preferredColorScheme(.dark)
+    .tint(Color("AccentColor"))
 }

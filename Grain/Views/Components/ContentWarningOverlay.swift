@@ -75,21 +75,23 @@ struct LabelBadge: View {
     }
 }
 
-#Preview("ContentWarningOverlay") {
-    ContentWarningOverlay(name: "Nudity", action: .hide) {}
-        .frame(height: 200)
-}
+#Preview {
+    VStack(spacing: 24) {
+        ContentWarningOverlay(name: "Nudity", action: .hide) {}
+            .frame(height: 200)
 
-#Preview("MediaWarningOverlay") {
-    MediaWarningOverlay(name: "Sexual Content") {}
-        .frame(height: 200)
-        .background(Color.gray.opacity(0.2))
-}
+        MediaWarningOverlay(name: "Sexual Content") {}
+            .frame(height: 200)
+            .background(Color.gray.opacity(0.2))
 
-#Preview("LabelBadge") {
-    HStack {
-        LabelBadge(name: "sensitive")
-        LabelBadge(name: "gore")
+        HStack {
+            LabelBadge(name: "sensitive")
+            LabelBadge(name: "gore")
+        }
+        .padding()
     }
-    .padding()
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .background(Color.black)
+    .preferredColorScheme(.dark)
+    .tint(Color("AccentColor"))
 }

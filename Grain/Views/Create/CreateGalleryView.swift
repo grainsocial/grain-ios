@@ -3,8 +3,48 @@ import ImageIO
 import os
 import PhotosUI
 import SwiftUI
+import UIKit
 
 private let logger = Logger(subsystem: "social.grain.grain", category: "Create")
+private let createSignposter = OSSignposter(subsystem: "social.grain.grain", category: "PhotoLoading.TaskGroup")
+
+/// Limits concurrent photo-load tasks to avoid overwhelming the Swift cooperative thread pool.
+private actor LoadThrottle {
+    private let maxConcurrent: Int
+    private var active = 0
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    init(maxConcurrent: Int) {
+        self.maxConcurrent = maxConcurrent
+    }
+
+    func acquire(spid: OSSignpostID) async {
+        if active < maxConcurrent {
+            active += 1
+            let a = active
+            createSignposter.emitEvent("ThrottleAcquired", id: spid, "active=\(a),waiters=0")
+        } else {
+            let a = active, w = waiters.count
+            let waitState = createSignposter.beginInterval("ThrottleWait", id: spid, "active=\(a),waiters=\(w)")
+            await withCheckedContinuation { self.waiters.append($0) }
+            let a2 = active
+            createSignposter.endInterval("ThrottleWait", waitState, "active=\(a2)")
+        }
+    }
+
+    func release(spid: OSSignpostID) {
+        if let next = waiters.first {
+            waiters.removeFirst()
+            next.resume()
+            let a = active, w = waiters.count
+            createSignposter.emitEvent("ThrottleHandoff", id: spid, "active=\(a),waiters=\(w)")
+        } else {
+            active -= 1
+            let a = active
+            createSignposter.emitEvent("ThrottleReleased", id: spid, "active=\(a)")
+        }
+    }
+}
 
 struct CreateGalleryView: View {
     @Environment(AuthManager.self) private var auth
@@ -15,19 +55,34 @@ struct CreateGalleryView: View {
     @State private var isUploading = false
     @State private var errorMessage: String?
     @State private var resolvedLocation: (h3: String, name: String, address: [String: AnyCodable]?)?
-    @State private var locationQuery = ""
-    @State private var locationSuggestions: [NominatimResult] = []
-    @State private var isSearchingLocation = false
-    @State private var locationSearchTask: Task<Void, Never>?
     @State private var showCamera = false
     @State private var photoItems: [PhotoItem] = []
     @State private var mentionState = MentionAutocompleteState()
     @State private var postToBluesky = false
     @State private var selectedLabels: Set<String> = []
     @State private var selectedPhotoID: UUID?
+    @State private var photoLoadTask: Task<Void, Never>?
+    /// Picker item identifiers that the user removed via the editor's X button.
+    /// loadPickerPhotos skips these so deleted photos don't reappear.
+    /// Cleared when the user explicitly re-selects items in the picker.
+    @State private var editorRemovedIDs: Set<String> = []
+    @State private var lastPickerCount = 0
     @State private var photoLocationResult: NominatimResult?
     @State private var sendExif = true
     @State private var includeLocation = true
+    @State private var imageZoomState = ImageZoomState()
+    /// True from the moment a cell is touched (arming window) through the end of
+    /// the drag. Drives .scrollDisabled on the Form so neither the pre-fire hold
+    /// nor the drag itself lets the Form scroll underneath the reorder gesture.
+    @State private var isReordering = false
+    /// True for the duration of a strip↔grid↔captions mode morph inside
+    /// GalleryEditor. Drives `.scrollDisabled` alongside `isReordering` so
+    /// UIKit's UICollectionView doesn't adjust scroll offset mid-morph —
+    /// that adjustment shifts matched-geometry source/destination frames
+    /// into different scroll contexts, producing wrong-direction morphs.
+    @State private var isAnimatingMode = false
+    @State private var editorMode: EditorMode = .preview
+    @State private var showDiscardAlert = false
 
     let client: XRPCClient
     var onCreated: (() -> Void)?
@@ -35,73 +90,130 @@ struct CreateGalleryView: View {
     private let maxTitle = 100
     private let maxDescription = 1000
 
+    private var hasChanges: Bool {
+        !photoItems.isEmpty || !title.isEmpty || !description.isEmpty ||
+            resolvedLocation != nil || !selectedLabels.isEmpty
+    }
+
     var body: some View {
-        NavigationStack {
+        // The Form is wrapped in an outer ZStack so `ImageZoomOverlay` attaches at
+        // the ZStack level rather than to the Form directly. Applied to the Form,
+        // its `.overlay { ... }` content lives inside the Form's own clipping
+        // context (Form is a UICollectionView under the hood) which can leave the
+        // zoomed image visually beneath sibling chrome on some transitions. Mounting
+        // the overlay one level above guarantees it composites on top of every-
+        // thing, mirroring how FeedView nests its zoom overlay above ScrollView.
+        ZStack {
             Form {
                 photosSection
                 gallerySection
                 photoEditorSection
+                postPreviewSection
                 cameraDataSection
                 ContentLabelPicker(selectedLabels: $selectedLabels)
                 Section {
                     Toggle("Post to Bluesky", isOn: $postToBluesky)
+                } footer: {
+                    Text("Includes location, description, and the first 4 photos.")
                 }
                 errorSection
             }
-            .safeAreaInset(edge: .bottom) {
-                MentionSuggestionOverlay(state: mentionState) { suggestion in
-                    mentionState.complete(handle: suggestion.handle, in: &description)
-                }
-            }
-            .onChange(of: selectedPhotos) {
-                Task {
-                    await loadPickerPhotos()
-                    if let id = selectedPhotoID, !photoItems.contains(where: { $0.id == id }) {
-                        selectedPhotoID = photoItems.first?.id
-                    } else if selectedPhotoID == nil {
-                        selectedPhotoID = photoItems.first?.id
-                    }
-                    await detectLocation()
-                }
-            }
-            .fullScreenCover(isPresented: $showCamera) {
-                CameraPicker { image, metadata in
-                    let thumb = PhotoItem.makeThumbnail(from: image)
-                    let exif = metadata.flatMap { makeExifSummary(from: $0) }
-                    let item = PhotoItem(thumbnail: thumb, source: .camera(image, metadata: metadata), exifSummary: exif)
-                    photoItems.append(item)
-                    if selectedPhotoID == nil { selectedPhotoID = item.id }
-                }
-                .ignoresSafeArea()
-            }
-            .task {
-                if let authContext = await auth.authContext(),
-                   let prefs = try? await client.getPreferences(auth: authContext).preferences
-                {
-                    if let exif = prefs.includeExif { sendExif = exif }
-                    if let location = prefs.includeLocation { includeLocation = location }
-                }
-            }
-            .navigationTitle("New Gallery")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        Task { await createGallery() }
-                    } label: {
-                        if isUploading {
-                            ProgressView()
-                        } else {
-                            Text("Post")
-                                .bold()
-                        }
-                    }
-                    .disabled(title.isEmpty || photoItems.isEmpty || isUploading || title.count > maxTitle || description.count > maxDescription)
-                }
+            // Lock the Form's vertical scroll while the zoom overlay is up so a
+            // pinch that drifts vertically can't scroll the page underneath the
+            // overlay. Also stays locked during reorder, same as before.
+            .scrollDisabled(isReordering || isAnimatingMode || imageZoomState.showOverlay)
+            .scrollDismissesKeyboard(.interactively)
+            .background(SheetGestureDisabler(isDisabled: isReordering))
+        }
+        .interactiveDismissDisabled(isReordering)
+        .safeAreaInset(edge: .bottom) {
+            MentionSuggestionOverlay(state: mentionState) { suggestion in
+                mentionState.complete(handle: suggestion.handle, in: &description)
             }
         }
+        .onChange(of: selectedPhotos) {
+            // If the user added items in the picker, clear any editor-removed
+            // IDs that they re-selected so those photos load again.
+            if selectedPhotos.count > lastPickerCount {
+                let currentIDs = Set(selectedPhotos.compactMap(\.itemIdentifier))
+                editorRemovedIDs.subtract(currentIDs)
+            }
+            lastPickerCount = selectedPhotos.count
+
+            createSignposter.emitEvent("TaskSpawned", "source=selectedPhotos,count=\(selectedPhotos.count)")
+            photoLoadTask?.cancel()
+            photoLoadTask = Task {
+                await loadPickerPhotos()
+                guard !Task.isCancelled else { return }
+                if let id = selectedPhotoID, !photoItems.contains(where: { $0.id == id }) {
+                    selectedPhotoID = photoItems.first?.id
+                } else if selectedPhotoID == nil {
+                    selectedPhotoID = photoItems.first?.id
+                }
+                await detectLocation()
+            }
+        }
+        // Re-derive the suggested location whenever the *first* photo changes
+        // (reorder, removal, etc.) so "Use first photo location" stays accurate.
+        .onChange(of: photoItems.first?.id) {
+            createSignposter.emitEvent("TaskSpawned", "source=firstPhotoChange,itemCount=\(photoItems.count)")
+            Task { await detectLocation() }
+        }
+        .fullScreenCover(isPresented: $showCamera) {
+            CameraPicker { image, metadata in
+                let thumb = PhotoItem.makeThumbnail(from: image)
+                let carousel = PhotoItem.makeCarouselPreview(from: image, width: UIScreen.main.bounds.width)
+                let exif = metadata.flatMap { makeExifSummary(from: $0) }
+                let item = PhotoItem(thumbnail: thumb, carouselPreview: carousel, source: .camera(image, metadata: metadata), exifSummary: exif)
+                photoItems.append(item)
+                if selectedPhotoID == nil { selectedPhotoID = item.id }
+            }
+            .ignoresSafeArea()
+        }
+        .task {
+            if let authContext = await auth.authContext(),
+               let prefs = try? await client.getPreferences(auth: authContext).preferences
+            {
+                if let exif = prefs.includeExif { sendExif = exif }
+                if let location = prefs.includeLocation { includeLocation = location }
+            }
+        }
+        .navigationTitle("New Gallery")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    if hasChanges {
+                        showDiscardAlert = true
+                    } else {
+                        dismiss()
+                    }
+                } label: {
+                    Image(systemName: "xmark")
+                        .foregroundStyle(hasChanges ? Color.accentColor : .primary)
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    Task { await createGallery() }
+                } label: {
+                    if isUploading {
+                        ProgressView()
+                    } else {
+                        Text("Post")
+                            .bold()
+                    }
+                }
+                .disabled(title.isEmpty || photoItems.isEmpty || isUploading || title.count > maxTitle || description.count > maxDescription)
+            }
+        }
+        .interactiveDismissDisabled(hasChanges)
+        .alert("Discard gallery?", isPresented: $showDiscardAlert) {
+            Button("Discard", role: .destructive) { dismiss() }
+            Button("Keep Editing", role: .cancel) {}
+        }
+        .environment(imageZoomState)
+        .modifier(ImageZoomOverlay(zoomState: imageZoomState))
     }
 
     // MARK: - Form Sections
@@ -111,7 +223,9 @@ struct CreateGalleryView: View {
             PhotosPicker(
                 selection: $selectedPhotos,
                 maxSelectionCount: 20,
-                matching: .images
+                selectionBehavior: .continuousAndOrdered,
+                matching: .images,
+                photoLibrary: .shared()
             ) {
                 Label("Select Photos", systemImage: "photo.on.rectangle.angled")
             }
@@ -121,55 +235,46 @@ struct CreateGalleryView: View {
             } label: {
                 Label("Take Photo", systemImage: "camera")
             }
-
-            if !photoItems.isEmpty {
-                ReorderablePhotoStrip(items: $photoItems, selectedPhotoID: $selectedPhotoID)
-                Label("Touch and hold a photo to reorder", systemImage: "hand.draw")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
         }
     }
 
     @ViewBuilder
     private var photoEditorSection: some View {
         if !photoItems.isEmpty {
-            Section("Alt Text") {
-                Text("Alt text describes images for blind and low-vision users, and helps give context to everyone.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                ForEach($photoItems) { $item in
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(alignment: .top, spacing: 12) {
-                            Image(uiImage: item.thumbnail)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 60)
-
-                            TextField("Describe this photo...", text: $item.alt, axis: .vertical)
-                                .font(.subheadline)
-                                .lineLimit(2 ... 4)
-                        }
-                        if let exif = item.exifSummary {
-                            VStack(alignment: .leading, spacing: 2) {
-                                if let camera = exif.camera {
-                                    Text(camera).font(.caption)
-                                }
-                                HStack {
-                                    Text([exif.shutterSpeed, exif.iso].compactMap(\.self).joined(separator: "  "))
-                                        .font(.caption)
-                                    Spacer()
-                                    Text([exif.focalLength, exif.aperture].compactMap(\.self).joined(separator: "  "))
-                                        .font(.caption)
-                                }
-                            }
-                            .foregroundStyle(sendExif ? .secondary : .tertiary)
-                            .padding(.leading, 72)
-                        }
-                    }
-                    .padding(.vertical, 4)
+            GalleryEditor(
+                items: $photoItems,
+                selectedPhotoID: $selectedPhotoID,
+                isReordering: $isReordering,
+                isAnimatingMode: $isAnimatingMode,
+                mode: $editorMode,
+                sendExif: sendExif,
+                onDeleteItem: { item in
+                    guard case let .picker(pickerItem) = item.source,
+                          let id = pickerItem.itemIdentifier else { return }
+                    editorRemovedIDs.insert(id)
+                    selectedPhotos.removeAll { $0.itemIdentifier == id }
                 }
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var postPreviewSection: some View {
+        if editorMode == .preview, !photoItems.isEmpty {
+            Section {
+                PhotoCarouselView(
+                    items: photoItems,
+                    selectedPhotoID: $selectedPhotoID,
+                    sendExif: sendExif
+                )
+                .id(photoItems.count)
+                .listRowInsets(EdgeInsets())
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.black)
+            } header: {
+                Text("Preview")
             }
+            .transition(.opacity)
         }
     }
 
@@ -208,80 +313,13 @@ struct CreateGalleryView: View {
         }
     }
 
-    @ViewBuilder
     private var locationRow: some View {
-        if let loc = resolvedLocation {
-            HStack {
-                Label(loc.name, systemImage: "mappin.and.ellipse")
-                    .font(.subheadline)
-                    .lineLimit(1)
-                Spacer()
-                Button {
-                    resolvedLocation = nil
-                    locationQuery = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
-                }
-            }
-        } else {
-            if let photoLoc = photoLocationResult {
-                Button { selectLocation(photoLoc) } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: "location.fill")
-                            .foregroundStyle(.secondary)
-                            .frame(width: 20)
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text("Use photo location")
-                                .font(.subheadline)
-                            Text(photoLoc.name)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                .foregroundStyle(.primary)
-            }
-            locationSearchField
-            ForEach(locationSuggestions, id: \.placeId) { result in
-                Button {
-                    selectLocation(result)
-                } label: {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(result.name)
-                            .font(.subheadline)
-                            .foregroundStyle(.primary)
-                        if let context = result.context {
-                            Text(context)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private var locationSearchField: some View {
-        HStack {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
-            TextField("Search for a location...", text: $locationQuery)
-                .textInputAutocapitalization(.never)
-                .onChange(of: locationQuery) {
-                    locationSearchTask?.cancel()
-                    let query = locationQuery
-                    locationSearchTask = Task {
-                        try? await Task.sleep(for: .milliseconds(300))
-                        guard !Task.isCancelled else { return }
-                        await searchLocation(query: query)
-                    }
-                }
-            if isSearchingLocation {
-                ProgressView()
-                    .controlSize(.small)
-            }
-        }
+        LocationPickerRows(
+            resolvedLocation: $resolvedLocation,
+            photoLocationResult: photoLocationResult,
+            photoLocationLabel: "Use first photo location",
+            onSelectLocation: selectLocation
+        )
     }
 
     @ViewBuilder
@@ -325,56 +363,93 @@ struct CreateGalleryView: View {
             return pickerItem.itemIdentifier
         })
 
-        // Only load and append truly new selections
-        for item in selectedPhotos where !(item.itemIdentifier.map { existingIDs.contains($0) } ?? false) {
-            if let data = try? await item.loadTransferable(type: Data.self),
-               let image = UIImage(data: data)
-            {
-                let thumb = PhotoItem.makeThumbnail(from: image)
-                let exif = makeExifSummary(from: data)
-                photoItems.append(PhotoItem(thumbnail: thumb, source: .picker(item), exifSummary: exif))
+        let newSelections = selectedPhotos.filter {
+            let isExisting = $0.itemIdentifier.map { existingIDs.contains($0) } ?? false
+            let isRemoved = $0.itemIdentifier.map { editorRemovedIDs.contains($0) } ?? false
+            return !isExisting && !isRemoved
+        }
+        guard !newSelections.isEmpty else { return }
+
+        // Load all new items concurrently, preserving selection order.
+        // Capture screen width here (main actor) before task bodies run on
+        // background threads where UIScreen.main is unavailable.
+        let batchState = createSignposter.beginInterval("LoadPickerBatch", id: createSignposter.makeSignpostID(), "count=\(newSelections.count)")
+        let carouselWidth = UIScreen.main.bounds.width
+        var loaded: [(index: Int, item: PhotoItem)] = []
+        let throttle = LoadThrottle(maxConcurrent: 8)
+        await withTaskGroup(of: (Int, PhotoItem?).self) { group in
+            for (index, pickerItem) in newSelections.enumerated() {
+                let spid = createSignposter.makeSignpostID()
+                group.addTask {
+                    await throttle.acquire(spid: spid)
+                    defer { Task { await throttle.release(spid: spid) } }
+                    let state = createSignposter.beginInterval("LoadPhoto", id: spid, "index=\(index)")
+                    guard let data = try? await pickerItem.loadTransferable(type: Data.self),
+                          let image = UIImage(data: data)
+                    else {
+                        createSignposter.endInterval("LoadPhoto", state, "result=nil")
+                        return (index, nil)
+                    }
+                    let thumb = PhotoItem.makeThumbnail(from: image)
+                    let carousel = PhotoItem.makeCarouselPreview(from: image, width: carouselWidth)
+                    let exif = makeExifSummary(from: data)
+                    createSignposter.endInterval("LoadPhoto", state, "result=ok")
+                    return (index, PhotoItem(thumbnail: thumb, carouselPreview: carousel, source: .picker(pickerItem), exifSummary: exif))
+                }
+            }
+            for await (index, item) in group {
+                if let item { loaded.append((index, item)) }
             }
         }
+        createSignposter.endInterval("LoadPickerBatch", batchState, "loaded=\(loaded.count)")
+
+        // Dedup: with .continuousAndOrdered the picker fires onChange per-item,
+        // so a previous load may have already added some of these.
+        let alreadyLoaded = Set(photoItems.compactMap { item -> String? in
+            guard case let .picker(p) = item.source else { return nil }
+            return p.itemIdentifier
+        })
+        let deduped = loaded.sorted(by: { $0.index < $1.index }).map(\.item).filter { item in
+            guard case let .picker(p) = item.source else { return true }
+            return !(p.itemIdentifier.map { alreadyLoaded.contains($0) } ?? false)
+        }
+        photoItems += deduped
     }
 
     private func detectLocation() async {
-        // Always extract GPS from the first photo so "Use photo location" can be offered
+        // Always derive from the *currently first* photo so reordering re-runs detection.
         photoLocationResult = nil
-        for item in photoItems {
-            var gps: (latitude: Double, longitude: Double)?
+        guard let first = photoItems.first else { return }
 
-            switch item.source {
-            case let .picker(pickerItem):
-                if let data = try? await pickerItem.loadTransferable(type: Data.self) {
-                    gps = ImageProcessing.extractGPS(from: data)
-                }
-            case .camera:
-                continue
+        let state = createSignposter.beginInterval("DetectLocation", id: createSignposter.makeSignpostID())
+        var gps: (latitude: Double, longitude: Double)?
+        switch first.source {
+        case let .picker(pickerItem):
+            if let data = try? await pickerItem.loadTransferable(type: Data.self) {
+                gps = ImageProcessing.extractGPS(from: data)
             }
-
-            guard let gps else { continue }
-
-            if let result = await LocationServices.reverseGeocode(latitude: gps.latitude, longitude: gps.longitude) {
-                photoLocationResult = result
-                if includeLocation, resolvedLocation == nil {
-                    selectLocation(result)
-                }
-            }
-            break
+        case .camera:
+            createSignposter.endInterval("DetectLocation", state, "source=camera,skipped")
+            return
         }
-    }
 
-    private func searchLocation(query: String) async {
-        isSearchingLocation = true
-        defer { isSearchingLocation = false }
-        locationSuggestions = await LocationServices.searchLocation(query: query)
+        guard let gps else {
+            createSignposter.endInterval("DetectLocation", state, "result=noGPS")
+            return
+        }
+
+        if let result = await LocationServices.reverseGeocode(latitude: gps.latitude, longitude: gps.longitude) {
+            photoLocationResult = result
+            if includeLocation, resolvedLocation == nil {
+                selectLocation(result)
+            }
+        }
+        createSignposter.endInterval("DetectLocation", state, "result=ok")
     }
 
     private func selectLocation(_ result: NominatimResult) {
         let h3 = LocationServices.latLonToH3(latitude: result.latitude, longitude: result.longitude)
         resolvedLocation = (h3: h3, name: result.name, address: result.address)
-        locationQuery = ""
-        locationSuggestions = []
     }
 
     // MARK: - Create Gallery
@@ -497,12 +572,39 @@ struct ExifSummary {
 struct PhotoItem: Identifiable {
     let id = UUID()
     let thumbnail: UIImage
+    /// Screen-width image for the carousel. Built at creation time via
+    /// `UIGraphicsImageRenderer`, which forces a full decode during the draw
+    /// call — so the resulting UIImage is backed by a decoded bitmap and
+    /// displays with zero decode work. Kept in memory for the editor session
+    /// so the carousel never stalls on first draw regardless of scroll speed.
+    let carouselPreview: UIImage
     let source: PhotoSource
     var alt: String = ""
     var exifSummary: ExifSummary?
 
+    /// Thumbnail's natural width-to-height ratio. Computed once from `thumbnail.size`
+    /// and used everywhere a cell needs aspect geometry — single source of truth.
+    var naturalAspect: CGFloat {
+        let h = thumbnail.size.height
+        guard h > 0 else { return 1 }
+        return thumbnail.size.width / h
+    }
+
     static func makeThumbnail(from image: UIImage, maxSize: CGFloat = 150) -> UIImage {
         let scale = min(maxSize / image.size.width, maxSize / image.size.height, 1)
+        let newSize = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+        let renderer = UIGraphicsImageRenderer(size: newSize)
+        return renderer.image { _ in
+            image.draw(in: CGRect(origin: .zero, size: newSize))
+        }
+    }
+
+    /// Downscale `image` so its width matches `width` (default: screen width),
+    /// preserving aspect ratio. The renderer applies UIScreen.main.scale so
+    /// the output is pixel-perfect at 1× zoom in the carousel without
+    /// upscaling on any standard iPhone.
+    static func makeCarouselPreview(from image: UIImage, width: CGFloat) -> UIImage {
+        let scale = min(width / image.size.width, 1)
         let newSize = CGSize(width: image.size.width * scale, height: image.size.height * scale)
         let renderer = UIGraphicsImageRenderer(size: newSize)
         return renderer.image { _ in
@@ -712,7 +814,7 @@ private func buildExifSummary(exifDict: [String: Any]?, tiffDict: [String: Any]?
         summary.shutterSpeed = et < 1 ? "1/\(Int((1 / et).rounded()))s" : "\(et)s"
     }
     if let fn = exifDict?[kCGImagePropertyExifFNumber as String] as? Double {
-        summary.aperture = "f/\(fn)"
+        summary.aperture = formatAperture(fn)
     }
     if let isoRaw = exifDict?[kCGImagePropertyExifISOSpeedRatings as String] as? [Any],
        let iso = (isoRaw.first as? NSNumber)?.intValue
@@ -766,8 +868,7 @@ private func extractGalleryExif(from data: Data) -> [String: AnyCodable]? {
     NavigationStack {
         CreateGalleryViewPreview(photoItems: $photos, selectedPhotoID: $selectedID)
     }
-    .environment(AuthManager())
-    .environment(LabelDefinitionsCache())
+    .previewEnvironments()
     .onAppear { selectedID = photos.first?.id }
 }
 
@@ -789,11 +890,58 @@ private struct CreateGalleryViewPreview: View {
             } header: {
                 Text("Gallery")
             }
+            Section {
+                GalleryEditor(
+                    items: $photoItems,
+                    selectedPhotoID: $selectedPhotoID,
+                    isReordering: .constant(false),
+                    isAnimatingMode: .constant(false),
+                    mode: .constant(.preview),
+                    sendExif: true
+                )
+            }
         }
         .navigationTitle("New Gallery")
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("Cancel") {} }
             ToolbarItem(placement: .topBarTrailing) { Button("Post") {}.bold() }
+        }
+        .grainPreview()
+    }
+}
+
+// MARK: - Sheet gesture disabler
+
+/// Disables the `UISheetPresentationController`'s pan gesture while active so
+/// the card cannot move at all — `interactiveDismissDisabled` only prevents
+/// the dismiss *completion*, not the downward *motion*. Used during photo
+/// reorder so the sheet stays perfectly still while a photo is picked up.
+private struct SheetGestureDisabler: UIViewRepresentable {
+    let isDisabled: Bool
+
+    func makeUIView(context _: Context) -> UIView {
+        UIView()
+    }
+
+    func updateUIView(_ uiView: UIView, context _: Context) {
+        // Capture before hopping to async so we get the value at call time.
+        let disabled = isDisabled
+        DispatchQueue.main.async {
+            // Walk the responder chain from our UIView up to the first
+            // UIViewController whose presentationController is the sheet.
+            var responder: UIResponder? = uiView
+            while let r = responder {
+                if let vc = r as? UIViewController,
+                   vc.presentationController is UISheetPresentationController,
+                   let presentedView = vc.presentationController?.presentedView
+                {
+                    for gesture in presentedView.gestureRecognizers ?? [] where gesture is UIPanGestureRecognizer {
+                        gesture.isEnabled = !disabled
+                    }
+                    return
+                }
+                responder = r.next
+            }
         }
     }
 }

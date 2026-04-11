@@ -809,8 +809,6 @@ struct StatView: View {
 }
 
 #Preview {
-    ProfileView(client: XRPCClient(baseURL: AuthManager.serverURL), did: "did:plc:preview")
-        .environment(AuthManager())
-        .environment(ViewedStoryStorage())
-        .environment(LabelDefinitionsCache())
+    ProfileView(client: .preview, did: "did:plc:preview")
+        .previewEnvironments()
 }

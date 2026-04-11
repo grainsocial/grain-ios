@@ -282,10 +282,15 @@ struct FollowListItem: Identifiable {
 }
 
 #Preview {
-    FollowListView(
-        client: XRPCClient(baseURL: AuthManager.serverURL),
-        did: "did:plc:preview",
-        mode: .followers
-    )
-    .environment(AuthManager())
+    NavigationStack {
+        FollowListView(
+            client: .preview,
+            did: "did:plc:preview",
+            mode: .followers
+        )
+    }
+    .previewEnvironments()
+    .preferredColorScheme(.dark)
+    .tint(Color("AccentColor"))
+    .frame(maxHeight: .infinity, alignment: .top)
 }

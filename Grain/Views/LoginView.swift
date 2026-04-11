@@ -317,5 +317,5 @@ private struct ActorSuggestion: Identifiable, Equatable {
 
 #Preview {
     LoginView()
-        .environment(AuthManager())
+        .previewEnvironments()
 }

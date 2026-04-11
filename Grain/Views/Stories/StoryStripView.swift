@@ -131,5 +131,5 @@ struct StoryStripView: View {
         onAuthorTap: { _, _ in },
         onCreateTap: {}
     )
-    .environment(ViewedStoryStorage())
+    .previewEnvironments()
 }

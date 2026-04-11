@@ -21,12 +21,12 @@ final class AuthManager {
     private var refreshTask: Task<Void, Error>?
 
     #if PRODUCTION_API || !targetEnvironment(simulator)
-        static let serverURL = URL(string: "https://grain.social")!
+        nonisolated static let serverURL = URL(string: "https://grain.social")!
     #else
-        static let serverURL = URL(string: "http://127.0.0.1:3000")!
+        nonisolated static let serverURL = URL(string: "http://127.0.0.1:3000")!
     #endif
-    static let clientID = "grain-native://app"
-    static let redirectURI = "grain://oauth/callback"
+    nonisolated static let clientID = "grain-native://app"
+    nonisolated static let redirectURI = "grain://oauth/callback"
 
     init() {
         // Restore session from Keychain — allow expired tokens since we can refresh

@@ -222,12 +222,9 @@ struct LocationDestination: Hashable, Identifiable {
 
 #Preview {
     LocationFeedView(
-        client: XRPCClient(baseURL: AuthManager.serverURL),
+        client: .preview,
         h3Index: "8928308280fffff",
         locationName: "San Francisco"
     )
-    .environment(AuthManager())
-    .environment(StoryStatusCache())
-    .environment(ViewedStoryStorage())
-    .environment(LabelDefinitionsCache())
+    .previewEnvironments()
 }

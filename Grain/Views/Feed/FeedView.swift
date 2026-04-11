@@ -13,6 +13,7 @@ struct FeedView: View {
     @State private var deepLinkGalleryUri: String?
     @State private var deepLinkStoryAuthor: GrainStoryAuthor?
     @State private var showFeedsManagement = false
+    @State private var feedRefreshID = UUID()
 
     let client: XRPCClient
     @Binding var pendingDeepLink: DeepLink?
@@ -47,6 +48,7 @@ struct FeedView: View {
                         },
                         prefsViewModel: prefsViewModel
                     )
+                    .id(feedRefreshID)
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
@@ -107,6 +109,14 @@ struct FeedView: View {
             }
             .navigationDestination(item: $deepLinkGalleryUri) { uri in
                 GalleryDetailView(client: client, galleryUri: uri)
+            }
+            .sheet(isPresented: $showCreate) {
+                NavigationStack {
+                    CreateGalleryView(client: client) {
+                        showCreate = false
+                        feedRefreshID = UUID()
+                    }
+                }
             }
             .fullScreenCover(item: $deepLinkStoryAuthor) { author in
                 StoryViewer(
@@ -431,9 +441,6 @@ private struct FeedTabContent: View {
 }
 
 #Preview {
-    FeedView(client: XRPCClient(baseURL: AuthManager.serverURL))
-        .environment(AuthManager())
-        .environment(StoryStatusCache())
-        .environment(ViewedStoryStorage())
-        .environment(LabelDefinitionsCache())
+    FeedView(client: .preview)
+        .previewEnvironments()
 }

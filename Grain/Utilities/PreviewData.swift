@@ -209,16 +209,36 @@ enum PreviewData {
             guard let path = Bundle.main.url(forResource: entry.name, withExtension: "jpg")?.path,
                   let fullImage = UIImage(contentsOfFile: path) else { return nil }
             let thumb = PhotoItem.makeThumbnail(from: fullImage)
-            var item = PhotoItem(thumbnail: thumb, source: .camera(fullImage, metadata: nil))
+            let carousel = PhotoItem.makeCarouselPreview(from: fullImage, width: 393)
+            var item = PhotoItem(thumbnail: thumb, carouselPreview: carousel, source: .camera(fullImage, metadata: nil))
             item.alt = entry.alt
             return item
         }
         // Pad with gradient fallbacks if fewer than 15 items total
         for (colors, label) in fallbackColors {
             let thumb = gradientThumb(colors: colors)
-            var item = PhotoItem(thumbnail: thumb, source: .camera(thumb, metadata: nil))
+            var item = PhotoItem(thumbnail: thumb, carouselPreview: thumb, source: .camera(thumb, metadata: nil))
             item.alt = label
             items.append(item)
+        }
+        return items
+    }
+
+    /// Same as `photoItems` but with mock EXIF on every even-indexed item,
+    /// so previews that show the ExifChip can see both the with/without states.
+    static var photoItemsWithExif: [PhotoItem] {
+        let mockExif = ExifSummary(
+            camera: "RICOH GR IIIx",
+            lens: nil,
+            exposure: nil,
+            shutterSpeed: "1/250",
+            iso: "400",
+            focalLength: "40mm",
+            aperture: "f/2.8"
+        )
+        var items = photoItems
+        for i in stride(from: 0, to: items.count, by: 2) {
+            items[i].exifSummary = mockExif
         }
         return items
     }

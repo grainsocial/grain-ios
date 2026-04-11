@@ -289,9 +289,8 @@ struct CommentRow: View {
 
 #Preview {
     GalleryDetailView(
-        client: XRPCClient(baseURL: AuthManager.serverURL),
+        client: .preview,
         galleryUri: "at://did:plc:preview/social.grain.gallery/r1"
     )
-    .environment(AuthManager())
-    .environment(LabelDefinitionsCache())
+    .previewEnvironments()
 }

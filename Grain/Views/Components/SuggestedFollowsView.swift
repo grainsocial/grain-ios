@@ -99,12 +99,19 @@ struct SuggestedFollowsView: View {
 
 #Preview {
     @Previewable @State var suggestions = [
-        SuggestedItem(did: "did:plc:a", handle: "alice.bsky.social", displayName: "Alice", description: "Photographer"),
-        SuggestedItem(did: "did:plc:b", handle: "bob.bsky.social", displayName: "Bob"),
+        SuggestedItem(did: "did:plc:a", handle: "alice.grain.social", displayName: "Alice", description: "Landscape & travel photographer based in SF.", followersCount: 1240),
+        SuggestedItem(did: "did:plc:b", handle: "bob.grain.social", displayName: "Bob", description: "Street photography from Tokyo.", followersCount: 873),
+        SuggestedItem(did: "did:plc:c", handle: "cara.grain.social", displayName: "Cara", description: "Film photographer. Mostly medium format.", followersCount: 4200),
+        SuggestedItem(did: "did:plc:d", handle: "david.grain.social", displayName: "David", description: "Documentary work and long-form essays.", followersCount: 310),
+        SuggestedItem(did: "did:plc:e", handle: "elena.grain.social", displayName: "Elena", description: "Portrait & editorial. Available for hire.", followersCount: 6700),
+        SuggestedItem(did: "did:plc:f", handle: "felix.grain.social", displayName: "Felix", description: "Night sky and astrophotography.", followersCount: 520),
+        SuggestedItem(did: "did:plc:g", handle: "grace.grain.social", displayName: "Grace", description: "Color theory nerd. Fuji only.", followersCount: 2100),
     ]
     SuggestedFollowsView(
-        client: XRPCClient(baseURL: AuthManager.serverURL),
+        client: .preview,
         suggestions: $suggestions
     )
-    .environment(AuthManager())
+    .previewEnvironments()
+    .preferredColorScheme(.dark)
+    .tint(Color("AccentColor"))
 }

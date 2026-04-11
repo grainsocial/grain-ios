@@ -96,4 +96,6 @@ struct ExpandableDescriptionView: View {
         )
     }
     .padding()
+    .preferredColorScheme(.dark)
+    .tint(Color("AccentColor"))
 }

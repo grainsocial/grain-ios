@@ -43,9 +43,10 @@ final class FeedEndpointModelTests: XCTestCase {
 
     // MARK: - PinnedFeed.defaults
 
-    func testDefaultsContainsTwoFeeds() {
-        XCTAssertEqual(PinnedFeed.defaults.count, 2)
+    func testDefaultsContainsThreeFeeds() {
+        XCTAssertEqual(PinnedFeed.defaults.count, 3)
         XCTAssertEqual(PinnedFeed.defaults[0].id, "recent")
         XCTAssertEqual(PinnedFeed.defaults[1].id, "following")
+        XCTAssertEqual(PinnedFeed.defaults[2].id, "foryou")
     }
 }

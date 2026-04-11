@@ -13,10 +13,6 @@ struct StoryCreateView: View {
     @State private var previewImage: UIImage?
     @State private var showCamera = false
     @State private var resolvedLocation: (h3: String, name: String, address: [String: AnyCodable]?)?
-    @State private var locationQuery = ""
-    @State private var locationSuggestions: [NominatimResult] = []
-    @State private var isSearchingLocation = false
-    @State private var locationSearchTask: Task<Void, Never>?
     @State private var photoLocationResult: NominatimResult?
     @State private var includeLocation = true
     @State private var isUploading = false
@@ -48,76 +44,11 @@ struct StoryCreateView: View {
                 }
 
                 Section("Location") {
-                    if let loc = resolvedLocation {
-                        HStack {
-                            Label(loc.name, systemImage: "mappin.and.ellipse")
-                                .font(.subheadline)
-                                .lineLimit(1)
-                            Spacer()
-                            Button {
-                                resolvedLocation = nil
-                                locationQuery = ""
-                            } label: {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    } else {
-                        if let photoLoc = photoLocationResult {
-                            Button { selectLocation(photoLoc) } label: {
-                                HStack(spacing: 10) {
-                                    Image(systemName: "location.fill")
-                                        .foregroundStyle(.secondary)
-                                        .frame(width: 20)
-                                    VStack(alignment: .leading, spacing: 1) {
-                                        Text("Use photo location")
-                                            .font(.subheadline)
-                                        Text(photoLoc.name)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                            }
-                            .foregroundStyle(.primary)
-                        }
-
-                        HStack {
-                            Image(systemName: "magnifyingglass")
-                                .foregroundStyle(.secondary)
-                            TextField("Search for a location...", text: $locationQuery)
-                                .textInputAutocapitalization(.never)
-                                .onChange(of: locationQuery) {
-                                    locationSearchTask?.cancel()
-                                    let query = locationQuery
-                                    locationSearchTask = Task {
-                                        try? await Task.sleep(for: .milliseconds(300))
-                                        guard !Task.isCancelled else { return }
-                                        await searchLocation(query: query)
-                                    }
-                                }
-                            if isSearchingLocation {
-                                ProgressView()
-                                    .controlSize(.small)
-                            }
-                        }
-
-                        ForEach(locationSuggestions, id: \.placeId) { result in
-                            Button {
-                                selectLocation(result)
-                            } label: {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(result.name)
-                                        .font(.subheadline)
-                                        .foregroundStyle(.primary)
-                                    if let context = result.context {
-                                        Text(context)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    LocationPickerRows(
+                        resolvedLocation: $resolvedLocation,
+                        photoLocationResult: photoLocationResult,
+                        onSelectLocation: selectLocation
+                    )
                 }
 
                 ContentLabelPicker(selectedLabels: $selectedLabels)
@@ -182,8 +113,6 @@ struct StoryCreateView: View {
         }
         selectedPhoto = nil
         resolvedLocation = nil
-        locationQuery = ""
-        locationSuggestions = []
         photoLocationResult = nil
     }
 
@@ -202,8 +131,6 @@ struct StoryCreateView: View {
         previewImage = image
 
         resolvedLocation = nil
-        locationQuery = ""
-        locationSuggestions = []
         photoLocationResult = nil
         if let gps = ImageProcessing.extractGPS(from: data),
            let result = await LocationServices.reverseGeocode(latitude: gps.latitude, longitude: gps.longitude)
@@ -304,21 +231,15 @@ struct StoryCreateView: View {
 
     // MARK: - Location
 
-    private func searchLocation(query: String) async {
-        isSearchingLocation = true
-        defer { isSearchingLocation = false }
-        locationSuggestions = await LocationServices.searchLocation(query: query)
-    }
-
     private func selectLocation(_ result: NominatimResult) {
         let h3 = LocationServices.latLonToH3(latitude: result.latitude, longitude: result.longitude)
         resolvedLocation = (h3: h3, name: result.name, address: result.address)
-        locationQuery = ""
-        locationSuggestions = []
     }
 }
 
 #Preview {
-    StoryCreateView(client: XRPCClient(baseURL: AuthManager.serverURL))
-        .environment(AuthManager())
+    StoryCreateView(client: .preview)
+        .previewEnvironments()
+        .preferredColorScheme(.dark)
+        .tint(Color("AccentColor"))
 }
