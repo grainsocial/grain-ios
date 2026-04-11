@@ -51,6 +51,9 @@ targets:
       configs:
         Debug:
           CODE_SIGN_ENTITLEMENTS: Grain/Grain-Debug.entitlements
+          GRAIN_OS_LOG_LEVEL: Debug
+        Release:
+          GRAIN_OS_LOG_LEVEL: Default
     dependencies:
       - package: Nuke
         product: Nuke
@@ -77,6 +80,12 @@ targets:
         UIAppFonts:
           - Syne-Variable.ttf
         UILaunchScreen: {}
+        OSLogPreferences:
+          social.grain.grain:
+            DEFAULT-OPTIONS:
+              Level:
+                Enable: "$(GRAIN_OS_LOG_LEVEL)"
+                Persist: "$(GRAIN_OS_LOG_LEVEL)"
 
   GrainTests:
     type: bundle.unit-test
