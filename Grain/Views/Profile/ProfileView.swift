@@ -19,7 +19,7 @@ struct ProfileView: View {
     @State private var showStoryCreate = false
     @State private var showAvatarOverlay = false
     @State private var viewModel: ProfileDetailViewModel
-    @State private var selectedGalleryUri: String?
+    @State private var selectedGallery: ProfileGallerySelection?
     @State private var selectedProfileDid: String?
     @State private var selectedHashtag: String?
     @State private var deletedGalleryUri: String?
@@ -383,9 +383,15 @@ struct ProfileView: View {
                     }
                 }
             }
-            .navigationDestination(item: $selectedGalleryUri) { uri in
-                ProfileGalleryFeedView(viewModel: viewModel, client: client, did: did, initialUri: uri)
-                    .navigationTransition(.zoom(sourceID: uri, in: galleryZoomNS))
+            .navigationDestination(item: $selectedGallery) { selection in
+                ProfileGalleryFeedView(
+                    viewModel: viewModel,
+                    client: client,
+                    did: did,
+                    initialUri: selection.uri,
+                    source: selection.source
+                )
+                .navigationTransition(.zoom(sourceID: selection.uri, in: galleryZoomNS))
             }
             .navigationDestination(item: $selectedProfileDid) { did in
                 ProfileView(client: client, did: did)
@@ -680,9 +686,9 @@ struct ProfileView: View {
             ], spacing: 2) {
                 ForEach(viewModel.galleries) { gallery in
                     Button {
-                        selectedGalleryUri = nil
+                        selectedGallery = nil
                         DispatchQueue.main.async {
-                            selectedGalleryUri = gallery.uri
+                            selectedGallery = ProfileGallerySelection(uri: gallery.uri, source: .galleries)
                         }
                     } label: {
                         Color.clear
@@ -793,7 +799,11 @@ struct ProfileView: View {
 
     @ViewBuilder
     private var favoritesGrid: some View {
-        if viewModel.favoriteGalleries.isEmpty, !viewModel.isLoading {
+        if viewModel.favoriteGalleries.isEmpty, !viewModel.favoritesLoaded {
+            ProgressView()
+                .frame(maxWidth: .infinity)
+                .padding(.top, 60)
+        } else if viewModel.favoriteGalleries.isEmpty {
             Text("No favorites yet")
                 .font(.subheadline)
                 .foregroundStyle(.tertiary)
@@ -807,9 +817,9 @@ struct ProfileView: View {
             ], spacing: 2) {
                 ForEach(viewModel.favoriteGalleries) { gallery in
                     Button {
-                        selectedGalleryUri = nil
+                        selectedGallery = nil
                         DispatchQueue.main.async {
-                            selectedGalleryUri = gallery.uri
+                            selectedGallery = ProfileGallerySelection(uri: gallery.uri, source: .favorites)
                         }
                     } label: {
                         Color.clear

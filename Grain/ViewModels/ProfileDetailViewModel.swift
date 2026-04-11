@@ -13,6 +13,12 @@ final class ProfileDetailViewModel {
     var isLoading = false
     var error: Error?
     var showReauthAlert = false
+    /// Set to `true` only after the first favorites network fetch completes.
+    /// Views should use this (not `favoriteGalleries.isEmpty`) to decide between
+    /// "loading" and "empty" — an empty array before the server has answered is
+    /// not the same as a confirmed empty list.
+    var favoritesLoaded = false
+    var isLoadingFavorites = false
 
     private var galleryCursor: String?
     private var hasMoreGalleries = true
@@ -21,8 +27,11 @@ final class ProfileDetailViewModel {
     private var archiveLoaded = false
     private var favoritesCursor: String?
     private var hasMoreFavorites = true
-    private var favoritesLoaded = false
     private let client: XRPCClient
+
+    /// Max favorites persisted to disk. Enough for an instant top-of-list on
+    /// re-open without bloating the cache.
+    private static let favoritesDiskCacheLimit = 30
 
     init(client: XRPCClient) {
         self.client = client
@@ -31,6 +40,16 @@ final class ProfileDetailViewModel {
     func load(did: String, viewer: String? = nil, auth: AuthContext? = nil) async {
         isLoading = true
         error = nil
+        favoritesLoaded = false
+        archiveLoaded = false
+
+        let isOwnProfile = viewer != nil && viewer == did
+        if isOwnProfile, favoriteGalleries.isEmpty {
+            let cached = FeedCache.shared.load(key: Self.favoritesCacheKey(did: did))
+            if !cached.isEmpty {
+                favoriteGalleries = cached
+            }
+        }
 
         do {
             async let profileFetch = client.getActorProfile(actor: did, viewer: viewer, auth: auth)
@@ -51,12 +70,14 @@ final class ProfileDetailViewModel {
             hasMoreGalleries = feedResult.cursor != nil
             stories = storiesResult.stories
             knownFollowers = await knownFollowersFetch
-            favoritesLoaded = false
-            archiveLoaded = false
         } catch {
             self.error = error
         }
         isLoading = false
+
+        if isOwnProfile {
+            Task { await self.loadFavorites(did: did, auth: auth) }
+        }
     }
 
     func loadMoreGalleries(did: String, auth: AuthContext? = nil) async {
@@ -98,14 +119,25 @@ final class ProfileDetailViewModel {
     }
 
     func loadFavorites(did: String, auth: AuthContext? = nil) async {
-        guard !favoritesLoaded else { return }
-        favoritesLoaded = true
+        guard !favoritesLoaded, !isLoadingFavorites else { return }
+        isLoadingFavorites = true
         do {
             let response = try await client.getActorFavorites(actor: did, auth: auth)
             favoriteGalleries = response.items ?? []
             favoritesCursor = response.cursor
             hasMoreFavorites = response.cursor != nil
+            let toCache = Array(favoriteGalleries.prefix(Self.favoritesDiskCacheLimit))
+            let key = Self.favoritesCacheKey(did: did)
+            Task.detached(priority: .utility) {
+                FeedCache.shared.save(toCache, key: key)
+            }
         } catch {}
+        favoritesLoaded = true
+        isLoadingFavorites = false
+    }
+
+    private static func favoritesCacheKey(did: String) -> String {
+        "favorites_\(did)"
     }
 
     func loadMoreFavorites(did: String, auth: AuthContext? = nil) async {
