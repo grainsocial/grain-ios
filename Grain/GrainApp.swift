@@ -8,6 +8,7 @@ private let appLogger = Logger(subsystem: "social.grain.grain", category: "AppLa
 @main
 struct GrainApp: App {
     init() {
+        appSignposter.emitEvent("GrainAppInitBegin")
         // Defer Nuke DataCache setup off the main-thread init path — no images
         // load during the ~800ms before MainTabView.task fires, so this is safe.
         Task.detached(priority: .userInitiated) {
@@ -22,6 +23,7 @@ struct GrainApp: App {
             appSignposter.endInterval("NukePipelineSetup", state)
             appLogger.debug("[NukePipelineSetup] end")
         }
+        appSignposter.emitEvent("GrainAppInitEnd")
     }
 
     @UIApplicationDelegateAdaptor private var appDelegate: AppDelegate
@@ -35,8 +37,10 @@ struct GrainApp: App {
     var body: some Scene {
         WindowGroup {
             let _ = appSignposter.emitEvent("WindowGroupBodyBegin")
+            let isAuthed = authManager.isAuthenticated
+            let _ = appSignposter.emitEvent("AuthGateResolved")
             Group {
-                if authManager.isAuthenticated {
+                if isAuthed {
                     MainTabView(pendingDeepLink: $pendingDeepLink)
                         .environment(authManager)
                         .environment(pushManager)
