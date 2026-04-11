@@ -191,6 +191,7 @@ struct StoryViewer: View {
         }
         .clipped()
         .background(Color.black.ignoresSafeArea())
+        .preferredColorScheme(.dark)
         .background(
             DragToDismissInstaller(
                 handle: fadeDismissHandle,
