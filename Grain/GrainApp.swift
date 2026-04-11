@@ -25,6 +25,15 @@ struct GrainApp: App {
             appSignposter.endInterval("NukePipelineSetup", state)
             appLogger.debug("[NukePipelineSetup] end")
         }
+        Task.detached(priority: .userInitiated) {
+            let spid = appSignposter.makeSignpostID()
+            let state = appSignposter.beginInterval("ConnectionPreheat", id: spid)
+            var req = URLRequest(url: AuthManager.serverURL.appendingPathComponent("_health"))
+            req.httpMethod = "GET"
+            req.timeoutInterval = 5
+            _ = try? await URLSession.shared.data(for: req)
+            appSignposter.endInterval("ConnectionPreheat", state)
+        }
         appSignposter.emitEvent("GrainAppInitEnd")
     }
 
