@@ -12,18 +12,8 @@ final class ViewedStoryStorage {
     private var saveTask: Task<Void, Never>?
 
     init() {
-        #if DEBUG
-            Self.wipeDefaults()
-        #endif
         load()
     }
-
-    #if DEBUG
-        private static func wipeDefaults() {
-            UserDefaults.standard.removeObject(forKey: urisKey)
-            UserDefaults.standard.removeObject(forKey: authorKey)
-        }
-    #endif
 
     private static let dateFormatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
