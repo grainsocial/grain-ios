@@ -40,7 +40,6 @@ struct PhotoThumbnailCell: View {
                     RoundedRectangle(cornerRadius: geometry.maskCornerRadius, style: .continuous)
                         .strokeBorder(Color.accentColor, lineWidth: isSelected ? 2.5 : 0)
                 )
-                .opacity(geometry.mode == .preview && !isSelected && !isDragging ? 0.5 : 1.0)
                 .overlay(alignment: .bottomTrailing) {
                     altPill.opacity(hideDelete ? 0 : 1)
                 }
