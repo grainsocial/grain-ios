@@ -16,7 +16,7 @@ struct MainTabView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedTab: AppTab = .feed
     @State private var commentPresenter = StoryCommentPresenter()
-    @State private var client = XRPCClient(baseURL: AuthManager.serverURL)
+    @State private var client: XRPCClient?
     @State private var showCreate = false
     @State private var avatarTabImage: UIImage?
     @State private var feedRefreshID = UUID()
@@ -47,41 +47,47 @@ struct MainTabView: View {
     var body: some View {
         let _ = launchSignposter.emitEvent("MainTabViewBodyBegin")
         let _ = Self.badgeAppearanceConfigured
-        let _ = launchSignposter.emitEvent("TabViewBodyBegin")
-        TabView(selection: $selectedTab) {
-            Tab("Feed", systemImage: "photo.on.rectangle", value: AppTab.feed) {
-                FeedView(client: client, pendingDeepLink: $pendingDeepLink, showCreate: $showCreate)
-                    .id(feedRefreshID)
-            }
-
-            Tab("Search", systemImage: "magnifyingglass", value: AppTab.search) {
-                SearchView(client: client)
-            }
-
-            Tab("Notifications", systemImage: "bell", value: AppTab.notifications) {
-                NotificationsView(client: client, viewModel: notificationsVM)
-            }
-            .badge(notificationsVM.unseenCount)
-
-            Tab(value: AppTab.profile) {
-                if let did = auth.userDID {
-                    ProfileView(client: client, did: did, isRoot: true)
-                }
-            } label: {
-                if let img = avatarTabImage {
-                    Label {
-                        Text("Profile")
-                    } icon: {
-                        Image(uiImage: img)
-                            .renderingMode(.original)
+        Group {
+            if let client {
+                let _ = launchSignposter.emitEvent("TabViewBodyBegin")
+                TabView(selection: $selectedTab) {
+                    Tab("Feed", systemImage: "photo.on.rectangle", value: AppTab.feed) {
+                        FeedView(client: client, pendingDeepLink: $pendingDeepLink, showCreate: $showCreate)
+                            .id(feedRefreshID)
                     }
-                } else {
-                    Label("Profile", systemImage: "person")
+
+                    Tab("Search", systemImage: "magnifyingglass", value: AppTab.search) {
+                        SearchView(client: client)
+                    }
+
+                    Tab("Notifications", systemImage: "bell", value: AppTab.notifications) {
+                        NotificationsView(client: client, viewModel: notificationsVM)
+                    }
+                    .badge(notificationsVM.unseenCount)
+
+                    Tab(value: AppTab.profile) {
+                        if let did = auth.userDID {
+                            ProfileView(client: client, did: did, isRoot: true)
+                        }
+                    } label: {
+                        if let img = avatarTabImage {
+                            Label {
+                                Text("Profile")
+                            } icon: {
+                                Image(uiImage: img)
+                                    .renderingMode(.original)
+                            }
+                        } else {
+                            Label("Profile", systemImage: "person")
+                        }
+                    }
                 }
+                .tint(Color("AccentColor"))
+                .environment(commentPresenter)
+            } else {
+                Color.clear
             }
         }
-        .tint(Color("AccentColor"))
-        .environment(commentPresenter)
         .task {
             let taskSpid = launchSignposter.makeSignpostID()
             let taskState = launchSignposter.beginInterval("MainTabLaunch", id: taskSpid)
@@ -118,9 +124,6 @@ struct MainTabView: View {
             await avatarFetch
             launchSignposter.endInterval("AvatarFetch", avatarState)
             launchLogger.debug("[AvatarFetch] end")
-            if let uiImage = auth.avatarImage {
-                avatarTabImage = circularAvatar(uiImage, size: 26)
-            }
 
             await notifFetch
             launchSignposter.endInterval("NotificationsFetch", notifState)
@@ -148,7 +151,9 @@ struct MainTabView: View {
                 Task {
                     try? await auth.refreshIfNeeded()
                     await notificationsVM.fetchUnseenCount(auth: auth.authContext())
-                    await labelDefsCache.loadIfNeeded(client: client, auth: auth.authContext())
+                    if let client {
+                        await labelDefsCache.loadIfNeeded(client: client, auth: auth.authContext())
+                    }
                 }
             } else if scenePhase == .background {
                 Task {
