@@ -1153,10 +1153,10 @@ struct StoryViewer: View {
 
     private func heartIcon(isFavorited: Bool) -> some View {
         Image(systemName: isFavorited ? "heart.fill" : "heart")
-            .font(.title3)
+            .font(.title)
             .foregroundStyle(isFavorited ? Color("AccentColor") : .white)
             .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isFavorited)
-            .frame(width: 36, height: 36)
+            .frame(width: 44, height: 44)
     }
 
     private var particleBurstOverlay: some View {
@@ -1165,6 +1165,7 @@ struct StoryViewer: View {
                 LikeParticleView(index: i)
             }
         }
+        .scaleEffect(1.4)
     }
 
     private func doubleTapLike(at point: CGPoint) {
