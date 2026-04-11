@@ -301,9 +301,11 @@ struct GalleryCardView: View {
                     Image(systemName: "ellipsis")
                         .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(.primary)
-                        .frame(width: 32, height: 32)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .highPriorityGesture(TapGesture().onEnded { showCardActions = true })
             }
         }
         .padding(.horizontal, 12)
