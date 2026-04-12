@@ -193,8 +193,8 @@ private struct ReasonIcon: View {
         switch reason {
         case .galleryFavorite, .storyFavorite: "heart.fill"
         case .follow: "person.fill.badge.plus"
-        case .galleryComment, .storyComment: "bubble.left.fill"
-        case .reply: "arrowshape.turn.up.left.fill"
+        case .galleryComment, .storyComment: "text.bubble.fill"
+        case .reply: "arrowshape.turn.up.backward.fill"
         case .galleryCommentMention, .galleryMention: "at"
         case .unknown: "bell.fill"
         }
