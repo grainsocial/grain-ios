@@ -1179,6 +1179,30 @@ private struct ProfileGridThumbnail: View {
     }
 }
 
+private struct CopiedCheckmarkToast: View {
+    @State private var checkScale = 0.3
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.subheadline)
+                .scaleEffect(checkScale)
+                .onAppear {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) {
+                        checkScale = 1.0
+                    }
+                }
+            Text("Copied")
+                .font(.subheadline.weight(.medium))
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.ultraThinMaterial, in: Capsule())
+        .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
+        .transition(.scale.combined(with: .opacity))
+    }
+}
+
 #Preview {
     ProfileView(client: .preview, did: "did:plc:preview")
         .previewEnvironments()
