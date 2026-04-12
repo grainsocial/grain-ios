@@ -54,13 +54,13 @@ enum PreviewData {
     static let profile6 = GrainProfile(
         cid: "cid6", did: "did:plc:prevuser6",
         handle: "rina.grain.social", displayName: "Rina Watanabe",
-        avatar: bundleImageURL("ACE_EMD_F40PH_Fremont_-_San_Jose")
+        avatar: nil
     )
 
     static let profile7 = GrainProfile(
         cid: "cid7", did: "did:plc:prevuser7",
         handle: "omar.grain.social", displayName: "Omar Hassan",
-        avatar: bundleImageURL("C-141_Starlifter_contrail")
+        avatar: nil
     )
 
     static let profile8 = GrainProfile(

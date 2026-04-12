@@ -410,6 +410,20 @@ final class OverlappingAvatarsUIView: UIView {
     private var authorDids: [String] = []
     private var currentKey = ""
 
+    private static func makeFallbackImage(size: CGFloat) -> UIImage {
+        let iconSize = size * 0.45
+        let config = UIImage.SymbolConfiguration(pointSize: iconSize)
+        let symbol = UIImage(systemName: "person.fill", withConfiguration: config)!
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: size, height: size))
+        return renderer.image { ctx in
+            UIColor.systemGray4.setFill()
+            ctx.cgContext.fillEllipse(in: CGRect(x: 0, y: 0, width: size, height: size))
+            let tinted = symbol.withTintColor(.systemGray2, renderingMode: .alwaysOriginal)
+            let origin = CGPoint(x: (size - tinted.size.width) / 2, y: (size - tinted.size.height) / 2)
+            tinted.draw(at: origin)
+        }
+    }
+
     override init(frame: CGRect) {
         super.init(frame: frame)
         isUserInteractionEnabled = true
@@ -436,6 +450,7 @@ final class OverlappingAvatarsUIView: UIView {
         avatarViews.removeAll()
 
         let step = size - overlap
+        let fallback = Self.makeFallbackImage(size: size)
 
         for (i, author) in authors.enumerated() {
             let iv = UIImageView()
@@ -444,7 +459,6 @@ final class OverlappingAvatarsUIView: UIView {
             iv.layer.cornerRadius = size / 2
             iv.layer.borderWidth = 2
             iv.layer.borderColor = UIColor.systemBackground.cgColor
-            iv.backgroundColor = UIColor.gray.withAlphaComponent(0.3)
             iv.frame = CGRect(x: CGFloat(i) * step, y: 0, width: size, height: size)
 
             // Load from Nuke memory cache synchronously, or fetch async
@@ -453,12 +467,15 @@ final class OverlappingAvatarsUIView: UIView {
                 if let cached = ImagePipeline.shared.cache.cachedImage(for: request)?.image {
                     iv.image = cached
                 } else {
+                    iv.image = fallback
                     Task { @MainActor in
                         if let image = try? await ImagePipeline.shared.image(for: request) {
                             iv.image = image
                         }
                     }
                 }
+            } else {
+                iv.image = fallback
             }
 
             addSubview(iv)
