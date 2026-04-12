@@ -40,6 +40,7 @@ sim-local: build-local
     APP_PATH=$(find "{{derived_data}}/Build/Products/Debug-iphonesimulator" -name "${BUNDLE_NAME:-Grain}.app" -type d | head -1)
     xcrun simctl install "$SIM" "$APP_PATH"
     xcrun simctl launch "$SIM" {{bundle_id}}
+    xcrun simctl spawn "$SIM" log config --subsystem {{bundle_id}} --mode level:debug
     echo "Installed and launched on simulator (local/dev API)"
 
 # Build + install + launch on simulator (production API — grain.social; same as Xcode Run)
@@ -53,6 +54,7 @@ sim:
     APP_PATH=$(find "{{derived_data}}/Build/Products/Debug-iphonesimulator" -name "${BUNDLE_NAME:-Grain}.app" -type d | head -1)
     xcrun simctl install "$SIM" "$APP_PATH"
     xcrun simctl launch "$SIM" {{bundle_id}}
+    xcrun simctl spawn "$SIM" log config --subsystem {{bundle_id}} --mode level:debug
     echo "Installed and launched on simulator (grain.social)"
 
 # Run tests
@@ -87,6 +89,7 @@ device device_id:
     APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData/Grain-*/Build/Products/Debug-iphoneos -name "${BUNDLE_NAME:-Grain}.app" -type d | head -1)
     echo "Installing $APP_PATH..."
     xcrun devicectl device install app --device {{device_id}} "$APP_PATH"
+    xcrun devicectl device process execute --device {{device_id}} /usr/bin/log -- config --subsystem {{bundle_id}} --mode level:debug 2>/dev/null || true
     echo "Installed to device {{device_id}}!"
 
 # Bump build number, regenerate project, archive, and upload to App Store Connect

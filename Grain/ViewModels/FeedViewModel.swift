@@ -6,6 +6,10 @@ final class FeedViewModel {
     var galleries: [GrainGallery] = []
     var isLoading = false
     var error: Error?
+    /// Set to `true` after the first network fetch completes (success or failure).
+    /// Used by FeedTabContent to always run a fresh fetch on first appear, even when
+    /// galleries are pre-populated from the disk cache.
+    var hasFetchedInitial = false
 
     private var cursor: String?
     private var hasMore = true
@@ -16,6 +20,7 @@ final class FeedViewModel {
     private let camera: String?
     private let location: String?
     private let tag: String?
+    private let cacheKey: String?
 
     init(
         client: XRPCClient,
@@ -23,7 +28,8 @@ final class FeedViewModel {
         actor: String? = nil,
         camera: String? = nil,
         location: String? = nil,
-        tag: String? = nil
+        tag: String? = nil,
+        cacheKey: String? = nil
     ) {
         self.client = client
         self.feedName = feedName
@@ -31,6 +37,10 @@ final class FeedViewModel {
         self.camera = camera
         self.location = location
         self.tag = tag
+        self.cacheKey = cacheKey
+        if let cacheKey {
+            galleries = FeedCache.shared.load(key: cacheKey)
+        }
     }
 
     convenience init(client: XRPCClient, pinnedFeed: PinnedFeed, userDID: String? = nil) {
@@ -40,7 +50,8 @@ final class FeedViewModel {
             actor: (pinnedFeed.id == "following" || pinnedFeed.id == "foryou") ? userDID : nil,
             camera: pinnedFeed.type == "camera" ? pinnedFeed.feedValue : nil,
             location: pinnedFeed.type == "location" ? pinnedFeed.feedValue : nil,
-            tag: pinnedFeed.type == "hashtag" ? pinnedFeed.feedValue : nil
+            tag: pinnedFeed.type == "hashtag" ? pinnedFeed.feedValue : nil,
+            cacheKey: pinnedFeed.id
         )
     }
 
@@ -65,11 +76,18 @@ final class FeedViewModel {
                 galleries = response.items ?? []
                 cursor = response.cursor
                 hasMore = response.cursor != nil
+                if let key = cacheKey {
+                    let toCache = galleries
+                    Task.detached(priority: .utility) {
+                        FeedCache.shared.save(toCache, key: key)
+                    }
+                }
             } catch {
                 guard !Task.isCancelled else { return }
                 self.error = error
             }
             isLoading = false
+            hasFetchedInitial = true
         }
         loadTask = task
         await task.value

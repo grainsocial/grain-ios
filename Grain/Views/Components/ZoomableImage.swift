@@ -66,6 +66,7 @@ struct PinchZoomOverlay: UIViewRepresentable {
     let zoomState: ImageZoomState
     var onBegan: (UnitPoint, CGRect) -> Void
     var onEnded: () -> Void
+    var onSingleTap: (() -> Void)?
     var onDoubleTap: ((CGPoint) -> Void)?
 
     func makeUIView(context: Context) -> UIView {
@@ -82,9 +83,23 @@ struct PinchZoomOverlay: UIViewRepresentable {
         pan.delegate = context.coordinator
         view.addGestureRecognizer(pan)
 
-        let doubleTap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleDoubleTap))
-        doubleTap.numberOfTapsRequired = 2
-        view.addGestureRecognizer(doubleTap)
+        var doubleTapRecognizer: UITapGestureRecognizer?
+        if onDoubleTap != nil {
+            let doubleTap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleDoubleTap))
+            doubleTap.numberOfTapsRequired = 2
+            view.addGestureRecognizer(doubleTap)
+            doubleTapRecognizer = doubleTap
+        }
+
+        if onSingleTap != nil {
+            let singleTap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleSingleTap))
+            singleTap.numberOfTapsRequired = 1
+            singleTap.numberOfTouchesRequired = 1
+            if let doubleTap = doubleTapRecognizer {
+                singleTap.require(toFail: doubleTap)
+            }
+            view.addGestureRecognizer(singleTap)
+        }
 
         return view
     }
@@ -141,6 +156,10 @@ struct PinchZoomOverlay: UIViewRepresentable {
             }
         }
 
+        @objc func handleSingleTap(_: UITapGestureRecognizer) {
+            parent.onSingleTap?()
+        }
+
         @objc func handleDoubleTap(_ gesture: UITapGestureRecognizer) {
             let loc = gesture.location(in: gesture.view)
             parent.onDoubleTap?(loc)
@@ -179,6 +198,7 @@ struct ZoomableImage: View {
     /// lazily-loaded hi-res version here so the normal display path uses a
     /// lighter image while zoom gets more detail if it's ready.
     var zoomImage: UIImage?
+    var onSingleTap: (() -> Void)?
     var onDoubleTap: ((CGPoint) -> Void)?
     @Environment(ImageZoomState.self) private var zoomState: ImageZoomState?
 
@@ -191,16 +211,18 @@ struct ZoomableImage: View {
     /// identity-based equality and leave the base image visible behind the overlay.
     @State private var isZoomingMe = false
 
-    init(url: String, thumbURL: String? = nil, aspectRatio: CGFloat, onDoubleTap: ((CGPoint) -> Void)? = nil) {
+    init(url: String, thumbURL: String? = nil, aspectRatio: CGFloat, onSingleTap: (() -> Void)? = nil, onDoubleTap: ((CGPoint) -> Void)? = nil) {
         source = .url(url, thumbURL: thumbURL)
         self.aspectRatio = aspectRatio
+        self.onSingleTap = onSingleTap
         self.onDoubleTap = onDoubleTap
     }
 
-    init(localImage: UIImage, aspectRatio: CGFloat, zoomImage: UIImage? = nil, onDoubleTap: ((CGPoint) -> Void)? = nil) {
+    init(localImage: UIImage, aspectRatio: CGFloat, zoomImage: UIImage? = nil, onSingleTap: (() -> Void)? = nil, onDoubleTap: ((CGPoint) -> Void)? = nil) {
         source = .local(localImage)
         self.aspectRatio = aspectRatio
         self.zoomImage = zoomImage
+        self.onSingleTap = onSingleTap
         self.onDoubleTap = onDoubleTap
     }
 
@@ -255,6 +277,7 @@ struct ZoomableImage: View {
                         isZoomingMe = true
                     },
                     onEnded: { scheduleSnapBack() },
+                    onSingleTap: onSingleTap,
                     onDoubleTap: onDoubleTap
                 )
             }
@@ -271,7 +294,7 @@ struct ZoomableImage: View {
     private var sourceView: some View {
         switch source {
         case let .url(url, thumbURL):
-            LazyImage(request: ImageRequest(url: URL(string: url), priority: .veryHigh)) { state in
+            LazyImage(request: ImageRequest(url: URL(string: url), priority: .veryHigh, options: .disableDiskCacheWrites)) { state in
                 if let image = state.image {
                     image
                         .resizable()
@@ -282,7 +305,6 @@ struct ZoomableImage: View {
                             thumb
                                 .resizable()
                                 .aspectRatio(aspectRatio, contentMode: .fit)
-                                .blur(radius: 20)
                                 .clipped()
                         } else {
                             Rectangle()

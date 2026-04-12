@@ -64,6 +64,18 @@ struct StoryStripView: View {
                         StoryRingView(hasStory: true, viewed: isViewed, size: avatarSize) {
                             AvatarView(url: author.profile.avatar, size: avatarSize)
                         }
+                        .padding(4)
+                        .profileContextMenu(
+                            handle: author.profile.handle,
+                            hasStory: true,
+                            onViewProfile: { onAuthorLongPress?(author.profile.did) },
+                            onViewStory: { onAuthorTap(author, 0) }
+                        ) {
+                            StoryRingView(hasStory: true, viewed: isViewed, size: 96) {
+                                AvatarView(url: author.profile.avatar, size: 96)
+                            }
+                            .padding(6)
+                        }
                         Text(author.profile.displayName ?? author.profile.handle)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
@@ -74,7 +86,6 @@ struct StoryStripView: View {
                     .offset(y: isLifted ? -3 : 0)
                     .zIndex(isViewed ? 0 : 1)
                     .onTapGesture { onAuthorTap(author, 0) }
-                    .onLongPressGesture { onAuthorLongPress?(author.profile.did) }
                 }
             }
             .padding(.horizontal)

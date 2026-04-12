@@ -1,4 +1,8 @@
+import os
 import SwiftUI
+
+private let launchSignposter = OSSignposter(subsystem: "social.grain.grain", category: "AppLaunch")
+private let launchLogger = Logger(subsystem: "social.grain.grain", category: "AppLaunch")
 
 private enum AppTab: Hashable {
     case feed, notifications, profile, search
@@ -12,7 +16,7 @@ struct MainTabView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedTab: AppTab = .feed
     @State private var commentPresenter = StoryCommentPresenter()
-    @State private var client = XRPCClient(baseURL: AuthManager.serverURL)
+    @State private var client: XRPCClient?
     @State private var showCreate = false
     @State private var avatarTabImage: UIImage?
     @State private var feedRefreshID = UUID()
@@ -20,6 +24,8 @@ struct MainTabView: View {
     @Binding var pendingDeepLink: DeepLink?
 
     @MainActor static let badgeAppearanceConfigured: Bool = MainActor.assumeIsolated {
+        let _spid = launchSignposter.makeSignpostID()
+        let _state = launchSignposter.beginInterval("BadgeAppearanceSetup", id: _spid)
         let color = UIColor(named: "AccentColor")
         let textAttrs: [NSAttributedString.Key: Any] = [.foregroundColor: UIColor.white]
         let appearance = UITabBarAppearance()
@@ -34,46 +40,60 @@ struct MainTabView: View {
         apply(appearance.compactInlineLayoutAppearance)
         UITabBar.appearance().standardAppearance = appearance
         UITabBar.appearance().scrollEdgeAppearance = appearance
+        launchSignposter.endInterval("BadgeAppearanceSetup", _state)
         return true
     }
 
     var body: some View {
+        let _ = launchSignposter.emitEvent("MainTabViewBodyBegin")
+        let _ = LaunchMetrics.endPreBodyOnce()
         let _ = Self.badgeAppearanceConfigured
-        TabView(selection: $selectedTab) {
-            Tab("Feed", systemImage: "photo.on.rectangle", value: AppTab.feed) {
-                FeedView(client: client, pendingDeepLink: $pendingDeepLink, showCreate: $showCreate)
-                    .id(feedRefreshID)
-            }
-
-            Tab("Search", systemImage: "magnifyingglass", value: AppTab.search) {
-                SearchView(client: client)
-            }
-
-            Tab("Notifications", systemImage: "bell", value: AppTab.notifications) {
-                NotificationsView(client: client, viewModel: notificationsVM)
-            }
-            .badge(notificationsVM.unseenCount)
-
-            Tab(value: AppTab.profile) {
-                if let did = auth.userDID {
-                    ProfileView(client: client, did: did, isRoot: true)
-                }
-            } label: {
-                if let img = avatarTabImage {
-                    Label {
-                        Text("Profile")
-                    } icon: {
-                        Image(uiImage: img)
-                            .renderingMode(.original)
+        Group {
+            if let client {
+                let _ = launchSignposter.emitEvent("TabViewBodyBegin")
+                TabView(selection: $selectedTab) {
+                    Tab("Feed", systemImage: "photo.on.rectangle", value: AppTab.feed) {
+                        FeedView(client: client, pendingDeepLink: $pendingDeepLink, showCreate: $showCreate)
+                            .id(feedRefreshID)
                     }
-                } else {
-                    Label("Profile", systemImage: "person")
+
+                    Tab("Search", systemImage: "magnifyingglass", value: AppTab.search) {
+                        SearchView(client: client)
+                    }
+
+                    Tab("Notifications", systemImage: "bell", value: AppTab.notifications) {
+                        NotificationsView(client: client, viewModel: notificationsVM)
+                    }
+                    .badge(notificationsVM.unseenCount)
+
+                    Tab(value: AppTab.profile) {
+                        if let did = auth.userDID {
+                            ProfileView(client: client, did: did, isRoot: true)
+                        }
+                    } label: {
+                        if let img = avatarTabImage {
+                            Label {
+                                Text("Profile")
+                            } icon: {
+                                Image(uiImage: img)
+                                    .renderingMode(.original)
+                            }
+                        } else {
+                            Label("Profile", systemImage: "person")
+                        }
+                    }
                 }
+                .tint(Color("AccentColor"))
+                .environment(commentPresenter)
+            } else {
+                Color.clear
             }
         }
-        .tint(Color("AccentColor"))
-        .environment(commentPresenter)
         .task {
+            let taskSpid = launchSignposter.makeSignpostID()
+            let taskState = launchSignposter.beginInterval("MainTabLaunch", id: taskSpid)
+            launchLogger.debug("[MainTabLaunch] begin")
+
             commentPresenter.configure(
                 auth: auth,
                 storyStatusCache: storyStatusCache,
@@ -82,12 +102,40 @@ struct MainTabView: View {
             let c = auth.makeClient()
             client = c
             notificationsVM.updateClient(c)
-            await auth.fetchAvatarIfNeeded()
-            if let uiImage = auth.avatarImage {
-                avatarTabImage = circularAvatar(uiImage, size: 26)
-            }
-            await notificationsVM.fetchUnseenCount(auth: auth.authContext())
-            await labelDefsCache.loadIfNeeded(client: c, auth: auth.authContext())
+
+            // Start avatar fetch immediately — it doesn't need an auth context
+            let avatarSpid = launchSignposter.makeSignpostID()
+            let avatarState = launchSignposter.beginInterval("AvatarFetch", id: avatarSpid)
+            launchLogger.debug("[AvatarFetch] begin")
+            async let avatarFetch: Void = auth.fetchAvatarIfNeeded()
+
+            // Resolve auth context once (may refresh token) while avatar is in flight
+            let ctx = await auth.authContext()
+
+            // Kick off notifications + label defs in parallel now that we have ctx
+            let notifSpid = launchSignposter.makeSignpostID()
+            let labelsSpid = launchSignposter.makeSignpostID()
+            let notifState = launchSignposter.beginInterval("NotificationsFetch", id: notifSpid)
+            launchLogger.debug("[NotificationsFetch] begin")
+            let labelsState = launchSignposter.beginInterval("LabelDefsFetch", id: labelsSpid)
+            launchLogger.debug("[LabelDefsFetch] begin")
+            async let notifFetch: Void = notificationsVM.fetchUnseenCount(auth: ctx)
+            async let labelsFetch: Void = labelDefsCache.loadIfNeeded(client: c, auth: ctx)
+
+            await avatarFetch
+            launchSignposter.endInterval("AvatarFetch", avatarState)
+            launchLogger.debug("[AvatarFetch] end")
+
+            await notifFetch
+            launchSignposter.endInterval("NotificationsFetch", notifState)
+            launchLogger.debug("[NotificationsFetch] end")
+
+            await labelsFetch
+            launchSignposter.endInterval("LabelDefsFetch", labelsState)
+            launchLogger.debug("[LabelDefsFetch] end")
+
+            launchSignposter.endInterval("MainTabLaunch", taskState)
+            launchLogger.debug("[MainTabLaunch] end")
         }
         .onChange(of: auth.avatarImage) {
             if let uiImage = auth.avatarImage {
@@ -104,7 +152,14 @@ struct MainTabView: View {
                 Task {
                     try? await auth.refreshIfNeeded()
                     await notificationsVM.fetchUnseenCount(auth: auth.authContext())
-                    await labelDefsCache.loadIfNeeded(client: client, auth: auth.authContext())
+                    if let client {
+                        await labelDefsCache.loadIfNeeded(client: client, auth: auth.authContext())
+                    }
+                }
+            } else if scenePhase == .background {
+                Task {
+                    viewedStories.cleanup()
+                    storyStatusCache.purgeExpired()
                 }
             }
         }

@@ -1,4 +1,8 @@
 import Foundation
+import os
+
+private let storageSignposter = OSSignposter(subsystem: "social.grain.grain", category: "AppLaunch")
+private let storageLogger = Logger(subsystem: "social.grain.grain", category: "AppLaunch")
 
 @Observable
 @MainActor
@@ -87,6 +91,13 @@ final class ViewedStoryStorage {
     }
 
     private func load() {
+        let spid = storageSignposter.makeSignpostID()
+        let state = storageSignposter.beginInterval("ViewedStorageLoad", id: spid)
+        storageLogger.debug("[ViewedStorageLoad] begin")
+        defer {
+            storageSignposter.endInterval("ViewedStorageLoad", state)
+            storageLogger.debug("[ViewedStorageLoad] end uris=\(self.viewedUris.count) authors=\(self.authorLastViewed.count)")
+        }
         if let data = UserDefaults.standard.data(forKey: Self.urisKey),
            let decoded = try? JSONDecoder().decode(Set<String>.self, from: data)
         {

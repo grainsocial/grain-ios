@@ -14,6 +14,8 @@ struct LoginView: View {
     @State private var errorMessage: String?
     @State private var suggestions: [ActorSuggestion] = []
     @State private var searchTask: Task<Void, Never>?
+    @State private var highlightedSuggestionIndex: Int?
+    @Namespace private var suggestionHighlightNS
 
     var body: some View {
         GeometryReader { geo in
@@ -47,6 +49,27 @@ struct LoginView: View {
                             .font(.custom("Syne", size: 44).weight(.heavy))
                             .foregroundStyle(.white)
                             .padding(.bottom, suggestions.isEmpty ? 60 : 20)
+
+                        if let reason = auth.reauthReason, suggestions.isEmpty {
+                            HStack(alignment: .top, spacing: 10) {
+                                Image(systemName: "exclamationmark.circle.fill")
+                                    .font(.body.weight(.medium))
+                                    .foregroundStyle(.white)
+                                Text(reason)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.white)
+                                    .multilineTextAlignment(.leading)
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
+                            .background(.white.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(.white.opacity(0.25), lineWidth: 1)
+                            )
+                            .padding(.horizontal, 20)
+                            .padding(.bottom, 20)
+                        }
 
                         if suggestions.isEmpty {
                             // Heading
@@ -83,9 +106,7 @@ struct LoginView: View {
                                     .autocorrectionDisabled()
                                     .textInputAutocapitalization(.never)
                                     .submitLabel(.go)
-                                    .onSubmit {
-                                        if !handle.isEmpty { Task { await login() } }
-                                    }
+                                    .onSubmit(submitFromKeyboard)
                                     .onChange(of: handle) {
                                         searchTask?.cancel()
                                         let query = handle
@@ -96,6 +117,15 @@ struct LoginView: View {
                                             guard !Task.isCancelled else { return }
                                             await searchActors(query: query)
                                         }
+                                    }
+                                    .onKeyPress(.downArrow) {
+                                        moveSuggestionHighlight(by: 1)
+                                    }
+                                    .onKeyPress(.upArrow) {
+                                        moveSuggestionHighlight(by: -1)
+                                    }
+                                    .onKeyPress(.tab) {
+                                        moveSuggestionHighlight(by: 1, wrap: true)
                                     }
 
                                 if isSearching {
@@ -115,10 +145,12 @@ struct LoginView: View {
                             // Suggestions
                             if !suggestions.isEmpty {
                                 VStack(spacing: 0) {
-                                    ForEach(suggestions) { actor in
+                                    ForEach(Array(suggestions.enumerated()), id: \.element.id) { index, actor in
+                                        let isHighlighted = highlightedSuggestionIndex == index
                                         Button {
                                             handle = actor.handle
                                             suggestions = []
+                                            highlightedSuggestionIndex = nil
                                             Task { await login() }
                                         } label: {
                                             HStack(spacing: 10) {
@@ -155,9 +187,22 @@ struct LoginView: View {
                                             }
                                             .padding(.horizontal, 16)
                                             .padding(.vertical, 8)
+                                            .background {
+                                                if isHighlighted {
+                                                    Color.clear
+                                                        .glassEffect(
+                                                            .regular.tint(Color.accentColor.opacity(0.45)),
+                                                            in: .rect(cornerRadius: 12)
+                                                        )
+                                                        .padding(.horizontal, 6)
+                                                        .padding(.vertical, 2)
+                                                        .matchedGeometryEffect(id: "suggestion-highlight", in: suggestionHighlightNS)
+                                                }
+                                            }
                                             .contentShape(Rectangle())
                                         }
                                         .buttonStyle(.plain)
+                                        .id(actor.id)
 
                                         if actor.id != suggestions.last?.id {
                                             Divider()
@@ -233,17 +278,66 @@ struct LoginView: View {
                             .frame(height: 60)
                     }
                     .frame(minHeight: geo.size.height)
-                    .onChange(of: suggestions) {
-                        if !suggestions.isEmpty {
+                    .onChange(of: suggestions) { _, newValue in
+                        if newValue.isEmpty {
+                            highlightedSuggestionIndex = nil
+                        } else if let idx = highlightedSuggestionIndex, idx >= newValue.count {
+                            highlightedSuggestionIndex = newValue.count - 1
+                        }
+                        if !newValue.isEmpty {
                             withAnimation {
                                 proxy.scrollTo("suggestions", anchor: .bottom)
                             }
+                        }
+                    }
+                    .onChange(of: highlightedSuggestionIndex) { _, newIndex in
+                        guard let idx = newIndex, suggestions.indices.contains(idx) else { return }
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            proxy.scrollTo(suggestions[idx].id, anchor: .center)
                         }
                     }
                 }
                 .scrollDismissesKeyboard(.interactively)
                 .scrollIndicators(.hidden)
             } // ScrollViewReader
+        }
+    }
+
+    /// Move the keyboard highlight up or down the suggestions list.
+    /// `wrap` (used for Tab) jumps back to the first item after the last.
+    /// Up-arrow off the first item deselects so the TextField regains focus.
+    /// The state change is wrapped in `withAnimation` so the matched-geometry
+    /// highlight layer physically slides between rows.
+    private func moveSuggestionHighlight(by delta: Int, wrap: Bool = false) -> KeyPress.Result {
+        guard !suggestions.isEmpty else { return .ignored }
+        let last = suggestions.count - 1
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.82)) {
+            if let current = highlightedSuggestionIndex {
+                let next = current + delta
+                if next < 0 {
+                    highlightedSuggestionIndex = nil
+                } else if next > last {
+                    highlightedSuggestionIndex = wrap ? 0 : last
+                } else {
+                    highlightedSuggestionIndex = next
+                }
+            } else {
+                highlightedSuggestionIndex = delta >= 0 ? 0 : last
+            }
+        }
+        return .handled
+    }
+
+    /// Submit either the highlighted suggestion or the raw handle text,
+    /// mirroring the behavior of clicking a row vs. tapping Sign In.
+    private func submitFromKeyboard() {
+        if let idx = highlightedSuggestionIndex, suggestions.indices.contains(idx) {
+            handle = suggestions[idx].handle
+            suggestions = []
+            highlightedSuggestionIndex = nil
+            Task { await login() }
+        } else if !handle.isEmpty {
+            Task { await login() }
         }
     }
 

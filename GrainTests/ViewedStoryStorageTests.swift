@@ -7,10 +7,14 @@ final class ViewedStoryStorageTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
+        UserDefaults.standard.removeObject(forKey: "viewedStoryUris")
+        UserDefaults.standard.removeObject(forKey: "viewedStoryAuthors")
         storage = ViewedStoryStorage()
     }
 
     override func tearDown() {
+        UserDefaults.standard.removeObject(forKey: "viewedStoryUris")
+        UserDefaults.standard.removeObject(forKey: "viewedStoryAuthors")
         storage = nil
         super.tearDown()
     }

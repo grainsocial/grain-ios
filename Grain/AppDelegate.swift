@@ -1,5 +1,8 @@
+import os
 import UIKit
 import UserNotifications
+
+private let appDelegateSignposter = OSSignposter(subsystem: "social.grain.grain", category: "AppLaunch")
 
 /// AppDelegate for handling push notification registration and tap callbacks.
 @MainActor
@@ -7,10 +10,16 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
     var pushManager: PushManager?
     var onNotificationTap: ((DeepLink) -> Void)?
 
+    override init() {
+        super.init()
+        appDelegateSignposter.emitEvent("AppDelegateInit")
+    }
+
     func application(
         _: UIApplication,
         didFinishLaunchingWithOptions _: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
+        appDelegateSignposter.emitEvent("AppDelegateDidFinishLaunching")
         UNUserNotificationCenter.current().delegate = self
         return true
     }

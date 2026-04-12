@@ -1,5 +1,8 @@
 import Foundation
+import OSLog
 import UIKit
+
+private let profileLogger = Logger(subsystem: "social.grain.grain", category: "Profile")
 
 @Observable
 @MainActor
@@ -13,16 +16,44 @@ final class ProfileDetailViewModel {
     var isLoading = false
     var error: Error?
     var showReauthAlert = false
+    /// Set to `true` only after the first favorites network fetch completes.
+    /// Views should use this (not `favoriteGalleries.isEmpty`) to decide between
+    /// "loading" and "empty" — an empty array before the server has answered is
+    /// not the same as a confirmed empty list.
+    var favoritesLoaded = false
+    var isLoadingFavorites = false
+    var favoritesError: Error?
+    /// URIs whose thumb a HEAD probe has confirmed is gone (404/410) — usually
+    /// dangling refs to since-deleted blobs. `visibleFavorites` filters these
+    /// out at render time so they vanish without a "deleted" placeholder, and
+    /// `hydratedFavorites` strips them on the next load so they stay gone.
+    var brokenFavoriteUris: Set<String> = []
+    /// URIs whose thumb has already been probed this session (either confirmed
+    /// reachable or confirmed broken). Used to skip redundant HEAD requests
+    /// when new favorite batches come in. Transient probe failures don't add
+    /// here so they're retried next pass.
+    var probedFavoriteUris: Set<String> = []
+
+    /// Favorites currently safe to render — drops anything a probe has
+    /// confirmed broken. `favoriteGalleries` keeps the raw list so broken
+    /// items can be retried if they come back; this computed view is what the
+    /// grid iterates.
+    var visibleFavorites: [GrainGallery] {
+        favoriteGalleries.filter { !brokenFavoriteUris.contains($0.uri) }
+    }
 
     private var galleryCursor: String?
-    private var hasMoreGalleries = true
+    private(set) var hasMoreGalleries = true
     private var archiveCursor: String?
     private var hasMoreArchive = true
     private var archiveLoaded = false
     private var favoritesCursor: String?
-    private var hasMoreFavorites = true
-    private var favoritesLoaded = false
+    private(set) var hasMoreFavorites = true
     private let client: XRPCClient
+
+    /// Max favorites persisted to disk. Enough for an instant top-of-list on
+    /// re-open without bloating the cache.
+    private static let favoritesDiskCacheLimit = 30
 
     init(client: XRPCClient) {
         self.client = client
@@ -31,6 +62,17 @@ final class ProfileDetailViewModel {
     func load(did: String, viewer: String? = nil, auth: AuthContext? = nil) async {
         isLoading = true
         error = nil
+        favoritesLoaded = false
+        archiveLoaded = false
+
+        let isOwnProfile = viewer != nil && viewer == did
+        if isOwnProfile, favoriteGalleries.isEmpty {
+            let cached = FeedCache.shared.load(key: Self.favoritesCacheKey(did: did))
+            let hydrated = hydratedFavorites(cached)
+            if !hydrated.isEmpty {
+                favoriteGalleries = hydrated
+            }
+        }
 
         do {
             async let profileFetch = client.getActorProfile(actor: did, viewer: viewer, auth: auth)
@@ -51,12 +93,14 @@ final class ProfileDetailViewModel {
             hasMoreGalleries = feedResult.cursor != nil
             stories = storiesResult.stories
             knownFollowers = await knownFollowersFetch
-            favoritesLoaded = false
-            archiveLoaded = false
         } catch {
             self.error = error
         }
         isLoading = false
+
+        if isOwnProfile {
+            Task { await self.loadFavorites(did: did, auth: auth) }
+        }
     }
 
     func loadMoreGalleries(did: String, auth: AuthContext? = nil) async {
@@ -98,14 +142,49 @@ final class ProfileDetailViewModel {
     }
 
     func loadFavorites(did: String, auth: AuthContext? = nil) async {
-        guard !favoritesLoaded else { return }
-        favoritesLoaded = true
+        guard !favoritesLoaded, !isLoadingFavorites else { return }
+        isLoadingFavorites = true
+        favoritesError = nil
+        profileLogger.info("loadFavorites start did=\(did, privacy: .public) hasAuth=\(auth != nil, privacy: .public)")
         do {
             let response = try await client.getActorFavorites(actor: did, auth: auth)
-            favoriteGalleries = response.items ?? []
+            favoriteGalleries = hydratedFavorites(response.items ?? [])
             favoritesCursor = response.cursor
             hasMoreFavorites = response.cursor != nil
-        } catch {}
+            let loadedCount = favoriteGalleries.count
+            profileLogger.info("loadFavorites ok count=\(loadedCount, privacy: .public)")
+            let toCache = Array(favoriteGalleries.prefix(Self.favoritesDiskCacheLimit))
+            let key = Self.favoritesCacheKey(did: did)
+            Task.detached(priority: .utility) {
+                FeedCache.shared.save(toCache, key: key)
+            }
+        } catch {
+            favoritesError = error
+            profileLogger.error("loadFavorites failed: \(error, privacy: .public)")
+        }
+        favoritesLoaded = true
+        isLoadingFavorites = false
+    }
+
+    private static func favoritesCacheKey(did: String) -> String {
+        "favorites_\(did)"
+    }
+
+    /// Drops favorites that would render empty: galleries with no photos
+    /// (deleted or never-populated), galleries whose thumb URL is missing or
+    /// unparseable (LazyImage can't attempt a load so it'd sit blank forever),
+    /// and galleries whose thumbnail was already confirmed broken this session
+    /// (tracked in `brokenFavoriteUris`). Applied on every load path.
+    private func hydratedFavorites(_ galleries: [GrainGallery]) -> [GrainGallery] {
+        galleries.filter { gallery in
+            guard !(gallery.items?.isEmpty ?? true) else { return false }
+            guard !brokenFavoriteUris.contains(gallery.uri) else { return false }
+            guard let thumb = gallery.items?.first?.thumb,
+                  !thumb.isEmpty,
+                  URL(string: thumb) != nil
+            else { return false }
+            return true
+        }
     }
 
     func loadMoreFavorites(did: String, auth: AuthContext? = nil) async {
@@ -113,7 +192,7 @@ final class ProfileDetailViewModel {
         isLoading = true
         do {
             let response = try await client.getActorFavorites(actor: did, cursor: cursor, auth: auth)
-            favoriteGalleries.append(contentsOf: response.items ?? [])
+            favoriteGalleries.append(contentsOf: hydratedFavorites(response.items ?? []))
             favoritesCursor = response.cursor
             hasMoreFavorites = response.cursor != nil
         } catch {}

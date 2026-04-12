@@ -16,13 +16,14 @@ struct SearchView: View {
     @State private var reportGallery: GrainGallery?
     @State private var deleteGalleryUri: String?
     @State private var showDeleteConfirmation = false
-    @State private var recentSearches = RecentSearchStorage()
+    @State private var recentSearches: RecentSearchStorage
     @State private var searchIsPresented = false
     let client: XRPCClient
 
     init(client: XRPCClient) {
         self.client = client
         _viewModel = State(initialValue: SearchViewModel(client: client))
+        _recentSearches = State(initialValue: RecentSearchStorage())
     }
 
     var body: some View {
@@ -76,6 +77,19 @@ struct SearchView: View {
                                             ) {
                                                 AvatarView(url: profile.avatar, size: 40)
                                             }
+                                            .profileContextMenu(
+                                                handle: profile.handle,
+                                                hasStory: storyStatusCache.hasStory(for: profile.did),
+                                                onViewProfile: {
+                                                    recentSearches.addProfile(did: profile.did, displayName: profile.displayName, handle: profile.handle, avatar: profile.avatar)
+                                                    selectedProfileDid = profile.did
+                                                },
+                                                onViewStory: {
+                                                    if let author = storyStatusCache.author(for: profile.did) {
+                                                        cardStoryAuthor = author
+                                                    }
+                                                }
+                                            )
                                             VStack(alignment: .leading) {
                                                 Text(profile.displayName ?? profile.handle ?? "")
                                                     .font(.subheadline.bold())
@@ -172,7 +186,7 @@ struct SearchView: View {
                 }
             }
             .sheet(item: $reportGallery) { gallery in
-                ReportView(client: client, subjectUri: gallery.uri, subjectCid: gallery.cid ?? "")
+                ReportView(client: client, subjectUri: gallery.uri, subjectCid: gallery.cid)
             }
             .alert("Delete Gallery?", isPresented: $showDeleteConfirmation) {
                 Button("Delete", role: .destructive) {

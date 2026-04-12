@@ -1,18 +1,43 @@
 import Nuke
+import os
 import SwiftUI
+
+private let appSignposter = OSSignposter(subsystem: "social.grain.grain", category: "AppLaunch")
+private let appLogger = Logger(subsystem: "social.grain.grain", category: "AppLaunch")
 
 @main
 struct GrainApp: App {
     init() {
-        var config = ImagePipeline.Configuration.withDataCache
-        if let dataCache = try? DataCache(name: "social.grain.images") {
-            config.dataCache = dataCache
+        LaunchMetrics.beginTFP()
+        LaunchMetrics.beginPreBody()
+        appSignposter.emitEvent("GrainAppInitBegin")
+        // Defer Nuke DataCache setup off the main-thread init path — no images
+        // load during the ~800ms before MainTabView.task fires, so this is safe.
+        Task.detached(priority: .userInitiated) {
+            let spid = appSignposter.makeSignpostID()
+            let state = appSignposter.beginInterval("NukePipelineSetup", id: spid)
+            appLogger.debug("[NukePipelineSetup] begin")
+            var config = ImagePipeline.Configuration.withDataCache
+            if let dataCache = try? DataCache(name: "social.grain.images") {
+                config.dataCache = dataCache
+            }
+            await MainActor.run { ImagePipeline.shared = ImagePipeline(configuration: config, delegate: GrainImagePipelineDelegate()) }
+            appSignposter.endInterval("NukePipelineSetup", state)
+            appLogger.debug("[NukePipelineSetup] end")
         }
-        ImagePipeline.shared = ImagePipeline(configuration: config)
+        Task.detached(priority: .userInitiated) {
+            let spid = appSignposter.makeSignpostID()
+            let state = appSignposter.beginInterval("ConnectionPreheat", id: spid)
+            var req = URLRequest(url: AuthManager.serverURL.appendingPathComponent("_health"))
+            req.httpMethod = "GET"
+            req.timeoutInterval = 5
+            _ = try? await URLSession.shared.data(for: req)
+            appSignposter.endInterval("ConnectionPreheat", state)
+        }
+        appSignposter.emitEvent("GrainAppInitEnd")
     }
 
     @UIApplicationDelegateAdaptor private var appDelegate: AppDelegate
-    @Environment(\.scenePhase) private var scenePhase
     @State private var authManager = AuthManager()
     @State private var pushManager = PushManager()
     @State private var storyStatusCache = StoryStatusCache()
@@ -22,8 +47,11 @@ struct GrainApp: App {
 
     var body: some Scene {
         WindowGroup {
+            let _ = appSignposter.emitEvent("WindowGroupBodyBegin")
+            let isAuthed = authManager.isAuthenticated
+            let _ = appSignposter.emitEvent("AuthGateResolved")
             Group {
-                if authManager.isAuthenticated {
+                if isAuthed {
                     MainTabView(pendingDeepLink: $pendingDeepLink)
                         .environment(authManager)
                         .environment(pushManager)
@@ -32,7 +60,11 @@ struct GrainApp: App {
                         .environment(labelDefsCache)
                         .tint(Color("AccentColor"))
                         .onAppear {
-                            viewedStoryStorage.cleanup()
+                            appSignposter.emitEvent("WindowOnAppear")
+                            Task {
+                                viewedStoryStorage.cleanup()
+                                storyStatusCache.purgeExpired()
+                            }
                             pushManager.configure(authManager: authManager)
                             appDelegate.pushManager = pushManager
                             appDelegate.onNotificationTap = { deepLink in
@@ -52,11 +84,6 @@ struct GrainApp: App {
             .onOpenURL { url in
                 if let deepLink = DeepLink.from(url: url) {
                     pendingDeepLink = deepLink
-                }
-            }
-            .onChange(of: scenePhase) {
-                if scenePhase == .background {
-                    viewedStoryStorage.cleanup()
                 }
             }
         }

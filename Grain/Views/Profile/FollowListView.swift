@@ -120,9 +120,16 @@ struct FollowListView: View {
                     selectedProfileDid = item.did
                 }
             }
-            .onLongPressGesture {
-                selectedProfileDid = item.did
-            }
+            .profileContextMenu(
+                handle: item.handle,
+                hasStory: storyStatusCache.hasStory(for: item.did),
+                onViewProfile: { selectedProfileDid = item.did },
+                onViewStory: {
+                    if let author = storyStatusCache.author(for: item.did) {
+                        cardStoryAuthor = author
+                    }
+                }
+            )
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
                     if let displayName = item.displayName, !displayName.isEmpty {

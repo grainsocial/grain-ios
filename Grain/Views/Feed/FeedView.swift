@@ -2,7 +2,7 @@ import Nuke
 import os
 import SwiftUI
 
-private let fvLogger = Logger(subsystem: "social.grain.grain", category: "FeedView")
+private let launchSignposter = OSSignposter(subsystem: "social.grain.grain", category: "AppLaunch")
 
 struct FeedView: View {
     @Environment(AuthManager.self) private var auth
@@ -33,7 +33,6 @@ struct FeedView: View {
 
     var body: some View {
         let storySortVersion = storyViewModel.version
-        let _ = fvLogger.info("[body] eval storyViewerDid=\(storyViewerDid ?? "nil") authors.count=\(storyViewModel.authors.count) version=\(storySortVersion)")
         NavigationStack {
             ForEach(prefsViewModel.pinnedFeeds) { feed in
                 if feed.id == prefsViewModel.selectedFeedId {
@@ -72,7 +71,11 @@ struct FeedView: View {
             }
             .task {
                 guard !isPreview else { return }
+                let prefsSpid = launchSignposter.makeSignpostID()
+                let prefsState = launchSignposter.beginInterval("FeedPrefsLoad", id: prefsSpid)
                 await prefsViewModel.loadIfNeeded(auth: auth.authContext())
+                launchSignposter.endInterval("FeedPrefsLoad", prefsState)
+                launchSignposter.emitEvent("FeedPrefsReady")
                 await storyViewModel.load(auth: auth.authContext(), storyStatusCache: storyStatusCache)
             }
             .onAppear {
@@ -87,7 +90,6 @@ struct FeedView: View {
                 get: { storyViewerDid != nil },
                 set: { if !$0 { storyViewerDid = nil } }
             )) {
-                let _ = fvLogger.info("[cover.content] closure invoked storyViewerDid=\(storyViewerDid ?? "nil")")
                 if let did = storyViewerDid {
                     StoryViewer(
                         authors: storyViewModel.authors,
@@ -444,7 +446,7 @@ private struct FeedTabContent: View {
             }
         }
         .sheet(item: $reportGallery) { gallery in
-            ReportView(client: client, subjectUri: gallery.uri, subjectCid: gallery.cid ?? "")
+            ReportView(client: client, subjectUri: gallery.uri, subjectCid: gallery.cid)
         }
         .alert("Delete Gallery?", isPresented: $showDeleteConfirmation) {
             Button("Delete", role: .destructive) {
@@ -469,8 +471,14 @@ private struct FeedTabContent: View {
                 #endif
                 return
             }
-            if viewModel.galleries.isEmpty {
+            if !viewModel.hasFetchedInitial {
+                let initialSpid = launchSignposter.makeSignpostID()
+                let initialState = launchSignposter.beginInterval("FeedInitialLoad", id: initialSpid)
+                launchSignposter.emitEvent("FeedInitialLoadStart")
                 await viewModel.loadInitial(auth: auth.authContext())
+                launchSignposter.endInterval("FeedInitialLoad", initialState)
+                launchSignposter.emitEvent("FeedFirstContent")
+                LaunchMetrics.endTFPOnce()
                 lastLoadTime = .now
             }
             if showSuggestedUsers, !suggestedLoaded, let did = auth.userDID {
@@ -499,6 +507,9 @@ private struct FeedTabContent: View {
 }
 
 #Preview {
-    FeedView(client: .preview)
-        .previewEnvironments()
+    FeedView(client: XRPCClient(baseURL: AuthManager.serverURL))
+        .environment(AuthManager())
+        .environment(StoryStatusCache())
+        .environment(ViewedStoryStorage())
+        .environment(LabelDefinitionsCache())
 }
