@@ -307,7 +307,7 @@ struct StoryViewer: View {
                             Text(story?.creator.displayName ?? story?.creator.handle ?? authors[authorIdx].profile.displayName ?? authors[authorIdx].profile.handle)
                                 .font(.subheadline.bold())
                                 .foregroundStyle(.white)
-                            Text(story.map { relativeTime($0.createdAt) } ?? " ")
+                            Text(story.map { DateFormatting.relativeTime($0.createdAt) } ?? " ")
                                 .font(.caption2)
                                 .foregroundStyle(.white.opacity(story != nil ? 0.7 : 0))
                                 .animation(.easeIn(duration: 0.12), value: story != nil)
@@ -531,7 +531,7 @@ struct StoryViewer: View {
                                     Text(story?.creator.displayName ?? story?.creator.handle ?? author.displayName ?? author.handle)
                                         .font(.subheadline.bold())
                                         .foregroundStyle(.white)
-                                    Text(story.map { relativeTime($0.createdAt) } ?? " ")
+                                    Text(story.map { DateFormatting.relativeTime($0.createdAt) } ?? " ")
                                         .font(.caption2)
                                         .foregroundStyle(.white.opacity(story != nil ? 0.7 : 0))
                                         .animation(.easeIn(duration: 0.12), value: story != nil)
@@ -1004,17 +1004,6 @@ struct StoryViewer: View {
             return parts.joined(separator: ", ")
         }
         return nil
-    }
-
-    private func relativeTime(_ dateString: String) -> String {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        guard let date = formatter.date(from: dateString) else { return "" }
-        let interval = Date().timeIntervalSince(date)
-        if interval < 60 { return "now" }
-        if interval < 3600 { return "\(Int(interval / 60))m" }
-        if interval < 86400 { return "\(Int(interval / 3600))h" }
-        return "\(Int(interval / 86400))d"
     }
 
     // MARK: - Comments & Likes

@@ -69,6 +69,16 @@ enum PreviewData {
         avatar: bundleImageURL("Endeavour_after_STS-126_on_SCA_over_Mojave_from_above")
     )
 
+    // MARK: - Date helpers
+
+    private static func ago(_ seconds: TimeInterval) -> String {
+        DateFormatting.nowISO(date: Date().addingTimeInterval(-seconds))
+    }
+
+    private static let minute: TimeInterval = 60
+    private static let hour: TimeInterval = 3600
+    private static let day: TimeInterval = 86400
+
     // MARK: - Bundle image URL helper
 
     static func bundleImageURL(_ name: String, ext: String = "jpg") -> String {
@@ -389,7 +399,7 @@ enum PreviewData {
         GrainNotification(
             uri: "at://did:plc:prevuser2/social.grain.notification/n1",
             reason: "gallery-favorite",
-            createdAt: "2025-01-10T19:30:00Z",
+            createdAt: ago(2 * minute),
             author: profile2,
             galleryUri: gallery1.uri,
             galleryTitle: gallery1.title,
@@ -398,7 +408,7 @@ enum PreviewData {
         GrainNotification(
             uri: "at://did:plc:prevuser6/social.grain.notification/n1b",
             reason: "gallery-favorite",
-            createdAt: "2025-01-10T18:45:00Z",
+            createdAt: ago(15 * minute),
             author: profile6,
             galleryUri: gallery1.uri,
             galleryTitle: gallery1.title,
@@ -407,7 +417,7 @@ enum PreviewData {
         GrainNotification(
             uri: "at://did:plc:prevuser7/social.grain.notification/n1c",
             reason: "gallery-favorite",
-            createdAt: "2025-01-10T17:20:00Z",
+            createdAt: ago(1 * hour),
             author: profile7,
             galleryUri: gallery1.uri,
             galleryTitle: gallery1.title,
@@ -416,7 +426,7 @@ enum PreviewData {
         GrainNotification(
             uri: "at://did:plc:prevuser8/social.grain.notification/n1d",
             reason: "gallery-favorite",
-            createdAt: "2025-01-10T16:00:00Z",
+            createdAt: ago(2 * hour),
             author: profile8,
             galleryUri: gallery1.uri,
             galleryTitle: gallery1.title,
@@ -426,7 +436,7 @@ enum PreviewData {
         GrainNotification(
             uri: "at://did:plc:prevuser3/social.grain.notification/n2",
             reason: "gallery-comment",
-            createdAt: "2025-01-10T19:00:00Z",
+            createdAt: ago(3 * hour),
             author: profile3,
             galleryUri: gallery1.uri,
             galleryTitle: gallery1.title,
@@ -437,26 +447,26 @@ enum PreviewData {
         GrainNotification(
             uri: "at://did:plc:prevuser4/social.grain.notification/n3",
             reason: "follow",
-            createdAt: "2025-01-10T18:00:00Z",
+            createdAt: ago(5 * hour),
             author: profile4
         ),
         GrainNotification(
             uri: "at://did:plc:prevuser6/social.grain.notification/n3b",
             reason: "follow",
-            createdAt: "2025-01-10T15:00:00Z",
+            createdAt: ago(8 * hour),
             author: profile6
         ),
         GrainNotification(
             uri: "at://did:plc:prevuser7/social.grain.notification/n3c",
             reason: "follow",
-            createdAt: "2025-01-10T14:30:00Z",
+            createdAt: ago(10 * hour),
             author: profile7
         ),
         // — Story favorite group: 2 users liked the same story → "Sofia and 1 other favorited your story"
         GrainNotification(
             uri: "at://did:plc:prevuser3/social.grain.notification/n6",
             reason: "story-favorite",
-            createdAt: "2025-01-10T13:00:00Z",
+            createdAt: ago(1 * day),
             author: profile3,
             storyUri: stories[0].uri,
             storyThumb: bundleImageURL("Portland_Japanese_Garden_maple")
@@ -464,7 +474,7 @@ enum PreviewData {
         GrainNotification(
             uri: "at://did:plc:prevuser5/social.grain.notification/n6b",
             reason: "story-favorite",
-            createdAt: "2025-01-10T12:30:00Z",
+            createdAt: ago(1 * day + 2 * hour),
             author: profile5,
             storyUri: stories[0].uri,
             storyThumb: bundleImageURL("Portland_Japanese_Garden_maple")
@@ -473,7 +483,7 @@ enum PreviewData {
         GrainNotification(
             uri: "at://did:plc:prevuser2/social.grain.notification/n4",
             reason: "gallery-favorite",
-            createdAt: "2025-01-09T12:00:00Z",
+            createdAt: ago(2 * day),
             author: profile2,
             galleryUri: gallery2.uri,
             galleryTitle: gallery2.title,
@@ -483,7 +493,7 @@ enum PreviewData {
         GrainNotification(
             uri: "at://did:plc:prevuser5/social.grain.notification/n5",
             reason: "gallery-comment-mention",
-            createdAt: "2025-01-09T10:00:00Z",
+            createdAt: ago(3 * day),
             author: profile5,
             galleryUri: gallery1.uri,
             galleryTitle: gallery1.title,

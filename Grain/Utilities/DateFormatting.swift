@@ -2,10 +2,10 @@ import Foundation
 
 enum DateFormatting {
     /// Produce an ISO 8601 string with fractional seconds (matches JS `toISOString()`).
-    static func nowISO() -> String {
+    static func nowISO(date: Date = Date()) -> String {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter.string(from: Date())
+        return formatter.string(from: date)
     }
 
     /// Parse an ISO 8601 string with or without fractional seconds.
@@ -18,6 +18,11 @@ enum DateFormatting {
     /// Relative time string like "2h", "3d", "1w", or "Mar 5".
     static func relativeTime(_ dateString: String) -> String {
         guard let date = parse(dateString) else { return "" }
+        return relativeTime(date)
+    }
+
+    /// Relative time from a `Date` value.
+    static func relativeTime(_ date: Date) -> String {
         let interval = Date().timeIntervalSince(date)
         if interval < 60 { return "now" }
         if interval < 3600 { return "\(Int(interval / 60))m" }
