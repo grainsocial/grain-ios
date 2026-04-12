@@ -1,42 +1,64 @@
 import SwiftUI
 
-/// Horizontal bar with aspect ratio preset chips and a lock toggle.
+/// Horizontal bar with aspect ratio preset chips, portrait/landscape toggle,
+/// and a lock button. Floats above the image with liquid glass.
 struct AspectRatioBar: View {
     @Bindable var state: CropState
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
+            // Lock toggle
             Button {
                 state.toggleRatioLock()
             } label: {
                 Image(systemName: state.isRatioLocked ? "lock.fill" : "lock.open")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(state.isRatioLocked ? Color.white : .secondary)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(state.isRatioLocked ? .white : .secondary)
+                    .frame(width: 36, height: 36)
+                    .contentShape(Rectangle())
+            }
+            .glassEffect(.regular.interactive(), in: .circle)
+
+            // Portrait/landscape toggle — only for ratios that aren't square or free
+            if state.showOrientationToggle {
+                Button {
+                    withAnimation(.smooth(duration: 0.3)) {
+                        state.toggleOrientation()
+                    }
+                } label: {
+                    Image(systemName: state.isPortrait ? "rectangle.portrait" : "rectangle.landscape.rotate")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.white)
+                        .frame(width: 36, height: 36)
+                        .contentShape(Rectangle())
+                }
+                .glassEffect(.regular.interactive(), in: .circle)
             }
 
-            Divider()
-                .frame(height: 20)
-
+            // Preset chips
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(AspectRatioPreset.allCases) { preset in
+                HStack(spacing: 6) {
+                    ForEach(AspectRatioPreset.allPresets) { preset in
                         Button {
-                            state.selectPreset(preset)
+                            withAnimation(.smooth(duration: 0.3)) {
+                                state.selectPreset(preset)
+                            }
                         } label: {
-                            Text(preset.rawValue)
+                            Text(preset.label)
                                 .font(.subheadline.weight(.medium))
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(
-                                    state.selectedPreset == preset
-                                        ? Color.white.opacity(0.2)
-                                        : Color.clear,
-                                    in: Capsule()
-                                )
                                 .foregroundStyle(
                                     state.selectedPreset == preset ? .white : .secondary
                                 )
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 8)
+                                .contentShape(Capsule())
                         }
+                        .glassEffect(
+                            state.selectedPreset == preset
+                                ? .regular.interactive()
+                                : .regular,
+                            in: .capsule
+                        )
                     }
                 }
             }

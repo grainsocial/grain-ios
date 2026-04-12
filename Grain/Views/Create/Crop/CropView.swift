@@ -40,16 +40,16 @@ struct CropView: View {
             ZStack {
                 Color.black.ignoresSafeArea()
 
+                // Image area fills the full geo — controls float on top
+                imageArea(in: geo)
+
+                // Floating controls
                 VStack(spacing: 0) {
                     toolbar
                         .padding(.horizontal, 16)
                         .padding(.top, 8)
 
-                    Spacer(minLength: 16)
-
-                    imageArea(in: geo)
-
-                    Spacer(minLength: 16)
+                    Spacer()
 
                     AspectRatioBar(state: state)
                         .padding(.bottom, 8)
@@ -71,14 +71,23 @@ struct CropView: View {
                 onCancel()
             }
             .foregroundStyle(.white)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .glassEffect(.regular.interactive(), in: .capsule)
 
             Spacer()
 
             Button("Reset") {
-                state.resetAll()
-                displayImage = ImageCropper.normalizeOrientation(image)
+                withAnimation(.smooth(duration: 0.4)) {
+                    state.resetAll()
+                }
+                let normalized = ImageCropper.normalizeOrientation(image)
+                displayImage = normalized
             }
             .foregroundStyle(.secondary)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .glassEffect(.regular.interactive(), in: .capsule)
 
             Spacer()
 
@@ -87,6 +96,9 @@ struct CropView: View {
             }
             .fontWeight(.semibold)
             .foregroundStyle(.white)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .glassEffect(.regular.interactive(), in: .capsule)
         }
     }
 
@@ -97,7 +109,7 @@ struct CropView: View {
         let safeArea = geo.safeAreaInsets
         let availableWidth = geo.size.width - 32
         let availableHeight = geo.size.height
-            - 44 // toolbar
+            - 56 // toolbar
             - 32 // spacers
             - 44 // aspect bar
             - 56 // rotation buttons
@@ -108,26 +120,29 @@ struct CropView: View {
         let fitHeight = fitWidth / imgAspect
 
         ZStack {
+            // Image layer — NO clipping so zoom can grow past bounds
             Image(uiImage: displayImage)
                 .resizable()
                 .aspectRatio(contentMode: .fill)
                 .frame(width: fitWidth, height: fitHeight)
                 .scaleEffect(state.imageScale)
                 .offset(state.imageOffset)
-                .clipped()
+                .transition(.blurReplace)
 
+            // Overlay (dimming + grid + handles) — clipped to the layout frame
             CropOverlayView(
                 cropRect: state.cropRect,
                 geometrySize: CGSize(width: fitWidth, height: fitHeight)
             )
 
-            // Gesture layer
+            // Gesture layer — covers full frame (including dim zone)
             Color.clear
                 .contentShape(Rectangle())
                 .gesture(dragGesture)
                 .simultaneousGesture(magnifyGesture)
         }
         .frame(width: fitWidth, height: fitHeight)
+        // Only clip the overlay, not the image — image can overflow when zoomed
         .clipped()
         .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .local) }) { frame in
             if state.imageDisplayFrame != frame {
@@ -138,31 +153,35 @@ struct CropView: View {
                 }
             }
         }
+        .animation(.smooth(duration: 0.35), value: displayImage.size.width)
+        .animation(.smooth(duration: 0.35), value: displayImage.size.height)
     }
 
     // MARK: - Rotation buttons
 
     private var rotationButtons: some View {
-        HStack(spacing: 40) {
+        HStack(spacing: 32) {
             Button {
                 rotate(degrees: -90)
             } label: {
                 Image(systemName: "rotate.left")
-                    .font(.system(size: 22))
+                    .font(.system(size: 20))
                     .foregroundStyle(.white)
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }
+            .glassEffect(.regular.interactive(), in: .circle)
 
             Button {
                 rotate(degrees: 90)
             } label: {
                 Image(systemName: "rotate.right")
-                    .font(.system(size: 22))
+                    .font(.system(size: 20))
                     .foregroundStyle(.white)
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }
+            .glassEffect(.regular.interactive(), in: .circle)
         }
     }
 
@@ -172,11 +191,10 @@ struct CropView: View {
         DragGesture(minimumDistance: 1)
             .onChanged { value in
                 if state.activeHandle == nil {
-                    if let handle = state.hitTest(point: value.startLocation) {
-                        state.activeHandle = handle
-                        state.dragStartCropRect = state.cropRect
-                        state.dragStartImageOffset = state.imageOffset
-                    }
+                    let handle = state.hitTest(point: value.startLocation)
+                    state.activeHandle = handle
+                    state.dragStartCropRect = state.cropRect
+                    state.dragStartImageOffset = state.imageOffset
                 }
 
                 guard let handle = state.activeHandle else { return }
@@ -213,9 +231,12 @@ struct CropView: View {
     // MARK: - Actions
 
     private func initializeCropState() {
+        // Set original ratio for the "Original" preset
+        let normalized = ImageCropper.normalizeOrientation(image)
+        state.originalImageRatio = normalized.size.width / max(normalized.size.height, 1)
+
         if let existing = existingCrop {
             state.rotation = existing.rotation
-            // Restore crop rect from normalized → view space
             let frame = state.imageDisplayFrame
             state.cropRect = CGRect(
                 x: frame.origin.x + existing.cropRect.origin.x * frame.width,
@@ -231,9 +252,9 @@ struct CropView: View {
     private func rotate(degrees: Int) {
         state.rotation = (state.rotation + degrees + 360) % 360
         let normalized = ImageCropper.normalizeOrientation(image)
-        displayImage = ImageCropper.rotate(normalized, degrees: state.rotation)
-        // Reset crop — coordinate space changed with new aspect ratio
-        DispatchQueue.main.async {
+
+        withAnimation(.smooth(duration: 0.4)) {
+            displayImage = ImageCropper.rotate(normalized, degrees: state.rotation)
             state.resetCrop()
         }
     }
