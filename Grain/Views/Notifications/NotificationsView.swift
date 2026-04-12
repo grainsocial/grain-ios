@@ -257,7 +257,7 @@ private struct GroupedNotificationRow: View {
                     onSubjectTap?()
                 } label: {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("\(Text(name).bold()) and \(others) \(reasonText) \(Text(DateFormatting.relativeTime(group.notification.createdAt)).foregroundStyle(.tertiary))")
+                        Text("\(Text(name).bold()) and \(others) \(reasonText) \(Text(DateFormatting.relativeTime(group.notification.createdAt)).foregroundStyle(.secondary))")
                             .font(.subheadline)
                             .foregroundStyle(.primary)
                         if group.notification.reasonType == .galleryFavorite,
@@ -319,7 +319,7 @@ private struct SingleNotificationRow: View {
                     }
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("\(Text(notification.author.displayName ?? notification.author.handle).bold()) \(reasonText) \(Text(DateFormatting.relativeTime(notification.createdAt)).foregroundStyle(.tertiary))")
+                    Text("\(Text(notification.author.displayName ?? notification.author.handle).bold()) \(reasonText) \(Text(DateFormatting.relativeTime(notification.createdAt)).foregroundStyle(.secondary))")
                         .font(.subheadline)
                         .foregroundStyle(.primary)
                     if notification.reasonType == .galleryFavorite,
