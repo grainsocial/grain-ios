@@ -7,35 +7,49 @@ enum CropHandle: Equatable {
     case topLeft, top, topRight
     case left, right
     case bottomLeft, bottom, bottomRight
-    /// Drag started inside the crop rect but not near any handle → pan image.
+    /// Drag started anywhere that isn't near a handle → pan image.
     case panImage
 }
 
 // MARK: - Aspect ratio presets
 
-enum AspectRatioPreset: String, CaseIterable, Identifiable {
-    case free = "Free"
-    case square = "1:1"
-    case fourFive = "4:5"
-    case threeFour = "3:4"
-    case sixteenNine = "16:9"
-    case nineSixteen = "9:16"
+enum AspectRatioPreset: Equatable, Identifiable {
+    case free
+    case original
+    case square
+    case ratio4x3
+    case ratio4x5
+    case ratio16x9
 
     var id: String {
-        rawValue
+        label
     }
 
-    /// Returns width/height ratio, or nil for free-form.
-    var ratio: CGFloat? {
+    var label: String {
         switch self {
-        case .free: nil
-        case .square: 1
-        case .fourFive: 4.0 / 5.0
-        case .threeFour: 3.0 / 4.0
-        case .sixteenNine: 16.0 / 9.0
-        case .nineSixteen: 9.0 / 16.0
+        case .free: "Free"
+        case .original: "Original"
+        case .square: "1:1"
+        case .ratio4x3: "4:3"
+        case .ratio4x5: "4:5"
+        case .ratio16x9: "16:9"
         }
     }
+
+    /// Base width/height ratio (landscape). Flipped by the orientation toggle.
+    var baseRatio: CGFloat? {
+        switch self {
+        case .free, .original: nil
+        case .square: 1
+        case .ratio4x3: 4.0 / 3.0
+        case .ratio4x5: 4.0 / 5.0
+        case .ratio16x9: 16.0 / 9.0
+        }
+    }
+
+    static let allPresets: [AspectRatioPreset] = [
+        .free, .original, .square, .ratio4x3, .ratio4x5, .ratio16x9,
+    ]
 }
 
 // MARK: - Crop state
@@ -64,6 +78,10 @@ final class CropState {
     var isRatioLocked: Bool = false
     /// The locked ratio (w/h). Set from preset or from current crop rect dimensions.
     var lockedRatio: CGFloat?
+    /// When true, ratios with baseRatio are flipped (landscape ↔ portrait).
+    var isPortrait: Bool = false
+    /// The original image's w/h ratio (set once on init).
+    var originalImageRatio: CGFloat = 1.0
 
     /// -- Rotation --
     /// Cumulative clockwise rotation in degrees: 0, 90, 180, 270.
@@ -73,9 +91,14 @@ final class CropState {
     /// The frame the image occupies on screen (set by geometry reader).
     var imageDisplayFrame: CGRect = .zero
 
-    /// Effective locked ratio: from preset if not free, else from manual lock.
+    /// Effective locked ratio: from preset, else from manual lock.
     var effectiveLockedRatio: CGFloat? {
-        if let preset = selectedPreset.ratio { return preset }
+        if selectedPreset == .original {
+            return originalImageRatio
+        }
+        if let base = selectedPreset.baseRatio {
+            return isPortrait ? 1.0 / base : base
+        }
         if isRatioLocked { return lockedRatio }
         return nil
     }
@@ -95,6 +118,7 @@ final class CropState {
         selectedPreset = .free
         isRatioLocked = false
         lockedRatio = nil
+        isPortrait = false
         resetCrop()
     }
 
@@ -102,11 +126,19 @@ final class CropState {
 
     func selectPreset(_ preset: AspectRatioPreset) {
         selectedPreset = preset
-        if let ratio = preset.ratio {
+        if let ratio = effectiveLockedRatio {
             lockedRatio = ratio
             applyCropRatio(ratio)
         } else if !isRatioLocked {
             lockedRatio = nil
+        }
+    }
+
+    func toggleOrientation() {
+        isPortrait.toggle()
+        if let ratio = effectiveLockedRatio {
+            lockedRatio = ratio
+            applyCropRatio(ratio)
         }
     }
 
@@ -120,6 +152,11 @@ final class CropState {
         } else if selectedPreset == .free {
             lockedRatio = nil
         }
+    }
+
+    /// Whether the portrait/landscape toggle should be shown.
+    var showOrientationToggle: Bool {
+        selectedPreset.baseRatio != nil && selectedPreset != .square
     }
 
     /// Snap crop rect to a given w/h ratio, centered, max size that fits.
@@ -148,10 +185,12 @@ final class CropState {
     private let handleHitRadius: CGFloat = 30
 
     /// Determine which handle (if any) a gesture start point is near.
-    func hitTest(point: CGPoint) -> CropHandle? {
+    /// Falls through to `.panImage` for ANY touch location — including
+    /// the dimmed zone outside the crop rect.
+    func hitTest(point: CGPoint) -> CropHandle {
         let r = cropRect
 
-        // Corners first (they overlap with edge zones)
+        // Corners first
         let corners: [(CropHandle, CGPoint)] = [
             (.topLeft, CGPoint(x: r.minX, y: r.minY)),
             (.topRight, CGPoint(x: r.maxX, y: r.minY)),
@@ -173,10 +212,8 @@ final class CropState {
             if distance(point, pos) < handleHitRadius { return handle }
         }
 
-        // Inside crop rect → pan image
-        if r.contains(point) { return .panImage }
-
-        return nil
+        // Anywhere else (inside crop OR in dim zone) → pan image
+        return .panImage
     }
 
     private func distance(_ a: CGPoint, _ b: CGPoint) -> CGFloat {
@@ -252,7 +289,6 @@ final class CropState {
         let currentRatio = r.width / max(r.height, 1)
 
         if currentRatio > ratio {
-            // Too wide — shrink width
             let newWidth = r.height * ratio
             switch anchor {
             case .topLeft, .left, .bottomLeft:
@@ -262,7 +298,6 @@ final class CropState {
             }
             r.size.width = newWidth
         } else {
-            // Too tall — shrink height
             let newHeight = r.width / ratio
             switch anchor {
             case .topLeft, .top, .topRight:
