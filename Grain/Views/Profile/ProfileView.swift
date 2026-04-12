@@ -640,18 +640,24 @@ struct ProfileView: View {
                 HStack(alignment: .top, spacing: 0) {
                     galleriesGrid
                         .containerRelativeFrame(.horizontal)
+                        .contentShape(Rectangle())
+                        .clipped()
                         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { h in
                             tabHeights[.grid] = h
                         }
                         .id(ProfileViewMode.grid)
                     favoritesGrid
                         .containerRelativeFrame(.horizontal)
+                        .contentShape(Rectangle())
+                        .clipped()
                         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { h in
                             tabHeights[.favorites] = h
                         }
                         .id(ProfileViewMode.favorites)
                     storyArchiveGrid
                         .containerRelativeFrame(.horizontal)
+                        .contentShape(Rectangle())
+                        .clipped()
                         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { h in
                             tabHeights[.stories] = h
                         }
@@ -715,15 +721,7 @@ struct ProfileView: View {
                             .aspectRatio(3.0 / 4.0, contentMode: .fit)
                             .overlay {
                                 if let photo = gallery.items?.first {
-                                    LazyImage(url: URL(string: photo.thumb)) { state in
-                                        if let image = state.image {
-                                            image
-                                                .resizable()
-                                                .scaledToFill()
-                                        } else {
-                                            Rectangle().fill(.quaternary)
-                                        }
-                                    }
+                                    ProfileGridThumbnail(urlString: photo.thumb)
                                 }
                             }
                             .clipped()
@@ -865,16 +863,8 @@ struct ProfileView: View {
                         Color.clear
                             .aspectRatio(3.0 / 4.0, contentMode: .fit)
                             .overlay {
-                                if let photo = gallery.items?.first, let url = URL(string: photo.thumb) {
-                                    LazyImage(url: url) { state in
-                                        if let image = state.image {
-                                            image
-                                                .resizable()
-                                                .scaledToFill()
-                                        } else {
-                                            Rectangle().fill(.quaternary)
-                                        }
-                                    }
+                                if let photo = gallery.items?.first {
+                                    ProfileGridThumbnail(urlString: photo.thumb)
                                 } else {
                                     Rectangle().fill(.quaternary)
                                 }
@@ -1145,6 +1135,48 @@ private enum FavoriteThumbProbeResult {
 private struct FavoriteThumbProbe {
     let uri: String
     let result: FavoriteThumbProbeResult
+}
+
+// MARK: - Profile Grid Thumbnail (sync cache read to avoid flash)
+
+private struct ProfileGridThumbnail: View {
+    let urlString: String
+    @State private var asyncImage: UIImage?
+
+    private var imageURL: URL? {
+        URL(string: urlString)
+    }
+
+    private var resolvedImage: UIImage? {
+        if let imageURL,
+           let cached = ImagePipeline.shared.cache.cachedImage(for: ImageRequest(url: imageURL))?.image
+        {
+            return cached
+        }
+        return asyncImage
+    }
+
+    var body: some View {
+        if let image = resolvedImage {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+        } else {
+            Rectangle().fill(.quaternary)
+                .onAppear { loadIfNeeded() }
+        }
+    }
+
+    private func loadIfNeeded() {
+        guard let imageURL, asyncImage == nil else { return }
+        let request = ImageRequest(url: imageURL)
+        if ImagePipeline.shared.cache.cachedImage(for: request) != nil { return }
+        Task {
+            if let image = try? await ImagePipeline.shared.image(for: request) {
+                asyncImage = image
+            }
+        }
+    }
 }
 
 #Preview {
