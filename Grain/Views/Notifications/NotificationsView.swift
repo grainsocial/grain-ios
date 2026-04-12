@@ -374,143 +374,32 @@ private struct SingleNotificationRow: View {
     }
 }
 
-// MARK: - Overlapping Avatars (UIKit-backed, zero SwiftUI layout participation)
+// MARK: - Overlapping Avatars
 
-private struct OverlappingAvatarsView: UIViewRepresentable {
+private struct OverlappingAvatarsView: View {
     let authors: [GrainProfile]
     let size: CGFloat
     let overlap: CGFloat
     var onProfileTap: ((String) -> Void)?
 
-    private var totalWidth: CGFloat {
-        guard !authors.isEmpty else { return 0 }
-        return size + CGFloat(authors.count - 1) * (size - overlap)
+    private var step: CGFloat {
+        size - overlap
     }
 
-    func makeUIView(context _: Context) -> OverlappingAvatarsUIView {
-        let view = OverlappingAvatarsUIView()
-        view.onProfileTap = onProfileTap
-        view.configure(authors: authors, size: size, overlap: overlap)
-        return view
-    }
-
-    func updateUIView(_ uiView: OverlappingAvatarsUIView, context _: Context) {
-        uiView.onProfileTap = onProfileTap
-        uiView.configure(authors: authors, size: size, overlap: overlap)
-    }
-
-    func sizeThatFits(_: ProposedViewSize, uiView _: OverlappingAvatarsUIView, context _: Context) -> CGSize? {
-        CGSize(width: totalWidth, height: size)
-    }
-}
-
-final class OverlappingAvatarsUIView: UIView {
-    var onProfileTap: ((String) -> Void)?
-    private var avatarViews: [UIImageView] = []
-    private var authorDids: [String] = []
-    private var currentKey = ""
-
-    private static func makeFallbackImage(size: CGFloat) -> UIImage {
-        let iconSize = size * 0.45
-        let config = UIImage.SymbolConfiguration(pointSize: iconSize)
-        let symbol = UIImage(systemName: "person.fill", withConfiguration: config)!
-        let renderer = UIGraphicsImageRenderer(size: CGSize(width: size, height: size))
-        return renderer.image { ctx in
-            UIColor.systemGray4.setFill()
-            ctx.cgContext.fillEllipse(in: CGRect(x: 0, y: 0, width: size, height: size))
-            let tinted = symbol.withTintColor(.systemGray2, renderingMode: .alwaysOriginal)
-            let origin = CGPoint(x: (size - tinted.size.width) / 2, y: (size - tinted.size.height) / 2)
-            tinted.draw(at: origin)
-        }
-    }
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        isUserInteractionEnabled = true
-        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: OverlappingAvatarsUIView, _) in
-            for iv in view.avatarViews {
-                iv.layer.borderColor = UIColor.systemBackground.cgColor
-            }
-        }
-    }
-
-    @available(*, unavailable)
-    required init?(coder _: NSCoder) {
-        fatalError()
-    }
-
-    func configure(authors: [GrainProfile], size: CGFloat, overlap: CGFloat) {
-        let key = authors.map(\.did).joined(separator: ",")
-        guard key != currentKey else { return }
-        currentKey = key
-        authorDids = authors.map(\.did)
-
-        // Remove old views
-        avatarViews.forEach { $0.removeFromSuperview() }
-        avatarViews.removeAll()
-
-        let step = size - overlap
-        let fallback = Self.makeFallbackImage(size: size)
-
-        for (i, author) in authors.enumerated() {
-            let iv = UIImageView()
-            iv.contentMode = .scaleAspectFill
-            iv.clipsToBounds = true
-            iv.layer.cornerRadius = size / 2
-            iv.layer.borderWidth = 2
-            iv.layer.borderColor = UIColor.systemBackground.cgColor
-            iv.frame = CGRect(x: CGFloat(i) * step, y: 0, width: size, height: size)
-
-            // Load from Nuke memory cache synchronously, or fetch async
-            if let url = author.avatar, let imageURL = URL(string: url) {
-                let request = ImageRequest(url: imageURL)
-                if let cached = ImagePipeline.shared.cache.cachedImage(for: request)?.image {
-                    iv.image = cached
-                } else {
-                    iv.image = fallback
-                    Task { @MainActor in
-                        if let image = try? await ImagePipeline.shared.image(for: request) {
-                            iv.image = image
-                        }
-                    }
+    var body: some View {
+        HStack(spacing: -overlap) {
+            ForEach(Array(authors.enumerated()), id: \.element.did) { i, author in
+                Button {
+                    onProfileTap?(author.did)
+                } label: {
+                    AvatarView(url: author.avatar, size: size, animated: false)
+                        .overlay(Circle().strokeBorder(Color(.systemBackground), lineWidth: 2))
                 }
-            } else {
-                iv.image = fallback
-            }
-
-            addSubview(iv)
-            avatarViews.append(iv)
-        }
-
-        let totalWidth = size + CGFloat(authors.count - 1) * step
-        frame.size = CGSize(width: totalWidth, height: size)
-        invalidateIntrinsicContentSize()
-    }
-
-    override var intrinsicContentSize: CGSize {
-        frame.size
-    }
-
-    override func hitTest(_ point: CGPoint, with _: UIEvent?) -> UIView? {
-        // Claim hit for any touch inside an avatar circle
-        for iv in avatarViews.reversed() {
-            if iv.frame.contains(point) { return self }
-        }
-        return nil
-    }
-
-    override func touchesEnded(_ touches: Set<UITouch>, with _: UIEvent?) {
-        guard let touch = touches.first else { return }
-        let location = touch.location(in: self)
-        // Check avatars in reverse order (topmost first)
-        for (i, iv) in avatarViews.enumerated().reversed() {
-            if iv.frame.contains(location) {
-                if i < authorDids.count {
-                    onProfileTap?(authorDids[i])
-                }
-                return
+                .buttonStyle(.plain)
+                .zIndex(Double(authors.count - i))
             }
         }
+        .fixedSize()
     }
 }
 
