@@ -12,7 +12,8 @@ struct CropView: View {
     let onCancel: () -> Void
 
     @State private var state = CropState()
-    /// The image after rotation is applied (for display).
+    /// Always the orientation-normalized original. Never mutated — rotation
+    /// is applied visually via `.rotationEffect()`.
     @State private var displayImage: UIImage
     @State private var hasInitialized = false
 
@@ -26,13 +27,12 @@ struct CropView: View {
         self.existingCrop = existingCrop
         self.onDone = onDone
         self.onCancel = onCancel
+        _displayImage = State(initialValue: ImageCropper.normalizeOrientation(image))
+    }
 
-        let normalized = ImageCropper.normalizeOrientation(image)
-        if let crop = existingCrop {
-            _displayImage = State(initialValue: ImageCropper.rotate(normalized, degrees: crop.rotation))
-        } else {
-            _displayImage = State(initialValue: normalized)
-        }
+    /// Whether the current rotation swaps width/height.
+    private var isSwapped: Bool {
+        state.rotationDegrees == 90 || state.rotationDegrees == 270
     }
 
     var body: some View {
@@ -40,10 +40,9 @@ struct CropView: View {
             ZStack {
                 Color.black.ignoresSafeArea()
 
-                // Image area fills the full geo — controls float on top
                 imageArea(in: geo)
 
-                // Floating controls
+                // Floating controls — on top of everything
                 VStack(spacing: 0) {
                     toolbar
                         .padding(.horizontal, 16)
@@ -54,7 +53,7 @@ struct CropView: View {
                     AspectRatioBar(state: state)
                         .padding(.bottom, 8)
 
-                    rotationButtons
+                    bottomControls
                         .padding(.bottom, 16)
                 }
             }
@@ -81,8 +80,6 @@ struct CropView: View {
                 withAnimation(.smooth(duration: 0.4)) {
                     state.resetAll()
                 }
-                let normalized = ImageCropper.normalizeOrientation(image)
-                displayImage = normalized
             }
             .foregroundStyle(.secondary)
             .padding(.horizontal, 14)
@@ -112,38 +109,53 @@ struct CropView: View {
             - 56 // toolbar
             - 32 // spacers
             - 44 // aspect bar
-            - 56 // rotation buttons
+            - 56 // bottom controls
             - safeArea.top - safeArea.bottom
 
-        let imgAspect = displayImage.size.width / max(displayImage.size.height, 1)
-        let fitWidth = min(availableWidth, availableHeight * imgAspect)
-        let fitHeight = fitWidth / imgAspect
+        // Post-rotation aspect ratio
+        let baseW = displayImage.size.width
+        let baseH = displayImage.size.height
+        let postW = isSwapped ? baseH : baseW
+        let postH = isSwapped ? baseW : baseH
+        let imgAspect = postW / max(postH, 1)
+
+        let (fitWidth, fitHeight): (CGFloat, CGFloat) = {
+            let w = min(availableWidth, availableHeight * imgAspect)
+            let h = w / imgAspect
+            if h > availableHeight {
+                return (availableHeight * imgAspect, availableHeight)
+            }
+            return (w, h)
+        }()
 
         ZStack {
-            // Image layer — NO clipping so zoom can grow past bounds
+            // Image layer — sized for pre-rotation, then rotated into post-rotation frame.
+            // No clipping — image can overflow when zoomed.
             Image(uiImage: displayImage)
                 .resizable()
-                .aspectRatio(contentMode: .fill)
-                .frame(width: fitWidth, height: fitHeight)
+                .frame(
+                    width: isSwapped ? fitHeight : fitWidth,
+                    height: isSwapped ? fitWidth : fitHeight
+                )
+                .rotationEffect(.degrees(state.rotationAngle))
                 .scaleEffect(state.imageScale)
                 .offset(state.imageOffset)
-                .transition(.blurReplace)
 
-            // Overlay (dimming + grid + handles) — clipped to the layout frame
+            // Overlay — dimming extends far beyond frame for zoom overflow
             CropOverlayView(
                 cropRect: state.cropRect,
-                geometrySize: CGSize(width: fitWidth, height: fitHeight)
+                geometrySize: CGSize(width: fitWidth, height: fitHeight),
+                showGrid: state.showGrid
             )
 
-            // Gesture layer — covers full frame (including dim zone)
+            // Gesture layer — covers the full frame
             Color.clear
                 .contentShape(Rectangle())
                 .gesture(dragGesture)
                 .simultaneousGesture(magnifyGesture)
         }
         .frame(width: fitWidth, height: fitHeight)
-        // Only clip the overlay, not the image — image can overflow when zoomed
-        .clipped()
+        // No .clipped() — image overflows when zoomed, dimming covers it
         .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .local) }) { frame in
             if state.imageDisplayFrame != frame {
                 state.imageDisplayFrame = frame
@@ -153,13 +165,11 @@ struct CropView: View {
                 }
             }
         }
-        .animation(.smooth(duration: 0.35), value: displayImage.size.width)
-        .animation(.smooth(duration: 0.35), value: displayImage.size.height)
     }
 
-    // MARK: - Rotation buttons
+    // MARK: - Bottom controls (rotation + grid toggle)
 
-    private var rotationButtons: some View {
+    private var bottomControls: some View {
         HStack(spacing: 32) {
             Button {
                 rotate(degrees: -90)
@@ -167,6 +177,17 @@ struct CropView: View {
                 Image(systemName: "rotate.left")
                     .font(.system(size: 20))
                     .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .glassEffect(.regular.interactive(), in: .circle)
+
+            Button {
+                state.showGrid.toggle()
+            } label: {
+                Image(systemName: state.showGrid ? "grid" : "grid.slash")
+                    .font(.system(size: 20))
+                    .foregroundStyle(state.showGrid ? .white : .secondary)
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }
@@ -191,7 +212,7 @@ struct CropView: View {
         DragGesture(minimumDistance: 1)
             .onChanged { value in
                 if state.activeHandle == nil {
-                    let handle = state.hitTest(point: value.startLocation)
+                    guard let handle = state.hitTest(point: value.startLocation) else { return }
                     state.activeHandle = handle
                     state.dragStartCropRect = state.cropRect
                     state.dragStartImageOffset = state.imageOffset
@@ -231,12 +252,10 @@ struct CropView: View {
     // MARK: - Actions
 
     private func initializeCropState() {
-        // Set original ratio for the "Original" preset
-        let normalized = ImageCropper.normalizeOrientation(image)
-        state.originalImageRatio = normalized.size.width / max(normalized.size.height, 1)
+        state.originalImageRatio = displayImage.size.width / max(displayImage.size.height, 1)
 
         if let existing = existingCrop {
-            state.rotation = existing.rotation
+            state.rotationAngle = Double(existing.rotation)
             let frame = state.imageDisplayFrame
             state.cropRect = CGRect(
                 x: frame.origin.x + existing.cropRect.origin.x * frame.width,
@@ -250,11 +269,8 @@ struct CropView: View {
     }
 
     private func rotate(degrees: Int) {
-        state.rotation = (state.rotation + degrees + 360) % 360
-        let normalized = ImageCropper.normalizeOrientation(image)
-
         withAnimation(.smooth(duration: 0.4)) {
-            displayImage = ImageCropper.rotate(normalized, degrees: state.rotation)
+            state.rotationAngle += Double(degrees)
             state.resetCrop()
         }
     }
@@ -270,12 +286,12 @@ struct CropView: View {
         let croppedImage = ImageCropper.applyCrop(
             to: image,
             normalizedRect: normalizedRect,
-            rotation: state.rotation
+            rotation: state.rotationDegrees
         )
 
         onDone(CropResult(
             croppedImage: croppedImage,
-            rotation: state.rotation,
+            rotation: state.rotationDegrees,
             cropRect: normalizedRect
         ))
     }
