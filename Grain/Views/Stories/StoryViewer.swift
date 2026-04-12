@@ -417,39 +417,23 @@ struct StoryViewer: View {
                                             }
                                         }
                                 } else {
-                                    ZStack {
-                                        if let thumbURL = URL(string: story.thumb),
-                                           let cachedThumb = ImagePipeline.shared.cache
-                                           .cachedImage(for: ImageRequest(url: thumbURL))?.image
-                                        {
-                                            Image(uiImage: cachedThumb)
-                                                .resizable()
-                                                .aspectRatio(story.aspectRatio.ratio, contentMode: .fit)
-                                                .blur(radius: 20)
-                                                .clipped()
-                                            // .overlay(alignment: .topLeading) {
-                                            //     // DEBUG: yellow = thumb sync-pulled from memory cache
-                                            //     Color.yellow.opacity(0.35).ignoresSafeArea()
-                                            //     Text("thumb · cache").font(.caption2.bold()).padding(6).background(.black.opacity(0.5)).foregroundStyle(.white).padding(8)
-                                            // }
-                                        } else {
-                                            LazyImage(url: URL(string: story.thumb)) { thumbState in
-                                                if let thumb = thumbState.image {
-                                                    thumb
-                                                        .resizable()
-                                                        .aspectRatio(story.aspectRatio.ratio, contentMode: .fit)
-                                                        .blur(radius: 20)
-                                                        .clipped()
-                                                    // .overlay(alignment: .topLeading) {
-                                                    //     // DEBUG: red = thumb from network (cache miss)
-                                                    //     Color.red.opacity(0.35).ignoresSafeArea()
-                                                    //     Text("thumb · network").font(.caption2.bold()).padding(6).background(.black.opacity(0.5)).foregroundStyle(.white).padding(8)
-                                                    // }
-                                                }
+                                    if let thumbURL = URL(string: story.thumb),
+                                       let cachedThumb = ImagePipeline.shared.cache
+                                       .cachedImage(for: ImageRequest(url: thumbURL))?.image
+                                    {
+                                        Image(uiImage: cachedThumb)
+                                            .resizable()
+                                            .aspectRatio(story.aspectRatio.ratio, contentMode: .fit)
+                                            .clipped()
+                                    } else {
+                                        LazyImage(url: URL(string: story.thumb)) { thumbState in
+                                            if let thumb = thumbState.image {
+                                                thumb
+                                                    .resizable()
+                                                    .aspectRatio(story.aspectRatio.ratio, contentMode: .fit)
+                                                    .clipped()
                                             }
                                         }
-                                        ProgressView()
-                                            .tint(.white)
                                     }
                                 }
                             }

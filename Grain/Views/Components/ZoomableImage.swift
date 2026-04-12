@@ -282,7 +282,6 @@ struct ZoomableImage: View {
                             thumb
                                 .resizable()
                                 .aspectRatio(aspectRatio, contentMode: .fit)
-                                .blur(radius: 20)
                                 .clipped()
                         } else {
                             Rectangle()
