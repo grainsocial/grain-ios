@@ -50,22 +50,13 @@ struct LoginView: View {
 
                         if suggestions.isEmpty {
                             // Heading
-                            Text("Log in with your internet handle")
+                            Text("Log in with your atmosphere account")
                                 .font(.title3.weight(.semibold))
                                 .foregroundStyle(.white)
                                 .multilineTextAlignment(.center)
                                 .padding(.bottom, 4)
 
-                            Text("Enter the domain you use as your identity across the open social web.")
-                                .font(.subheadline)
-                                .foregroundStyle(.white.opacity(0.7))
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal, 8)
-
-                            Link("Learn more", destination: URL(string: "https://internethandle.org")!)
-                                .font(.subheadline.weight(.medium))
-                                .underline()
-                                .foregroundStyle(.white)
+                            AtmosphereLogosMarquee()
                                 .padding(.bottom, 16)
                         }
 
@@ -77,7 +68,7 @@ struct LoginView: View {
                                     .font(.body.weight(.medium))
                                     .foregroundStyle(.white.opacity(0.5))
 
-                                TextField("e.g. jasmine.garden", text: $handle, prompt: Text("e.g. jasmine.garden").foregroundStyle(.white.opacity(0.5)))
+                                TextField("e.g. user.bsky.social", text: $handle, prompt: Text("e.g. user.bsky.social").foregroundStyle(.white.opacity(0.5)))
                                     .foregroundStyle(.white)
                                     .textContentType(.username)
                                     .autocorrectionDisabled()
@@ -312,6 +303,72 @@ private struct ActorSuggestion: Identifiable, Equatable {
     let avatar: String?
     var id: String {
         handle
+    }
+}
+
+// MARK: - Atmosphere Logos Marquee
+
+private struct AtmosphereApp: Identifiable {
+    let name: String
+    let logo: String
+    var id: String {
+        name
+    }
+}
+
+private struct AtmosphereLogosMarquee: View {
+    private static let apps: [AtmosphereApp] = [
+        .init(name: "Bluesky", logo: "atmo-bluesky"),
+        .init(name: "Tangled", logo: "atmo-tangled"),
+        .init(name: "Anisota", logo: "atmo-anisota"),
+        .init(name: "Beacon Bits", logo: "atmo-beacon-bits"),
+        .init(name: "Eurosky", logo: "atmo-eurosky"),
+        .init(name: "Flashes", logo: "atmo-flashes"),
+        .init(name: "Gander", logo: "atmo-gander"),
+        .init(name: "Germ", logo: "atmo-germ"),
+        .init(name: "Leaflet", logo: "atmo-leaflet"),
+        .init(name: "Northsky", logo: "atmo-northsky"),
+        .init(name: "Offprint", logo: "atmo-offprint"),
+        .init(name: "Pckt", logo: "atmo-pckt"),
+        .init(name: "Plyr", logo: "atmo-plyr"),
+        .init(name: "Popfeed", logo: "atmo-popfeed"),
+        .init(name: "Blento", logo: "atmo-blento"),
+        .init(name: "Semble", logo: "atmo-semble"),
+        .init(name: "Skylight", logo: "atmo-skylight"),
+        .init(name: "Blacksky", logo: "atmo-blacksky"),
+        .init(name: "Spark", logo: "atmo-spark"),
+        .init(name: "Stream Place", logo: "atmo-stream-place"),
+    ]
+
+    private let logoSize: CGFloat = 40
+    private let itemSpacing: CGFloat = 12
+    private let speed: CGFloat = 25
+
+    private static let uiImages: [UIImage] = apps.compactMap { UIImage(named: $0.logo) }
+
+    var body: some View {
+        TimelineView(.animation) { (timeline: TimelineViewDefaultContext) in
+            let now = timeline.date.timeIntervalSinceReferenceDate
+            Canvas { ctx, size in
+                let images = Self.uiImages
+                let totalWidth = CGFloat(images.count) * (logoSize + itemSpacing)
+                let scrollOffset = (CGFloat(now) * speed).truncatingRemainder(dividingBy: totalWidth)
+
+                for i in 0 ..< images.count * 2 {
+                    let idx = i % images.count
+                    let x = CGFloat(i) * (logoSize + itemSpacing) - scrollOffset
+                    guard x + logoSize > 0, x < size.width else { continue }
+                    let rect = CGRect(x: x, y: (size.height - logoSize) / 2, width: logoSize, height: logoSize)
+                    ctx.drawLayer { layerCtx in
+                        let clipPath = RoundedRectangle(cornerRadius: 10).path(in: rect)
+                        layerCtx.clip(to: clipPath)
+                        layerCtx.draw(Image(uiImage: images[idx]), in: rect)
+                    }
+                }
+            }
+            .frame(height: 44)
+        }
+        .clipped()
     }
 }
 
