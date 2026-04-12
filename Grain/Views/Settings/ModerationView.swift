@@ -5,15 +5,11 @@ struct ModerationView: View {
 
     var body: some View {
         List {
-            NavigationLink {
-                BlockedUsersView(client: client)
-            } label: {
-                Label("Blocked Users", systemImage: "nosign")
-            }
-            NavigationLink {
+            NavigationLink("Muted Users") {
                 MutedUsersView(client: client)
-            } label: {
-                Label("Muted Users", systemImage: "speaker.slash")
+            }
+            NavigationLink("Blocked Users") {
+                BlockedUsersView(client: client)
             }
         }
         .navigationTitle("Moderation")

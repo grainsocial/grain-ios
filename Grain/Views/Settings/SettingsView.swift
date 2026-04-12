@@ -1,4 +1,5 @@
 import Nuke
+import SafariServices
 import SwiftUI
 
 struct SettingsView: View {
@@ -6,97 +7,34 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     let client: XRPCClient
     @State private var cacheSizeText = "Calculating..."
-    @State private var includeExif = true
-    @State private var includeLocation = true
-    @State private var hasLoadedPrefs = false
-    @AppStorage("privacy.showSuggestedUsers") private var showSuggestedUsers = true
-    @State private var showCopiedToast = false
+    @State private var safariURL: URL?
 
     var body: some View {
         List {
-            Section("Account") {
-                if let handle = auth.userHandle {
-                    Menu {
-                        Button { copyText("@\(handle)") } label: {
-                            Label("Copy", systemImage: "doc.on.doc")
-                        }
-                    } label: {
-                        LabeledContent("Handle", value: "@\(handle)")
-                    }
-                    .foregroundStyle(.primary)
+            Section {
+                NavigationLink("Account") {
+                    AccountDetailView()
                 }
-                if let did = auth.userDID {
-                    Menu {
-                        Button { copyText(did) } label: {
-                            Label("Copy", systemImage: "doc.on.doc")
-                        }
-                    } label: {
-                        LabeledContent("DID", value: did)
-                            .font(.caption)
-                    }
-                    .foregroundStyle(.primary)
-                }
-            }
-
-            Section("Notifications") {
-                NavigationLink {
+                NavigationLink("Notifications") {
                     NotificationSettingsView(client: client)
-                } label: {
-                    Label("Notifications", systemImage: "bell")
                 }
-            }
-
-            Section("Moderation") {
-                NavigationLink {
+                NavigationLink("Moderation") {
                     ModerationView(client: client)
-                } label: {
-                    Label("Moderation", systemImage: "shield")
+                }
+                NavigationLink("Appearance") {
+                    AppearanceSettingsView()
+                }
+                NavigationLink("Upload Defaults") {
+                    UploadDefaultsView(client: client)
                 }
             }
 
             Section {
-                Toggle("Include location", isOn: $includeLocation)
-                    .onChange(of: includeLocation) {
-                        guard hasLoadedPrefs else { return }
-                        Task {
-                            guard let authContext = await auth.authContext() else { return }
-                            try? await client.putIncludeLocation(includeLocation, auth: authContext)
-                        }
-                    }
-                Toggle("Include camera data", isOn: $includeExif)
-                    .onChange(of: includeExif) {
-                        guard hasLoadedPrefs else { return }
-                        Task {
-                            guard let authContext = await auth.authContext() else { return }
-                            try? await client.putIncludeExif(includeExif, auth: authContext)
-                        }
-                    }
-                Toggle("Show suggested users", isOn: $showSuggestedUsers)
-            } header: {
-                Text("Privacy")
-            } footer: {
-                Text("Camera data includes make, model, and exposure info. Location is auto-detected from photo metadata when available.")
-            }
-
-            Section("Storage") {
-                LabeledContent("Image Cache", value: cacheSizeText)
-                Button("Clear Image Cache", role: .destructive) {
-                    clearImageCache()
-                }
-            }
-            .task {
-                guard !isPreview else { return }
-                updateCacheSize()
-            }
-
-            Section("Legal") {
-                Link("Privacy Policy", destination: URL(string: "https://grain.social/support/privacy")!)
-                Link("Terms of Service", destination: URL(string: "https://grain.social/support/terms")!)
-                Link("Copyright Policy", destination: URL(string: "https://grain.social/support/copyright")!)
-            }
-
-            Section("About") {
-                Link("Powered by AT Protocol", destination: URL(string: "https://atproto.com")!)
+                settingsLink("Privacy Policy", url: "https://grain.social/support/privacy")
+                settingsLink("Terms of Service", url: "https://grain.social/support/terms")
+                settingsLink("Copyright Policy", url: "https://grain.social/support/copyright")
+                settingsLink("Community Guidelines", url: "https://grain.social/support/community-guidelines")
+                settingsLink("AT Protocol", url: "https://atproto.com")
             }
 
             Section {
@@ -105,31 +43,31 @@ struct SettingsView: View {
                     dismiss()
                 }
             }
+
+            Section {
+                Button {
+                    clearImageCache()
+                } label: {
+                    HStack {
+                        Text("Clear cache")
+                            .foregroundStyle(Color("AccentColor"))
+                        Spacer()
+                        Text(cacheSizeText)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .task {
+                guard !isPreview else { return }
+                updateCacheSize()
+            }
+        }
+        .sheet(item: $safariURL) { url in
+            SafariView(url: url)
+                .ignoresSafeArea()
         }
         .navigationTitle("Settings")
-        .overlay(alignment: .center) {
-            if showCopiedToast { CopiedCheckmarkToast() }
-        }
-        .animation(.spring(response: 0.4, dampingFraction: 0.7), value: showCopiedToast)
-        .sensoryFeedback(.impact(weight: .medium), trigger: showCopiedToast)
-        .task {
-            if let authContext = await auth.authContext(),
-               let prefs = try? await client.getPreferences(auth: authContext).preferences
-            {
-                if let exif = prefs.includeExif { includeExif = exif }
-                if let location = prefs.includeLocation { includeLocation = location }
-            }
-            hasLoadedPrefs = true
-        }
-    }
-
-    private func copyText(_ text: String) {
-        UIPasteboard.general.string = text
-        showCopiedToast = true
-        Task {
-            try? await Task.sleep(for: .seconds(2))
-            showCopiedToast = false
-        }
+        .tint(.primary)
     }
 
     private func updateCacheSize() {
@@ -141,6 +79,21 @@ struct SettingsView: View {
         cacheSizeText = ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)
     }
 
+    private func settingsLink(_ title: String, url: String) -> some View {
+        Button {
+            safariURL = URL(string: url)
+        } label: {
+            HStack {
+                Text(title)
+                    .foregroundStyle(.primary)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+    }
+
     private func clearImageCache() {
         ImagePipeline.shared.cache.removeAll()
         if let dataCache = ImagePipeline.shared.configuration.dataCache as? DataCache {
@@ -150,28 +103,131 @@ struct SettingsView: View {
     }
 }
 
-struct CopiedCheckmarkToast: View {
-    @State private var checkScale = 0.3
+extension URL: @retroactive Identifiable {
+    public var id: String {
+        absoluteString
+    }
+}
+
+private struct AccountDetailView: View {
+    @Environment(AuthManager.self) private var auth
+    @State private var safariURL: URL?
 
     var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.subheadline)
-                .scaleEffect(checkScale)
-                .onAppear {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) {
-                        checkScale = 1.0
+        List {
+            Section {
+                if let handle = auth.userHandle {
+                    LabeledContent("Handle", value: "@\(handle)")
+                }
+                if let did = auth.userDID {
+                    LabeledContent("DID", value: did)
+                        .font(.caption)
+                }
+            }
+
+            Section {
+                if let did = auth.userDID {
+                    Button {
+                        safariURL = URL(string: "https://pdsls.dev/at://\(did)")
+                    } label: {
+                        HStack {
+                            Text("Manage your data")
+                                .foregroundStyle(.primary)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                        }
                     }
                 }
-            Text("Copied")
-                .font(.subheadline.weight(.medium))
+            }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(.ultraThinMaterial, in: Capsule())
-        .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
-        .transition(.scale.combined(with: .opacity))
+        .sheet(item: $safariURL) { url in
+            SafariView(url: url)
+                .ignoresSafeArea()
+        }
+        .navigationTitle("Account")
+        .tint(.primary)
     }
+}
+
+private struct AppearanceSettingsView: View {
+    @AppStorage("privacy.showSuggestedUsers") private var showSuggestedUsers = true
+
+    var body: some View {
+        List {
+            Section {
+                Toggle("Show suggested users", isOn: $showSuggestedUsers)
+            }
+        }
+        .navigationTitle("Appearance")
+        .tint(Color("AccentColor"))
+    }
+}
+
+private struct UploadDefaultsView: View {
+    @Environment(AuthManager.self) private var auth
+    let client: XRPCClient
+    @State private var includeExif = true
+    @State private var includeLocation = true
+    @State private var hasLoadedPrefs = false
+
+    var body: some View {
+        List {
+            Section {
+                Toggle(isOn: $includeLocation) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Include location")
+                        Text("Auto-detected from photo metadata")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .onChange(of: includeLocation) {
+                    guard hasLoadedPrefs else { return }
+                    Task {
+                        guard let authContext = await auth.authContext() else { return }
+                        try? await client.putIncludeLocation(includeLocation, auth: authContext)
+                    }
+                }
+                Toggle(isOn: $includeExif) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Include camera data")
+                        Text("Make, model, and exposure info")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .onChange(of: includeExif) {
+                    guard hasLoadedPrefs else { return }
+                    Task {
+                        guard let authContext = await auth.authContext() else { return }
+                        try? await client.putIncludeExif(includeExif, auth: authContext)
+                    }
+                }
+            }
+        }
+        .navigationTitle("Upload Defaults")
+        .tint(Color("AccentColor"))
+        .task {
+            if let authContext = await auth.authContext(),
+               let prefs = try? await client.getPreferences(auth: authContext).preferences
+            {
+                if let exif = prefs.includeExif { includeExif = exif }
+                if let location = prefs.includeLocation { includeLocation = location }
+            }
+            hasLoadedPrefs = true
+        }
+    }
+}
+
+private struct SafariView: UIViewControllerRepresentable {
+    let url: URL
+    func makeUIViewController(context _: Context) -> SFSafariViewController {
+        SFSafariViewController(url: url)
+    }
+
+    func updateUIViewController(_: SFSafariViewController, context _: Context) {}
 }
 
 #Preview {
