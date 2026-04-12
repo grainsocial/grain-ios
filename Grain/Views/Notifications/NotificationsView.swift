@@ -203,7 +203,7 @@ private struct ReasonIcon: View {
     var body: some View {
         Image(systemName: iconName)
             .foregroundStyle(Color("AccentColor"))
-            .font(.system(size: 14))
+            .font(.system(size: 18))
             .frame(width: 20)
     }
 }
@@ -223,7 +223,7 @@ private struct GroupedNotificationRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             ReasonIcon(reason: group.notification.reasonType)
-                .padding(.top, 4)
+                .frame(height: 38)
 
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 0) {
@@ -310,7 +310,7 @@ private struct SingleNotificationRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             ReasonIcon(reason: notification.reasonType)
-                .padding(.top, 4)
+                .frame(height: 34)
 
             VStack(alignment: .leading, spacing: 6) {
                 AvatarView(url: notification.author.avatar, size: 34, animated: false)
@@ -605,5 +605,6 @@ private struct GroupedAuthorsView: View {
     vm.unseenCount = 3
     return NotificationsView(client: client, viewModel: vm)
         .previewEnvironments()
+        .grainPreview()
         .frame(maxHeight: .infinity, alignment: .top)
 }

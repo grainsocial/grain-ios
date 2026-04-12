@@ -51,6 +51,24 @@ enum PreviewData {
         avatar: bundleImageURL("Mt_Herschel,_Antarctica,_Jan_2006")
     )
 
+    static let profile6 = GrainProfile(
+        cid: "cid6", did: "did:plc:prevuser6",
+        handle: "rina.grain.social", displayName: "Rina Watanabe",
+        avatar: bundleImageURL("ACE_EMD_F40PH_Fremont_-_San_Jose")
+    )
+
+    static let profile7 = GrainProfile(
+        cid: "cid7", did: "did:plc:prevuser7",
+        handle: "omar.grain.social", displayName: "Omar Hassan",
+        avatar: bundleImageURL("C-141_Starlifter_contrail")
+    )
+
+    static let profile8 = GrainProfile(
+        cid: "cid8", did: "did:plc:prevuser8",
+        handle: "elena.grain.social", displayName: "Elena Voronova",
+        avatar: bundleImageURL("Endeavour_after_STS-126_on_SCA_over_Mojave_from_above")
+    )
+
     // MARK: - Bundle image URL helper
 
     static func bundleImageURL(_ name: String, ext: String = "jpg") -> String {
@@ -367,6 +385,7 @@ enum PreviewData {
     // MARK: - Notifications
 
     static let notifications: [GrainNotification] = [
+        // — Gallery favorite group: 4 users liked gallery1 within 48h → "Marcus and 3 others favorited your gallery"
         GrainNotification(
             uri: "at://did:plc:prevuser2/social.grain.notification/n1",
             reason: "gallery-favorite",
@@ -374,8 +393,36 @@ enum PreviewData {
             author: profile2,
             galleryUri: gallery1.uri,
             galleryTitle: gallery1.title,
-            galleryThumb: ""
+            galleryThumb: bundleImageURL("Portland_Japanese_Garden_maple")
         ),
+        GrainNotification(
+            uri: "at://did:plc:prevuser6/social.grain.notification/n1b",
+            reason: "gallery-favorite",
+            createdAt: "2025-01-10T18:45:00Z",
+            author: profile6,
+            galleryUri: gallery1.uri,
+            galleryTitle: gallery1.title,
+            galleryThumb: bundleImageURL("Portland_Japanese_Garden_maple")
+        ),
+        GrainNotification(
+            uri: "at://did:plc:prevuser7/social.grain.notification/n1c",
+            reason: "gallery-favorite",
+            createdAt: "2025-01-10T17:20:00Z",
+            author: profile7,
+            galleryUri: gallery1.uri,
+            galleryTitle: gallery1.title,
+            galleryThumb: bundleImageURL("Portland_Japanese_Garden_maple")
+        ),
+        GrainNotification(
+            uri: "at://did:plc:prevuser8/social.grain.notification/n1d",
+            reason: "gallery-favorite",
+            createdAt: "2025-01-10T16:00:00Z",
+            author: profile8,
+            galleryUri: gallery1.uri,
+            galleryTitle: gallery1.title,
+            galleryThumb: bundleImageURL("Portland_Japanese_Garden_maple")
+        ),
+        // — Single gallery comment
         GrainNotification(
             uri: "at://did:plc:prevuser3/social.grain.notification/n2",
             reason: "gallery-comment",
@@ -383,15 +430,46 @@ enum PreviewData {
             author: profile3,
             galleryUri: gallery1.uri,
             galleryTitle: gallery1.title,
-            galleryThumb: "",
+            galleryThumb: bundleImageURL("Portland_Japanese_Garden_maple"),
             commentText: "The light in the third frame is unreal. What film stock?"
         ),
+        // — Follow group: 3 users followed within 48h → "Kai and 2 others followed you"
         GrainNotification(
             uri: "at://did:plc:prevuser4/social.grain.notification/n3",
             reason: "follow",
             createdAt: "2025-01-10T18:00:00Z",
-            author: GrainProfile(cid: "c4", did: "did:plc:prevuser4", handle: "kai.grain.social", displayName: "Kai Müller")
+            author: profile4
         ),
+        GrainNotification(
+            uri: "at://did:plc:prevuser6/social.grain.notification/n3b",
+            reason: "follow",
+            createdAt: "2025-01-10T15:00:00Z",
+            author: profile6
+        ),
+        GrainNotification(
+            uri: "at://did:plc:prevuser7/social.grain.notification/n3c",
+            reason: "follow",
+            createdAt: "2025-01-10T14:30:00Z",
+            author: profile7
+        ),
+        // — Story favorite group: 2 users liked the same story → "Sofia and 1 other favorited your story"
+        GrainNotification(
+            uri: "at://did:plc:prevuser3/social.grain.notification/n6",
+            reason: "story-favorite",
+            createdAt: "2025-01-10T13:00:00Z",
+            author: profile3,
+            storyUri: stories[0].uri,
+            storyThumb: bundleImageURL("Portland_Japanese_Garden_maple")
+        ),
+        GrainNotification(
+            uri: "at://did:plc:prevuser5/social.grain.notification/n6b",
+            reason: "story-favorite",
+            createdAt: "2025-01-10T12:30:00Z",
+            author: profile5,
+            storyUri: stories[0].uri,
+            storyThumb: bundleImageURL("Portland_Japanese_Garden_maple")
+        ),
+        // — Single gallery favorite (different gallery, no group)
         GrainNotification(
             uri: "at://did:plc:prevuser2/social.grain.notification/n4",
             reason: "gallery-favorite",
@@ -399,16 +477,17 @@ enum PreviewData {
             author: profile2,
             galleryUri: gallery2.uri,
             galleryTitle: gallery2.title,
-            galleryThumb: ""
+            galleryThumb: bundleImageURL("Mount_Hood_reflected_in_Mirror_Lake,_Oregon")
         ),
+        // — Single comment mention
         GrainNotification(
             uri: "at://did:plc:prevuser5/social.grain.notification/n5",
             reason: "gallery-comment-mention",
             createdAt: "2025-01-09T10:00:00Z",
-            author: GrainProfile(cid: "c5", did: "did:plc:prevuser5", handle: "leo.grain.social", displayName: "Leo Park"),
+            author: profile5,
             galleryUri: gallery1.uri,
             galleryTitle: gallery1.title,
-            galleryThumb: "",
+            galleryThumb: bundleImageURL("Portland_Japanese_Garden_maple"),
             commentText: "Tagged you in a comment: @yuki.grain.social beautiful work!"
         ),
     ]
