@@ -500,6 +500,53 @@ enum PreviewData {
             galleryThumb: bundleImageURL("Portland_Japanese_Garden_maple"),
             commentText: "Tagged you in a comment: @yuki.grain.social beautiful work!"
         ),
+        // — Single gallery mention
+        GrainNotification(
+            uri: "at://did:plc:prevuser4/social.grain.notification/n7",
+            reason: "gallery-mention",
+            createdAt: ago(3 * day + 2 * hour),
+            author: profile4,
+            galleryUri: gallery3.uri,
+            galleryTitle: gallery3.title,
+            galleryThumb: bundleImageURL("Mt_Herschel,_Antarctica,_Jan_2006")
+        ),
+        // — Single story comment
+        GrainNotification(
+            uri: "at://did:plc:prevuser6/social.grain.notification/n8",
+            reason: "story-comment",
+            createdAt: ago(3 * day + 5 * hour),
+            author: profile6,
+            storyUri: stories[0].uri,
+            storyThumb: bundleImageURL("Portland_Japanese_Garden_maple"),
+            commentText: "Love the autumn colors here"
+        ),
+        // — Single reply
+        GrainNotification(
+            uri: "at://did:plc:prevuser7/social.grain.notification/n9",
+            reason: "reply",
+            createdAt: ago(4 * day),
+            author: profile7,
+            galleryUri: gallery1.uri,
+            galleryTitle: gallery1.title,
+            galleryThumb: bundleImageURL("Portland_Japanese_Garden_maple"),
+            commentText: "Totally agree, Portra is unmatched for skin tones"
+        ),
+        // — Single story favorite (different story, won't group with the pair above)
+        GrainNotification(
+            uri: "at://did:plc:prevuser8/social.grain.notification/n10",
+            reason: "story-favorite",
+            createdAt: ago(4 * day + 3 * hour),
+            author: profile8,
+            storyUri: stories[1].uri,
+            storyThumb: bundleImageURL("Mount_Hood_reflected_in_Mirror_Lake,_Oregon")
+        ),
+        // — Single follow (>48h from the group, won't merge)
+        GrainNotification(
+            uri: "at://did:plc:prevuser5/social.grain.notification/n11",
+            reason: "follow",
+            createdAt: ago(5 * day),
+            author: profile5
+        ),
     ]
 
     // MARK: - Image generation
