@@ -23,6 +23,14 @@ struct SettingsView: View {
                 }
             }
 
+            Section("Notifications") {
+                NavigationLink {
+                    NotificationSettingsView(client: client)
+                } label: {
+                    Label("Notifications", systemImage: "bell")
+                }
+            }
+
             Section("Moderation") {
                 NavigationLink {
                     ModerationView(client: client)

@@ -17,7 +17,7 @@ extension XRPCClient {
     }
 
     func getNotifications(
-        limit: Int = 20,
+        limit: Int = 100,
         cursor: String? = nil,
         countOnly: Bool = false,
         auth: AuthContext? = nil

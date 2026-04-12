@@ -124,16 +124,18 @@ struct FollowListView: View {
                 selectedProfileDid = item.did
             }
             VStack(alignment: .leading, spacing: 2) {
-                if let displayName = item.displayName, !displayName.isEmpty {
-                    Text(displayName)
-                        .font(.body.weight(.semibold))
-                        .lineLimit(1)
-                }
-                if let handle = item.handle {
-                    Text(handle)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                HStack(spacing: 4) {
+                    if let displayName = item.displayName, !displayName.isEmpty {
+                        Text(displayName)
+                            .font(.body.weight(.semibold))
+                            .lineLimit(1)
+                    }
+                    if let handle = item.handle {
+                        Text("@\(handle)")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                 }
                 if let desc = item.description, !desc.isEmpty {
                     Text(desc)

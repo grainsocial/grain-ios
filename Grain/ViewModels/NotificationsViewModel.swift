@@ -1,9 +1,12 @@
 import Foundation
+import Nuke
+import SwiftUI
 
 @Observable
 @MainActor
 final class NotificationsViewModel {
     var notifications: [GrainNotification] = []
+    var grouped: [GroupedNotification] = []
     var unseenCount: Int = 0
     var isLoading = false
     var error: Error?
@@ -11,6 +14,7 @@ final class NotificationsViewModel {
     private var cursor: String?
     private var hasMore = true
     private var client: XRPCClient
+    private var prefetcher = ImagePrefetcher()
 
     init(client: XRPCClient) {
         self.client = client
@@ -29,10 +33,14 @@ final class NotificationsViewModel {
 
         do {
             let response = try await client.getNotifications(auth: auth)
-            notifications = response.notifications
-            unseenCount = response.unseenCount ?? 0
-            cursor = response.cursor
-            hasMore = response.cursor != nil
+            withAnimation(nil) {
+                notifications = response.notifications
+                grouped = GroupedNotification.group(notifications)
+                unseenCount = response.unseenCount ?? 0
+                cursor = response.cursor
+                hasMore = response.cursor != nil
+            }
+            prefetchImages(response.notifications)
         } catch {
             self.error = error
         }
@@ -45,9 +53,15 @@ final class NotificationsViewModel {
 
         do {
             let response = try await client.getNotifications(cursor: cursor, auth: auth)
-            notifications.append(contentsOf: response.notifications)
+            var updatedGroups = grouped
+            GroupedNotification.mergeNewPage(response.notifications, into: &updatedGroups)
+            withAnimation(nil) {
+                notifications.append(contentsOf: response.notifications)
+                grouped = updatedGroups
+            }
             self.cursor = response.cursor
             hasMore = response.cursor != nil
+            prefetchImages(response.notifications)
         } catch {
             self.error = error
         }
@@ -63,6 +77,14 @@ final class NotificationsViewModel {
         } catch {
             unseenCount = previousCount
         }
+    }
+
+    private func prefetchImages(_ notifs: [GrainNotification]) {
+        var urlStrings = notifs.compactMap(\.author.avatar)
+        urlStrings += notifs.compactMap(\.galleryThumb)
+        urlStrings += notifs.compactMap(\.storyThumb)
+        let urls = urlStrings.compactMap { URL(string: $0) }
+        prefetcher.startPrefetching(with: urls)
     }
 
     func fetchUnseenCount(auth: AuthContext? = nil) async {

@@ -21,10 +21,33 @@ struct GetPreferencesResponse: Codable, Sendable {
     let preferences: UserPreferences
 }
 
+struct NotifPref: Codable, Sendable {
+    var push: Bool
+    var inApp: Bool
+    var from: String // "all" or "follows"
+
+    static let `default` = NotifPref(push: true, inApp: true, from: "all")
+}
+
+struct NotificationPrefs: Codable, Sendable {
+    var favorites: NotifPref?
+    var follows: NotifPref?
+    var comments: NotifPref?
+    var mentions: NotifPref?
+
+    static let `default` = NotificationPrefs(
+        favorites: .default,
+        follows: .default,
+        comments: .default,
+        mentions: .default
+    )
+}
+
 struct UserPreferences: Codable, Sendable {
     var pinnedFeeds: [PinnedFeed]?
     var includeExif: Bool?
     var includeLocation: Bool?
+    var notificationPrefs: NotificationPrefs?
 }
 
 struct PinnedFeed: Codable, Sendable, Identifiable, Hashable {
@@ -124,6 +147,14 @@ extension XRPCClient {
             let value: Bool
         }
         try await procedure("dev.hatk.putPreference", input: Input(key: "includeLocation", value: value), auth: auth)
+    }
+
+    func putNotificationPrefs(_ prefs: NotificationPrefs, auth: AuthContext? = nil) async throws {
+        struct Input: Encodable {
+            let key: String
+            let value: NotificationPrefs
+        }
+        try await procedure("dev.hatk.putPreference", input: Input(key: "notificationPrefs", value: prefs), auth: auth)
     }
 
     func getActorFavorites(
