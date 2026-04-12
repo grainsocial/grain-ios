@@ -7,7 +7,7 @@ enum CropHandle: Equatable {
     case topLeft, top, topRight
     case left, right
     case bottomLeft, bottom, bottomRight
-    /// Drag started anywhere that isn't near a handle → pan image.
+    /// Drag inside the crop rect or while zoomed → pan image.
     case panImage
 }
 
@@ -57,7 +57,7 @@ enum AspectRatioPreset: Equatable, Identifiable {
 @Observable
 @MainActor
 final class CropState {
-    /// -- Crop rect in VIEW SPACE (points, relative to the image display frame) --
+    /// Crop rect in VIEW SPACE (points, relative to the image display frame).
     var cropRect: CGRect = .zero
 
     // -- Image transform (view space) --
@@ -66,32 +66,34 @@ final class CropState {
 
     /// -- Gesture tracking --
     var activeHandle: CropHandle?
-    /// Snapshot of cropRect when a handle drag begins.
     var dragStartCropRect: CGRect = .zero
-    /// Snapshot of imageOffset when an image pan begins.
     var dragStartImageOffset: CGSize = .zero
-    /// Snapshot of imageScale when a pinch begins.
     var pinchStartScale: CGFloat = 1.0
 
     // -- Aspect ratio --
     var selectedPreset: AspectRatioPreset = .free
     var isRatioLocked: Bool = false
-    /// The locked ratio (w/h). Set from preset or from current crop rect dimensions.
     var lockedRatio: CGFloat?
-    /// When true, ratios with baseRatio are flipped (landscape ↔ portrait).
     var isPortrait: Bool = false
-    /// The original image's w/h ratio (set once on init).
     var originalImageRatio: CGFloat = 1.0
 
     /// -- Rotation --
-    /// Cumulative clockwise rotation in degrees: 0, 90, 180, 270.
-    var rotation: Int = 0
+    /// Cumulative clockwise rotation in degrees. Animated continuously
+    /// (not clamped to 0–360) so SwiftUI always rotates the short way.
+    var rotationAngle: Double = 0
+
+    /// Discrete rotation for crop math (always 0, 90, 180, 270).
+    var rotationDegrees: Int {
+        let mod = Int(rotationAngle.truncatingRemainder(dividingBy: 360))
+        return (mod + 360) % 360
+    }
+
+    /// -- Display --
+    var showGrid: Bool = true
 
     /// -- Layout reference --
-    /// The frame the image occupies on screen (set by geometry reader).
     var imageDisplayFrame: CGRect = .zero
 
-    /// Effective locked ratio: from preset, else from manual lock.
     var effectiveLockedRatio: CGFloat? {
         if selectedPreset == .original {
             return originalImageRatio
@@ -105,16 +107,14 @@ final class CropState {
 
     // MARK: - Initialization
 
-    /// Reset crop rect to cover the full image display frame.
     func resetCrop() {
         cropRect = imageDisplayFrame
         imageOffset = .zero
         imageScale = 1.0
     }
 
-    /// Reset everything including rotation.
     func resetAll() {
-        rotation = 0
+        rotationAngle = 0
         selectedPreset = .free
         isRatioLocked = false
         lockedRatio = nil
@@ -154,12 +154,10 @@ final class CropState {
         }
     }
 
-    /// Whether the portrait/landscape toggle should be shown.
     var showOrientationToggle: Bool {
         selectedPreset.baseRatio != nil && selectedPreset != .square
     }
 
-    /// Snap crop rect to a given w/h ratio, centered, max size that fits.
     private func applyCropRatio(_ ratio: CGFloat) {
         let maxW = imageDisplayFrame.width
         let maxH = imageDisplayFrame.height
@@ -184,13 +182,14 @@ final class CropState {
 
     private let handleHitRadius: CGFloat = 30
 
-    /// Determine which handle (if any) a gesture start point is near.
-    /// Falls through to `.panImage` for ANY touch location — including
-    /// the dimmed zone outside the crop rect.
-    func hitTest(point: CGPoint) -> CropHandle {
+    /// Hit-test a point to determine the gesture mode.
+    ///
+    /// Priority: corners → full edge lines → inside crop rect (pan) → nil.
+    /// Dragging in the dim zone far from any edge does nothing (returns nil).
+    func hitTest(point: CGPoint) -> CropHandle? {
         let r = cropRect
 
-        // Corners first
+        // Corners (highest priority — overlap with edges)
         let corners: [(CropHandle, CGPoint)] = [
             (.topLeft, CGPoint(x: r.minX, y: r.minY)),
             (.topRight, CGPoint(x: r.maxX, y: r.minY)),
@@ -201,19 +200,26 @@ final class CropState {
             if distance(point, pos) < handleHitRadius { return handle }
         }
 
-        // Edge midpoints
-        let edges: [(CropHandle, CGPoint)] = [
-            (.top, CGPoint(x: r.midX, y: r.minY)),
-            (.bottom, CGPoint(x: r.midX, y: r.maxY)),
-            (.left, CGPoint(x: r.minX, y: r.midY)),
-            (.right, CGPoint(x: r.maxX, y: r.midY)),
-        ]
-        for (handle, pos) in edges {
-            if distance(point, pos) < handleHitRadius { return handle }
+        // Full edge LINES (not just midpoints) — drag anywhere along an edge
+        let hr = handleHitRadius
+        if abs(point.y - r.minY) < hr, point.x >= r.minX - hr, point.x <= r.maxX + hr {
+            return .top
+        }
+        if abs(point.y - r.maxY) < hr, point.x >= r.minX - hr, point.x <= r.maxX + hr {
+            return .bottom
+        }
+        if abs(point.x - r.minX) < hr, point.y >= r.minY - hr, point.y <= r.maxY + hr {
+            return .left
+        }
+        if abs(point.x - r.maxX) < hr, point.y >= r.minY - hr, point.y <= r.maxY + hr {
+            return .right
         }
 
-        // Anywhere else (inside crop OR in dim zone) → pan image
-        return .panImage
+        // Inside crop rect → pan image
+        if r.contains(point) { return .panImage }
+
+        // Dim zone, far from edges → no gesture
+        return nil
     }
 
     private func distance(_ a: CGPoint, _ b: CGPoint) -> CGFloat {
@@ -224,7 +230,6 @@ final class CropState {
 
     private let minCropSize: CGFloat = 60
 
-    /// Update crop rect based on a handle drag translation.
     func handleDrag(handle: CropHandle, translation: CGSize) {
         var r = dragStartCropRect
         let dx = translation.width
@@ -261,7 +266,6 @@ final class CropState {
             return
         }
 
-        // Enforce minimum size
         if r.width < minCropSize {
             r.size.width = minCropSize
             if handle == .topLeft || handle == .left || handle == .bottomLeft {
@@ -275,7 +279,6 @@ final class CropState {
             }
         }
 
-        // Enforce aspect ratio lock
         if let ratio = effectiveLockedRatio {
             r = applyAspectRatio(ratio, to: r, anchor: handle)
         }
@@ -283,7 +286,6 @@ final class CropState {
         cropRect = clampCropToImage(r)
     }
 
-    /// Adjust rect to match the target aspect ratio, anchoring to the opposite edge.
     private func applyAspectRatio(_ ratio: CGFloat, to rect: CGRect, anchor: CropHandle) -> CGRect {
         var r = rect
         let currentRatio = r.width / max(r.height, 1)
@@ -323,7 +325,6 @@ final class CropState {
 
     // MARK: - Clamping
 
-    /// Clamp crop rect so it stays within the transformed image bounds.
     private func clampCropToImage(_ rect: CGRect) -> CGRect {
         let imageBounds = transformedImageBounds()
         var r = rect
@@ -336,7 +337,6 @@ final class CropState {
         return r
     }
 
-    /// Clamp image offset so the image always covers the entire crop rect.
     func clampImageOffset(_ offset: CGSize) -> CGSize {
         let scaledW = imageDisplayFrame.width * imageScale
         let scaledH = imageDisplayFrame.height * imageScale
@@ -367,7 +367,6 @@ final class CropState {
         return clamped
     }
 
-    /// The image bounds in view space after scale and offset are applied.
     func transformedImageBounds() -> CGRect {
         let scaledW = imageDisplayFrame.width * imageScale
         let scaledH = imageDisplayFrame.height * imageScale
