@@ -57,10 +57,10 @@ struct AvatarView: View {
 
     private var fallback: some View {
         ZStack {
-            Circle().fill(Color.gray.opacity(0.3))
+            Circle().fill(Color(.systemGray4))
             Image(systemName: "person.fill")
                 .font(.system(size: size * 0.45))
-                .foregroundStyle(Color.gray.opacity(0.6))
+                .foregroundStyle(Color(.systemGray2))
         }
     }
 }

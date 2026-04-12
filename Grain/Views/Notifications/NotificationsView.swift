@@ -198,8 +198,8 @@ private struct ReasonIcon: View {
         switch reason {
         case .galleryFavorite, .storyFavorite: "heart.fill"
         case .follow: "person.fill.badge.plus"
-        case .galleryComment, .storyComment: "bubble.left.fill"
-        case .reply: "arrowshape.turn.up.left.fill"
+        case .galleryComment, .storyComment: "text.bubble.fill"
+        case .reply: "arrowshape.turn.up.backward.fill"
         case .galleryCommentMention, .galleryMention: "at"
         case .unknown: "bell.fill"
         }
@@ -208,7 +208,7 @@ private struct ReasonIcon: View {
     var body: some View {
         Image(systemName: iconName)
             .foregroundStyle(Color("AccentColor"))
-            .font(.system(size: 14))
+            .font(.system(size: 18))
             .frame(width: 20)
     }
 }
@@ -225,10 +225,14 @@ private struct GroupedNotificationRow: View {
         group.notification.galleryThumb ?? group.notification.storyThumb
     }
 
+    private var isStoryThumb: Bool {
+        group.notification.galleryThumb == nil && group.notification.storyThumb != nil
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             ReasonIcon(reason: group.notification.reasonType)
-                .padding(.top, 4)
+                .frame(height: 38)
 
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 0) {
@@ -262,7 +266,7 @@ private struct GroupedNotificationRow: View {
                     onSubjectTap?()
                 } label: {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("\(Text(name).bold()) and \(others) \(reasonText) \(Text(DateFormatting.relativeTime(group.notification.createdAt)).foregroundStyle(.tertiary))")
+                        Text("\(Text(name).bold()) and \(others) \(reasonText) \(Text(DateFormatting.relativeTime(group.notification.createdAt)).foregroundStyle(.secondary))")
                             .font(.subheadline)
                             .foregroundStyle(.primary)
                         if group.notification.reasonType == .galleryFavorite,
@@ -284,7 +288,7 @@ private struct GroupedNotificationRow: View {
         .overlay(alignment: .trailing) {
             if let thumb {
                 Button { onSubjectTap?() } label: {
-                    CachedThumbnailView(url: thumb, height: 44)
+                    CachedThumbnailView(url: thumb, size: 44, portrait: isStoryThumb)
                 }
                 .buttonStyle(.plain)
             }
@@ -312,10 +316,14 @@ private struct SingleNotificationRow: View {
         notification.galleryThumb ?? notification.storyThumb
     }
 
+    private var isStoryThumb: Bool {
+        notification.galleryThumb == nil && notification.storyThumb != nil
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             ReasonIcon(reason: notification.reasonType)
-                .padding(.top, 4)
+                .frame(height: 34)
 
             VStack(alignment: .leading, spacing: 6) {
                 AvatarView(url: notification.author.avatar, size: 34, animated: false)
@@ -324,7 +332,7 @@ private struct SingleNotificationRow: View {
                     }
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("\(Text(notification.author.displayName ?? notification.author.handle).bold()) \(reasonText) \(Text(DateFormatting.relativeTime(notification.createdAt)).foregroundStyle(.tertiary))")
+                    Text("\(Text(notification.author.displayName ?? notification.author.handle).bold()) \(reasonText) \(Text(DateFormatting.relativeTime(notification.createdAt)).foregroundStyle(.secondary))")
                         .font(.subheadline)
                         .foregroundStyle(.primary)
                     if notification.reasonType == .galleryFavorite,
@@ -349,7 +357,7 @@ private struct SingleNotificationRow: View {
         .overlay(alignment: .trailing) {
             if let thumb {
                 Button { onSubjectTap?() } label: {
-                    CachedThumbnailView(url: thumb, height: 44)
+                    CachedThumbnailView(url: thumb, size: 44, portrait: isStoryThumb)
                 }
                 .buttonStyle(.plain)
             }
@@ -371,126 +379,32 @@ private struct SingleNotificationRow: View {
     }
 }
 
-// MARK: - Overlapping Avatars (UIKit-backed, zero SwiftUI layout participation)
+// MARK: - Overlapping Avatars
 
-private struct OverlappingAvatarsView: UIViewRepresentable {
+private struct OverlappingAvatarsView: View {
     let authors: [GrainProfile]
     let size: CGFloat
     let overlap: CGFloat
     var onProfileTap: ((String) -> Void)?
 
-    private var totalWidth: CGFloat {
-        guard !authors.isEmpty else { return 0 }
-        return size + CGFloat(authors.count - 1) * (size - overlap)
+    private var step: CGFloat {
+        size - overlap
     }
 
-    func makeUIView(context _: Context) -> OverlappingAvatarsUIView {
-        let view = OverlappingAvatarsUIView()
-        view.onProfileTap = onProfileTap
-        view.configure(authors: authors, size: size, overlap: overlap)
-        return view
-    }
-
-    func updateUIView(_ uiView: OverlappingAvatarsUIView, context _: Context) {
-        uiView.onProfileTap = onProfileTap
-        uiView.configure(authors: authors, size: size, overlap: overlap)
-    }
-
-    func sizeThatFits(_: ProposedViewSize, uiView _: OverlappingAvatarsUIView, context _: Context) -> CGSize? {
-        CGSize(width: totalWidth, height: size)
-    }
-}
-
-final class OverlappingAvatarsUIView: UIView {
-    var onProfileTap: ((String) -> Void)?
-    private var avatarViews: [UIImageView] = []
-    private var authorDids: [String] = []
-    private var currentKey = ""
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        isUserInteractionEnabled = true
-        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: OverlappingAvatarsUIView, _) in
-            for iv in view.avatarViews {
-                iv.layer.borderColor = UIColor.systemBackground.cgColor
-            }
-        }
-    }
-
-    @available(*, unavailable)
-    required init?(coder _: NSCoder) {
-        fatalError()
-    }
-
-    func configure(authors: [GrainProfile], size: CGFloat, overlap: CGFloat) {
-        let key = authors.map(\.did).joined(separator: ",")
-        guard key != currentKey else { return }
-        currentKey = key
-        authorDids = authors.map(\.did)
-
-        // Remove old views
-        avatarViews.forEach { $0.removeFromSuperview() }
-        avatarViews.removeAll()
-
-        let step = size - overlap
-
-        for (i, author) in authors.enumerated() {
-            let iv = UIImageView()
-            iv.contentMode = .scaleAspectFill
-            iv.clipsToBounds = true
-            iv.layer.cornerRadius = size / 2
-            iv.layer.borderWidth = 2
-            iv.layer.borderColor = UIColor.systemBackground.cgColor
-            iv.backgroundColor = UIColor.gray.withAlphaComponent(0.3)
-            iv.frame = CGRect(x: CGFloat(i) * step, y: 0, width: size, height: size)
-
-            // Load from Nuke memory cache synchronously, or fetch async
-            if let url = author.avatar, let imageURL = URL(string: url) {
-                let request = ImageRequest(url: imageURL)
-                if let cached = ImagePipeline.shared.cache.cachedImage(for: request)?.image {
-                    iv.image = cached
-                } else {
-                    Task { @MainActor in
-                        if let image = try? await ImagePipeline.shared.image(for: request) {
-                            iv.image = image
-                        }
-                    }
+    var body: some View {
+        HStack(spacing: -overlap) {
+            ForEach(Array(authors.enumerated()), id: \.element.did) { i, author in
+                Button {
+                    onProfileTap?(author.did)
+                } label: {
+                    AvatarView(url: author.avatar, size: size, animated: false)
+                        .overlay(Circle().strokeBorder(Color(.systemBackground), lineWidth: 2))
                 }
-            }
-
-            addSubview(iv)
-            avatarViews.append(iv)
-        }
-
-        let totalWidth = size + CGFloat(authors.count - 1) * step
-        frame.size = CGSize(width: totalWidth, height: size)
-        invalidateIntrinsicContentSize()
-    }
-
-    override var intrinsicContentSize: CGSize {
-        frame.size
-    }
-
-    override func hitTest(_ point: CGPoint, with _: UIEvent?) -> UIView? {
-        // Claim hit for any touch inside an avatar circle
-        for iv in avatarViews.reversed() {
-            if iv.frame.contains(point) { return self }
-        }
-        return nil
-    }
-
-    override func touchesEnded(_ touches: Set<UITouch>, with _: UIEvent?) {
-        guard let touch = touches.first else { return }
-        let location = touch.location(in: self)
-        // Check avatars in reverse order (topmost first)
-        for (i, iv) in avatarViews.enumerated().reversed() {
-            if iv.frame.contains(location) {
-                if i < authorDids.count {
-                    onProfileTap?(authorDids[i])
-                }
-                return
+                .buttonStyle(.plain)
+                .zIndex(Double(authors.count - i))
             }
         }
+        .fixedSize()
     }
 }
 
@@ -498,7 +412,16 @@ final class OverlappingAvatarsUIView: UIView {
 
 private struct CachedThumbnailView: View {
     let url: String
-    let height: CGFloat
+    let size: CGFloat
+    var portrait: Bool = false
+
+    private var width: CGFloat {
+        size
+    }
+
+    private var height: CGFloat {
+        portrait ? size * 4 / 3 : size
+    }
 
     @State private var asyncImage: UIImage?
 
@@ -506,9 +429,16 @@ private struct CachedThumbnailView: View {
         URL(string: url)
     }
 
+    private var thumbRequest: ImageRequest? {
+        guard let imageURL else { return nil }
+        let scale = UIScreen.main.scale
+        let targetSize = CGSize(width: width * scale, height: height * scale)
+        return ImageRequest(url: imageURL, processors: [.resize(size: targetSize, contentMode: .aspectFill)])
+    }
+
     private var resolvedImage: UIImage? {
-        if let imageURL,
-           let cached = ImagePipeline.shared.cache.cachedImage(for: ImageRequest(url: imageURL))?.image
+        if let request = thumbRequest,
+           let cached = ImagePipeline.shared.cache.cachedImage(for: request)?.image
         {
             return cached
         }
@@ -520,20 +450,18 @@ private struct CachedThumbnailView: View {
             if let image = resolvedImage {
                 Image(uiImage: image)
                     .resizable()
-                    .aspectRatio(contentMode: .fit)
+                    .aspectRatio(contentMode: .fill)
             } else {
                 Rectangle().fill(.quaternary)
-                    .aspectRatio(1, contentMode: .fit)
             }
         }
-        .frame(height: height)
+        .frame(width: width, height: height)
         .clipShape(.rect(cornerRadius: 6))
         .onAppear { loadIfNeeded() }
     }
 
     private func loadIfNeeded() {
-        guard let imageURL else { return }
-        let request = ImageRequest(url: imageURL)
+        guard let request = thumbRequest else { return }
         if ImagePipeline.shared.cache.cachedImage(for: request) != nil { return }
         guard asyncImage == nil else { return }
         Task {
@@ -610,5 +538,6 @@ private struct GroupedAuthorsView: View {
     vm.unseenCount = 3
     return NotificationsView(client: client, viewModel: vm)
         .previewEnvironments()
+        .grainPreview()
         .frame(maxHeight: .infinity, alignment: .top)
 }

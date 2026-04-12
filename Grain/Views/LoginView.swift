@@ -1,4 +1,3 @@
-import NukeUI
 import SwiftUI
 
 struct LoginView: View {
@@ -145,21 +144,7 @@ struct LoginView: View {
                                             Task { await login() }
                                         } label: {
                                             HStack(spacing: 10) {
-                                                if let avatar = actor.avatar, let url = URL(string: avatar) {
-                                                    LazyImage(url: url) { state in
-                                                        if let image = state.image {
-                                                            image.resizable().scaledToFill()
-                                                        } else {
-                                                            Circle().fill(.white.opacity(0.2))
-                                                        }
-                                                    }
-                                                    .frame(width: 32, height: 32)
-                                                    .clipShape(Circle())
-                                                } else {
-                                                    Circle()
-                                                        .fill(.white.opacity(0.2))
-                                                        .frame(width: 32, height: 32)
-                                                }
+                                                AvatarView(url: actor.avatar, size: 32)
 
                                                 VStack(alignment: .leading, spacing: 1) {
                                                     if let displayName = actor.displayName, !displayName.isEmpty {

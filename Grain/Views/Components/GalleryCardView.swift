@@ -474,7 +474,7 @@ struct GalleryCardView: View {
                 (onCommentTap ?? onNavigate)()
             } label: {
                 HStack(spacing: 5) {
-                    Image(systemName: "bubble.right")
+                    Image(systemName: "bubble")
                         .font(.system(size: 20))
                     Text("\(gallery.commentCount ?? 0)")
                 }

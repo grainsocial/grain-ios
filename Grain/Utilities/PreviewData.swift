@@ -51,6 +51,34 @@ enum PreviewData {
         avatar: bundleImageURL("Mt_Herschel,_Antarctica,_Jan_2006")
     )
 
+    static let profile6 = GrainProfile(
+        cid: "cid6", did: "did:plc:prevuser6",
+        handle: "rina.grain.social", displayName: "Rina Watanabe",
+        avatar: nil
+    )
+
+    static let profile7 = GrainProfile(
+        cid: "cid7", did: "did:plc:prevuser7",
+        handle: "omar.grain.social", displayName: "Omar Hassan",
+        avatar: nil
+    )
+
+    static let profile8 = GrainProfile(
+        cid: "cid8", did: "did:plc:prevuser8",
+        handle: "elena.grain.social", displayName: "Elena Voronova",
+        avatar: bundleImageURL("Endeavour_after_STS-126_on_SCA_over_Mojave_from_above")
+    )
+
+    // MARK: - Date helpers
+
+    private static func ago(_ seconds: TimeInterval) -> String {
+        DateFormatting.nowISO(date: Date().addingTimeInterval(-seconds))
+    }
+
+    private static let minute: TimeInterval = 60
+    private static let hour: TimeInterval = 3600
+    private static let day: TimeInterval = 86400
+
     // MARK: - Bundle image URL helper
 
     static func bundleImageURL(_ name: String, ext: String = "jpg") -> String {
@@ -367,49 +395,157 @@ enum PreviewData {
     // MARK: - Notifications
 
     static let notifications: [GrainNotification] = [
+        // — Gallery favorite group: 4 users liked gallery1 within 48h → "Marcus and 3 others favorited your gallery"
         GrainNotification(
             uri: "at://did:plc:prevuser2/social.grain.notification/n1",
             reason: "gallery-favorite",
-            createdAt: "2025-01-10T19:30:00Z",
+            createdAt: ago(2 * minute),
             author: profile2,
             galleryUri: gallery1.uri,
             galleryTitle: gallery1.title,
-            galleryThumb: ""
+            galleryThumb: bundleImageURL("Mount_Hood_reflected_in_Mirror_Lake,_Oregon_thumb")
         ),
+        GrainNotification(
+            uri: "at://did:plc:prevuser6/social.grain.notification/n1b",
+            reason: "gallery-favorite",
+            createdAt: ago(15 * minute),
+            author: profile6,
+            galleryUri: gallery1.uri,
+            galleryTitle: gallery1.title,
+            galleryThumb: bundleImageURL("Mount_Hood_reflected_in_Mirror_Lake,_Oregon_thumb")
+        ),
+        GrainNotification(
+            uri: "at://did:plc:prevuser7/social.grain.notification/n1c",
+            reason: "gallery-favorite",
+            createdAt: ago(1 * hour),
+            author: profile7,
+            galleryUri: gallery1.uri,
+            galleryTitle: gallery1.title,
+            galleryThumb: bundleImageURL("Mount_Hood_reflected_in_Mirror_Lake,_Oregon_thumb")
+        ),
+        GrainNotification(
+            uri: "at://did:plc:prevuser8/social.grain.notification/n1d",
+            reason: "gallery-favorite",
+            createdAt: ago(2 * hour),
+            author: profile8,
+            galleryUri: gallery1.uri,
+            galleryTitle: gallery1.title,
+            galleryThumb: bundleImageURL("Mount_Hood_reflected_in_Mirror_Lake,_Oregon_thumb")
+        ),
+        // — Single gallery comment
         GrainNotification(
             uri: "at://did:plc:prevuser3/social.grain.notification/n2",
             reason: "gallery-comment",
-            createdAt: "2025-01-10T19:00:00Z",
+            createdAt: ago(3 * hour),
             author: profile3,
             galleryUri: gallery1.uri,
             galleryTitle: gallery1.title,
-            galleryThumb: "",
+            galleryThumb: bundleImageURL("Mount_Hood_reflected_in_Mirror_Lake,_Oregon_thumb"),
             commentText: "The light in the third frame is unreal. What film stock?"
         ),
+        // — Follow group: 3 users followed within 48h → "Kai and 2 others followed you"
         GrainNotification(
             uri: "at://did:plc:prevuser4/social.grain.notification/n3",
             reason: "follow",
-            createdAt: "2025-01-10T18:00:00Z",
-            author: GrainProfile(cid: "c4", did: "did:plc:prevuser4", handle: "kai.grain.social", displayName: "Kai Müller")
+            createdAt: ago(5 * hour),
+            author: profile4
         ),
+        GrainNotification(
+            uri: "at://did:plc:prevuser6/social.grain.notification/n3b",
+            reason: "follow",
+            createdAt: ago(8 * hour),
+            author: profile6
+        ),
+        GrainNotification(
+            uri: "at://did:plc:prevuser7/social.grain.notification/n3c",
+            reason: "follow",
+            createdAt: ago(10 * hour),
+            author: profile7
+        ),
+        // — Story favorite group: 2 users liked the same story → "Sofia and 1 other favorited your story"
+        GrainNotification(
+            uri: "at://did:plc:prevuser3/social.grain.notification/n6",
+            reason: "story-favorite",
+            createdAt: ago(1 * day),
+            author: profile3,
+            storyUri: stories[0].uri,
+            storyThumb: bundleImageURL("Portland_Japanese_Garden_maple_thumb")
+        ),
+        GrainNotification(
+            uri: "at://did:plc:prevuser5/social.grain.notification/n6b",
+            reason: "story-favorite",
+            createdAt: ago(1 * day + 2 * hour),
+            author: profile5,
+            storyUri: stories[0].uri,
+            storyThumb: bundleImageURL("Portland_Japanese_Garden_maple_thumb")
+        ),
+        // — Single gallery favorite (different gallery, no group)
         GrainNotification(
             uri: "at://did:plc:prevuser2/social.grain.notification/n4",
             reason: "gallery-favorite",
-            createdAt: "2025-01-09T12:00:00Z",
+            createdAt: ago(2 * day),
             author: profile2,
             galleryUri: gallery2.uri,
             galleryTitle: gallery2.title,
-            galleryThumb: ""
+            galleryThumb: bundleImageURL("Mount_Hood_reflected_in_Mirror_Lake,_Oregon_thumb")
         ),
+        // — Single comment mention
         GrainNotification(
             uri: "at://did:plc:prevuser5/social.grain.notification/n5",
             reason: "gallery-comment-mention",
-            createdAt: "2025-01-09T10:00:00Z",
-            author: GrainProfile(cid: "c5", did: "did:plc:prevuser5", handle: "leo.grain.social", displayName: "Leo Park"),
+            createdAt: ago(3 * day),
+            author: profile5,
             galleryUri: gallery1.uri,
             galleryTitle: gallery1.title,
-            galleryThumb: "",
+            galleryThumb: bundleImageURL("Portland_Japanese_Garden_maple_thumb"),
             commentText: "Tagged you in a comment: @yuki.grain.social beautiful work!"
+        ),
+        // — Single gallery mention
+        GrainNotification(
+            uri: "at://did:plc:prevuser4/social.grain.notification/n7",
+            reason: "gallery-mention",
+            createdAt: ago(3 * day + 2 * hour),
+            author: profile4,
+            galleryUri: gallery3.uri,
+            galleryTitle: gallery3.title,
+            galleryThumb: bundleImageURL("Mt_Herschel,_Antarctica,_Jan_2006_thumb")
+        ),
+        // — Single story comment
+        GrainNotification(
+            uri: "at://did:plc:prevuser6/social.grain.notification/n8",
+            reason: "story-comment",
+            createdAt: ago(3 * day + 5 * hour),
+            author: profile6,
+            storyUri: stories[0].uri,
+            storyThumb: bundleImageURL("Portland_Japanese_Garden_maple_thumb"),
+            commentText: "Love the autumn colors here"
+        ),
+        // — Single reply
+        GrainNotification(
+            uri: "at://did:plc:prevuser7/social.grain.notification/n9",
+            reason: "reply",
+            createdAt: ago(4 * day),
+            author: profile7,
+            galleryUri: gallery1.uri,
+            galleryTitle: gallery1.title,
+            galleryThumb: bundleImageURL("Portland_Japanese_Garden_maple_thumb"),
+            commentText: "Totally agree, Portra is unmatched for skin tones"
+        ),
+        // — Single story favorite (different story, won't group with the pair above)
+        GrainNotification(
+            uri: "at://did:plc:prevuser8/social.grain.notification/n10",
+            reason: "story-favorite",
+            createdAt: ago(4 * day + 3 * hour),
+            author: profile8,
+            storyUri: stories[1].uri,
+            storyThumb: bundleImageURL("Mount_Hood_reflected_in_Mirror_Lake,_Oregon_thumb")
+        ),
+        // — Single follow (>48h from the group, won't merge)
+        GrainNotification(
+            uri: "at://did:plc:prevuser5/social.grain.notification/n11",
+            reason: "follow",
+            createdAt: ago(5 * day),
+            author: profile5
         ),
     ]
 

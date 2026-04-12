@@ -79,12 +79,31 @@ final class NotificationsViewModel {
         }
     }
 
+    private static let thumbSize: CGFloat = 44
+    private static let thumbSquareSize: CGSize = {
+        let px = thumbSize * UIScreen.main.scale
+        return CGSize(width: px, height: px)
+    }()
+
+    private static let thumbPortraitSize: CGSize = {
+        let scale = UIScreen.main.scale
+        return CGSize(width: thumbSize * scale, height: thumbSize * 4 / 3 * scale)
+    }()
+
     private func prefetchImages(_ notifs: [GrainNotification]) {
-        var urlStrings = notifs.compactMap(\.author.avatar)
-        urlStrings += notifs.compactMap(\.galleryThumb)
-        urlStrings += notifs.compactMap(\.storyThumb)
-        let urls = urlStrings.compactMap { URL(string: $0) }
-        prefetcher.startPrefetching(with: urls)
+        let avatarURLs = notifs.compactMap(\.author.avatar).compactMap { URL(string: $0) }
+        var requests = avatarURLs.map { ImageRequest(url: $0) }
+
+        for notif in notifs {
+            if let thumb = notif.galleryThumb, let url = URL(string: thumb) {
+                requests.append(ImageRequest(url: url, processors: [.resize(size: Self.thumbSquareSize, contentMode: .aspectFill)]))
+            }
+            if let thumb = notif.storyThumb, let url = URL(string: thumb) {
+                requests.append(ImageRequest(url: url, processors: [.resize(size: Self.thumbPortraitSize, contentMode: .aspectFill)]))
+            }
+        }
+
+        prefetcher.startPrefetching(with: requests)
     }
 
     func fetchUnseenCount(auth: AuthContext? = nil) async {
