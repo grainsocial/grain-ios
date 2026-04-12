@@ -175,7 +175,7 @@ struct CommentSheetContent: View {
                         }
                         .glassEffect(.regular.interactive(), in: .circle)
                         .disabled(isPostingComment)
-                        .transition(.scale.combined(with: .opacity))
+                        .transition(.scale(scale: 0, anchor: .trailing).combined(with: .opacity))
                     }
                 }
                 .animation(.spring(response: 0.3, dampingFraction: 0.8), value: commentText.isEmpty)
