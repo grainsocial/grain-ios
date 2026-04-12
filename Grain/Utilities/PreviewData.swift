@@ -403,7 +403,7 @@ enum PreviewData {
             author: profile2,
             galleryUri: gallery1.uri,
             galleryTitle: gallery1.title,
-            galleryThumb: bundleImageURL("Portland_Japanese_Garden_maple")
+            galleryThumb: bundleImageURL("Mount_Hood_reflected_in_Mirror_Lake,_Oregon_thumb")
         ),
         GrainNotification(
             uri: "at://did:plc:prevuser6/social.grain.notification/n1b",
@@ -412,7 +412,7 @@ enum PreviewData {
             author: profile6,
             galleryUri: gallery1.uri,
             galleryTitle: gallery1.title,
-            galleryThumb: bundleImageURL("Portland_Japanese_Garden_maple")
+            galleryThumb: bundleImageURL("Mount_Hood_reflected_in_Mirror_Lake,_Oregon_thumb")
         ),
         GrainNotification(
             uri: "at://did:plc:prevuser7/social.grain.notification/n1c",
@@ -421,7 +421,7 @@ enum PreviewData {
             author: profile7,
             galleryUri: gallery1.uri,
             galleryTitle: gallery1.title,
-            galleryThumb: bundleImageURL("Portland_Japanese_Garden_maple")
+            galleryThumb: bundleImageURL("Mount_Hood_reflected_in_Mirror_Lake,_Oregon_thumb")
         ),
         GrainNotification(
             uri: "at://did:plc:prevuser8/social.grain.notification/n1d",
@@ -430,7 +430,7 @@ enum PreviewData {
             author: profile8,
             galleryUri: gallery1.uri,
             galleryTitle: gallery1.title,
-            galleryThumb: bundleImageURL("Portland_Japanese_Garden_maple")
+            galleryThumb: bundleImageURL("Mount_Hood_reflected_in_Mirror_Lake,_Oregon_thumb")
         ),
         // — Single gallery comment
         GrainNotification(
@@ -440,7 +440,7 @@ enum PreviewData {
             author: profile3,
             galleryUri: gallery1.uri,
             galleryTitle: gallery1.title,
-            galleryThumb: bundleImageURL("Portland_Japanese_Garden_maple"),
+            galleryThumb: bundleImageURL("Mount_Hood_reflected_in_Mirror_Lake,_Oregon_thumb"),
             commentText: "The light in the third frame is unreal. What film stock?"
         ),
         // — Follow group: 3 users followed within 48h → "Kai and 2 others followed you"
@@ -469,7 +469,7 @@ enum PreviewData {
             createdAt: ago(1 * day),
             author: profile3,
             storyUri: stories[0].uri,
-            storyThumb: bundleImageURL("Portland_Japanese_Garden_maple")
+            storyThumb: bundleImageURL("Portland_Japanese_Garden_maple_thumb")
         ),
         GrainNotification(
             uri: "at://did:plc:prevuser5/social.grain.notification/n6b",
@@ -477,7 +477,7 @@ enum PreviewData {
             createdAt: ago(1 * day + 2 * hour),
             author: profile5,
             storyUri: stories[0].uri,
-            storyThumb: bundleImageURL("Portland_Japanese_Garden_maple")
+            storyThumb: bundleImageURL("Portland_Japanese_Garden_maple_thumb")
         ),
         // — Single gallery favorite (different gallery, no group)
         GrainNotification(
@@ -487,7 +487,7 @@ enum PreviewData {
             author: profile2,
             galleryUri: gallery2.uri,
             galleryTitle: gallery2.title,
-            galleryThumb: bundleImageURL("Mount_Hood_reflected_in_Mirror_Lake,_Oregon")
+            galleryThumb: bundleImageURL("Mount_Hood_reflected_in_Mirror_Lake,_Oregon_thumb")
         ),
         // — Single comment mention
         GrainNotification(
@@ -497,7 +497,7 @@ enum PreviewData {
             author: profile5,
             galleryUri: gallery1.uri,
             galleryTitle: gallery1.title,
-            galleryThumb: bundleImageURL("Portland_Japanese_Garden_maple"),
+            galleryThumb: bundleImageURL("Portland_Japanese_Garden_maple_thumb"),
             commentText: "Tagged you in a comment: @yuki.grain.social beautiful work!"
         ),
         // — Single gallery mention
@@ -508,7 +508,7 @@ enum PreviewData {
             author: profile4,
             galleryUri: gallery3.uri,
             galleryTitle: gallery3.title,
-            galleryThumb: bundleImageURL("Mt_Herschel,_Antarctica,_Jan_2006")
+            galleryThumb: bundleImageURL("Mt_Herschel,_Antarctica,_Jan_2006_thumb")
         ),
         // — Single story comment
         GrainNotification(
@@ -517,7 +517,7 @@ enum PreviewData {
             createdAt: ago(3 * day + 5 * hour),
             author: profile6,
             storyUri: stories[0].uri,
-            storyThumb: bundleImageURL("Portland_Japanese_Garden_maple"),
+            storyThumb: bundleImageURL("Portland_Japanese_Garden_maple_thumb"),
             commentText: "Love the autumn colors here"
         ),
         // — Single reply
@@ -528,7 +528,7 @@ enum PreviewData {
             author: profile7,
             galleryUri: gallery1.uri,
             galleryTitle: gallery1.title,
-            galleryThumb: bundleImageURL("Portland_Japanese_Garden_maple"),
+            galleryThumb: bundleImageURL("Portland_Japanese_Garden_maple_thumb"),
             commentText: "Totally agree, Portra is unmatched for skin tones"
         ),
         // — Single story favorite (different story, won't group with the pair above)
@@ -538,7 +538,7 @@ enum PreviewData {
             createdAt: ago(4 * day + 3 * hour),
             author: profile8,
             storyUri: stories[1].uri,
-            storyThumb: bundleImageURL("Mount_Hood_reflected_in_Mirror_Lake,_Oregon")
+            storyThumb: bundleImageURL("Mount_Hood_reflected_in_Mirror_Lake,_Oregon_thumb")
         ),
         // — Single follow (>48h from the group, won't merge)
         GrainNotification(

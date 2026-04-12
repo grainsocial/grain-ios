@@ -220,6 +220,10 @@ private struct GroupedNotificationRow: View {
         group.notification.galleryThumb ?? group.notification.storyThumb
     }
 
+    private var isStoryThumb: Bool {
+        group.notification.galleryThumb == nil && group.notification.storyThumb != nil
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             ReasonIcon(reason: group.notification.reasonType)
@@ -279,7 +283,7 @@ private struct GroupedNotificationRow: View {
         .overlay(alignment: .trailing) {
             if let thumb {
                 Button { onSubjectTap?() } label: {
-                    CachedThumbnailView(url: thumb, height: 44)
+                    CachedThumbnailView(url: thumb, size: 44, portrait: isStoryThumb)
                 }
                 .buttonStyle(.plain)
             }
@@ -305,6 +309,10 @@ private struct SingleNotificationRow: View {
 
     private var thumb: String? {
         notification.galleryThumb ?? notification.storyThumb
+    }
+
+    private var isStoryThumb: Bool {
+        notification.galleryThumb == nil && notification.storyThumb != nil
     }
 
     var body: some View {
@@ -344,7 +352,7 @@ private struct SingleNotificationRow: View {
         .overlay(alignment: .trailing) {
             if let thumb {
                 Button { onSubjectTap?() } label: {
-                    CachedThumbnailView(url: thumb, height: 44)
+                    CachedThumbnailView(url: thumb, size: 44, portrait: isStoryThumb)
                 }
                 .buttonStyle(.plain)
             }
@@ -493,7 +501,16 @@ final class OverlappingAvatarsUIView: UIView {
 
 private struct CachedThumbnailView: View {
     let url: String
-    let height: CGFloat
+    let size: CGFloat
+    var portrait: Bool = false
+
+    private var width: CGFloat {
+        size
+    }
+
+    private var height: CGFloat {
+        portrait ? size * 4 / 3 : size
+    }
 
     @State private var asyncImage: UIImage?
 
@@ -501,9 +518,16 @@ private struct CachedThumbnailView: View {
         URL(string: url)
     }
 
+    private var thumbRequest: ImageRequest? {
+        guard let imageURL else { return nil }
+        let scale = UIScreen.main.scale
+        let targetSize = CGSize(width: width * scale, height: height * scale)
+        return ImageRequest(url: imageURL, processors: [.resize(size: targetSize, contentMode: .aspectFill)])
+    }
+
     private var resolvedImage: UIImage? {
-        if let imageURL,
-           let cached = ImagePipeline.shared.cache.cachedImage(for: ImageRequest(url: imageURL))?.image
+        if let request = thumbRequest,
+           let cached = ImagePipeline.shared.cache.cachedImage(for: request)?.image
         {
             return cached
         }
@@ -515,20 +539,18 @@ private struct CachedThumbnailView: View {
             if let image = resolvedImage {
                 Image(uiImage: image)
                     .resizable()
-                    .aspectRatio(contentMode: .fit)
+                    .aspectRatio(contentMode: .fill)
             } else {
                 Rectangle().fill(.quaternary)
-                    .aspectRatio(1, contentMode: .fit)
             }
         }
-        .frame(height: height)
+        .frame(width: width, height: height)
         .clipShape(.rect(cornerRadius: 6))
         .onAppear { loadIfNeeded() }
     }
 
     private func loadIfNeeded() {
-        guard let imageURL else { return }
-        let request = ImageRequest(url: imageURL)
+        guard let request = thumbRequest else { return }
         if ImagePipeline.shared.cache.cachedImage(for: request) != nil { return }
         guard asyncImage == nil else { return }
         Task {
