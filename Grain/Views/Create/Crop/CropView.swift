@@ -42,13 +42,11 @@ struct CropView: View {
         ZStack {
             Color(.systemBackground).ignoresSafeArea()
 
-            GeometryReader { geo in
-                imageArea(in: geo)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-            .onGeometryChange(for: CGSize.self, of: { $0.size }) { lastGeoSize = $0 }
-
-            // Controls — respect safe area for Dynamic Island / home indicator
+            // VStack sandwiches the image between the controls so the
+            // GeometryReader receives only the actual image-zone height.
+            // Previously the reader filled the full screen and the image
+            // was centred in the full height rather than between the
+            // controls — visually off-centre on short landscape photos.
             VStack(spacing: 0) {
                 VStack(spacing: 8) {
                     toolbar
@@ -58,7 +56,11 @@ struct CropView: View {
                 }
                 .padding(.top, 8)
 
-                Spacer()
+                GeometryReader { geo in
+                    imageArea(in: geo)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                .onGeometryChange(for: CGSize.self, of: { $0.size }) { lastGeoSize = $0 }
 
                 VStack(spacing: 8) {
                     bottomControls
@@ -232,13 +234,12 @@ struct CropView: View {
 
     // MARK: - Image area
 
-    /// Height reserved by all controls above and below the image.
-    private static let controlsHeight: CGFloat = 44 + 48 + 44 + 44 + 48
-
     /// Compute the fitted image dimensions for a given rotation state.
+    /// geoSize is already the image-zone size (GeometryReader sits between
+    /// the controls in a VStack, so no controlsHeight subtraction needed).
     private func fitSize(geoSize: CGSize, swapped: Bool) -> (width: CGFloat, height: CGFloat) {
         let availableWidth = geoSize.width - 32
-        let availableHeight = geoSize.height - Self.controlsHeight
+        let availableHeight = geoSize.height
         let baseW = displayImage.size.width
         let baseH = displayImage.size.height
         let postW = swapped ? baseH : baseW
