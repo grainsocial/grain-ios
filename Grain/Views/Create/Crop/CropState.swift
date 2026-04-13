@@ -97,17 +97,10 @@ final class CropState {
     /// -- Layout reference --
     var imageDisplayFrame: CGRect = .zero
 
-<<<<<<< Updated upstream
     /// -- Baseline (incoming crop state, used for hasModifications / resetAll) --
     /// Normalized crop rect from the incoming CropResult (0…1 in post-rotation space).
     /// Full image = (0, 0, 1, 1).
     private(set) var baselineNormalizedCrop: CGRect = .init(x: 0, y: 0, width: 1, height: 1)
-=======
-    // -- Baseline (incoming crop state, used for hasModifications / resetAll) --
-    /// Normalized crop rect from the incoming CropResult (0…1 in post-rotation space).
-    /// Full image = (0, 0, 1, 1).
-    private(set) var baselineNormalizedCrop: CGRect = CGRect(x: 0, y: 0, width: 1, height: 1)
->>>>>>> Stashed changes
     /// Incoming rotation in degrees (0, 90, 180, 270).
     private(set) var baselineRotation: Double = 0
 
