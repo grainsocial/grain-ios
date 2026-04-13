@@ -130,8 +130,8 @@ final class CropStateTests: XCTestCase {
         let tiny = CGRect(x: 100, y: 100, width: 10, height: 10)
         let clamped = state.nearestValidCrop(tiny)
 
-        XCTAssertGreaterThanOrEqual(clamped.width, 60)
-        XCTAssertGreaterThanOrEqual(clamped.height, 60)
+        XCTAssertGreaterThanOrEqual(clamped.width, 44)
+        XCTAssertGreaterThanOrEqual(clamped.height, 44)
     }
 
     func testNearestValidCropWithRatioStaysInBounds() {

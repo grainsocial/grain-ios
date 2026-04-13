@@ -386,7 +386,8 @@ final class CropState {
 
     // MARK: - Handle drag
 
-    private let minCropSize: CGFloat = 60
+    /// Minimum crop dimension in overlay points (~132px at 3x).
+    private let minCropSize: CGFloat = 44
 
     func handleDrag(handle: CropHandle, translation: CGSize) {
         // If user drags a handle while a preset is selected but lock is off,
@@ -454,12 +455,35 @@ final class CropState {
 
     private func applyAspectRatio(_ ratio: CGFloat, to rect: CGRect, anchor: CropHandle) -> CGRect {
         var r = rect
-        let currentRatio = r.width / max(r.height, 1)
 
+        // For single-axis edges, the user changed ONE dimension — adjust the
+        // OTHER to maintain ratio. Without this, the unchanged axis forces
+        // the changed axis back to its original value, canceling the drag.
+        switch anchor {
+        case .top, .bottom:
+            // Height was dragged → adjust width
+            let newWidth = r.height * ratio
+            let cx = r.midX
+            r.origin.x = cx - newWidth / 2
+            r.size.width = newWidth
+            return r
+        case .left, .right:
+            // Width was dragged → adjust height
+            let newHeight = r.width / ratio
+            let cy = r.midY
+            r.origin.y = cy - newHeight / 2
+            r.size.height = newHeight
+            return r
+        default:
+            break
+        }
+
+        // Corners: both axes changed. Snap whichever is further from ratio.
+        let currentRatio = r.width / max(r.height, 1)
         if currentRatio > ratio {
             let newWidth = r.height * ratio
             switch anchor {
-            case .topLeft, .left, .bottomLeft:
+            case .topLeft, .bottomLeft:
                 r.origin.x = r.maxX - newWidth
             default:
                 break
@@ -468,7 +492,7 @@ final class CropState {
         } else {
             let newHeight = r.width / ratio
             switch anchor {
-            case .topLeft, .top, .topRight:
+            case .topLeft, .topRight:
                 r.origin.y = r.maxY - newHeight
             default:
                 break
@@ -590,8 +614,9 @@ final class CropState {
     }
 
     /// Screen-space hit rect for the move indicator above the crop top edge.
+    /// Generous 80×44 rect centered on the pill visual for reliable tapping.
     var moveIndicatorScreenRect: CGRect {
         let topCenter = overlayToScreenPoint(CGPoint(x: cropRect.midX, y: cropRect.minY))
-        return CGRect(x: topCenter.x - 22, y: topCenter.y - 28, width: 44, height: 28)
+        return CGRect(x: topCenter.x - 40, y: topCenter.y - 36, width: 80, height: 44)
     }
 }

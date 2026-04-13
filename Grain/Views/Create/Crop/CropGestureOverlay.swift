@@ -101,16 +101,11 @@ struct CropGestureOverlay: UIViewRepresentable {
                 let overlayPoint = state.viewToOverlayPoint(viewPoint)
                 var handle = state.hitTest(point: overlayPoint)
 
-                // When zoomed past 1x, promote interior + edge handles
-                // → panImage so panning is easy. Corners stay active
-                // for fine crop adjustment while zoomed.
-                if state.imageScale > 1.0 {
-                    switch handle {
-                    case .moveCrop, .top, .bottom, .left, .right:
-                        handle = .panImage
-                    default:
-                        break
-                    }
+                // When zoomed past 1x, promote interior to panImage
+                // so panning is easy. Edges and corners stay active
+                // for crop adjustment while zoomed.
+                if state.imageScale > 1.0, handle == .moveCrop {
+                    handle = .panImage
                 }
 
                 state.activeHandle = handle
