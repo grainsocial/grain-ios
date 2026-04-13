@@ -75,6 +75,16 @@ struct CropGestureOverlay: UIViewRepresentable {
             switch gesture.state {
             case .began:
                 let viewPoint = gesture.location(in: gesture.view)
+
+                // Check move indicator in screen space first — it may be
+                // outside the image bounds and is never promoted to panImage.
+                if state.moveIndicatorScreenRect.contains(viewPoint) {
+                    state.activeHandle = .moveIndicator
+                    state.dragStartCropRect = state.cropRect
+                    state.dragStartImageOffset = state.imageOffset
+                    return
+                }
+
                 let overlayPoint = state.viewToOverlayPoint(viewPoint)
                 var handle = state.hitTest(point: overlayPoint)
 
@@ -96,7 +106,7 @@ struct CropGestureOverlay: UIViewRepresentable {
                 switch handle {
                 case .panImage:
                     state.handleImagePan(translation: size)
-                case .moveCrop:
+                case .moveCrop, .moveIndicator:
                     let overlay = state.viewToOverlayTranslation(size)
                     state.handleCropMove(translation: overlay)
                 default:
