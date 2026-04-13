@@ -65,6 +65,7 @@ struct CropView: View {
                 }
                 .padding(.bottom, 16)
             }
+            .tint(.primary)
         }
         .statusBarHidden()
         .persistentSystemOverlays(.hidden)
@@ -73,78 +74,67 @@ struct CropView: View {
     // MARK: - Toolbar
 
     private var toolbar: some View {
-        ZStack {
-            // Center: Reset (always horizontally centered regardless of Cancel/Done widths)
-            Button("Reset") {
-                withAnimation(.smooth(duration: 0.4)) {
-                    state.resetAll()
-                }
+        HStack {
+            Button("Cancel") {
+                onCancel()
             }
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.primary)
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
             .glassEffect(.regular.interactive(), in: .capsule)
 
-            // Sides: Cancel + Done
-            HStack {
-                Button("Cancel") {
-                    onCancel()
-                }
-                .foregroundStyle(.primary)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .glassEffect(.regular.interactive(), in: .capsule)
+            Spacer()
 
-                Spacer()
-
-                Button("Done") {
-                    confirmCrop()
-                }
-                .fontWeight(.semibold)
-                .foregroundStyle(.primary)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .glassEffect(.regular.interactive(), in: .capsule)
+            Button("Done") {
+                confirmCrop()
             }
+            .fontWeight(.semibold)
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .glassEffect(.regular.interactive(), in: .capsule)
         }
     }
 
-    // MARK: - Tool buttons (rotation + grid) — top row
+    // MARK: - Tool buttons — top row
+
+    private func toolButton(_ icon: String, active: Bool = true, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 18))
+                .foregroundStyle(active ? .primary : .tertiary)
+                .frame(width: 40, height: 40)
+                .contentShape(Rectangle())
+        }
+        .glassEffect(active ? .regular.interactive() : .regular, in: .circle)
+    }
 
     private var toolButtons: some View {
-        HStack(spacing: 24) {
-            Button {
-                rotate(degrees: -90)
-            } label: {
-                Image(systemName: "rotate.left")
-                    .font(.system(size: 18))
-                    .foregroundStyle(.primary)
-                    .frame(width: 40, height: 40)
-                    .contentShape(Rectangle())
-            }
-            .glassEffect(.regular.interactive(), in: .circle)
+        HStack(spacing: 16) {
+            toolButton("rotate.left") { rotate(degrees: -90) }
+            toolButton("rotate.right") { rotate(degrees: 90) }
+            toolButton("grid", active: state.showGrid) { state.showGrid.toggle() }
 
-            Button {
-                state.showGrid.toggle()
-            } label: {
-                Image(systemName: "grid")
-                    .font(.system(size: 18))
-                    .foregroundStyle(state.showGrid ? .primary : .tertiary)
-                    .frame(width: 40, height: 40)
-                    .contentShape(Rectangle())
+            toolButton("square.arrowtriangle.4.outward") {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+                    state.zoomToCrop()
+                }
             }
-            .glassEffect(state.showGrid ? .regular.interactive() : .regular, in: .circle)
 
-            Button {
-                rotate(degrees: 90)
-            } label: {
-                Image(systemName: "rotate.right")
-                    .font(.system(size: 18))
-                    .foregroundStyle(.primary)
-                    .frame(width: 40, height: 40)
-                    .contentShape(Rectangle())
+            toolButton("arrow.counterclockwise") {
+                withAnimation(.smooth(duration: 0.4)) {
+                    state.resetAll()
+                }
             }
-            .glassEffect(.regular.interactive(), in: .circle)
+
+            if state.isViewModified {
+                toolButton("arrow.uturn.backward") {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+                        state.resetView()
+                    }
+                }
+                .transition(.opacity.combined(with: .scale(scale: 0.8)))
+            }
         }
     }
 
@@ -269,6 +259,9 @@ struct CropView: View {
             }
             .scaleEffect(state.imageScale)
             .offset(state.imageOffset)
+
+            // Screen-space handles (outside transform chain — constant size at any zoom)
+            CropHandlesView(screenCropRect: state.screenCropRect)
 
             // Gesture layer — UIKit recognizers for anchor-based pinch + 1-finger drag
             CropGestureOverlay(

@@ -9,6 +9,8 @@ enum CropHandle: Equatable {
     case bottomLeft, bottom, bottomRight
     /// Drag inside the crop rect → reposition the mask.
     case moveCrop
+    /// Move indicator above top edge — always moves crop, never promoted to panImage.
+    case moveIndicator
     /// Pan the image (drag in masked/dim area, or 2-finger pan while zoomed).
     case panImage
 }
@@ -121,6 +123,40 @@ final class CropState {
         lockedRatio = nil
         isPortrait = false
         resetCrop()
+    }
+
+    /// Resets only zoom and pan, preserving crop rect and rotation.
+    func resetView() {
+        imageOffset = .zero
+        imageScale = 1.0
+    }
+
+    /// True when image is zoomed or panned from default state.
+    var isViewModified: Bool {
+        imageScale != 1.0 || imageOffset != .zero
+    }
+
+    /// Zoom and pan so the current crop rect fills the frame (with padding).
+    func zoomToCrop() {
+        let frame = imageDisplayFrame
+        let padding: CGFloat = 24
+        let targetW = frame.width - padding * 2
+        let targetH = frame.height - padding * 2
+        guard targetW > 0, targetH > 0,
+              cropRect.width > 0, cropRect.height > 0 else { return }
+
+        let scaleX = targetW / cropRect.width
+        let scaleY = targetH / cropRect.height
+        let newScale = max(1.0, min(scaleX, scaleY))
+
+        let cx = frame.width / 2
+        let cy = frame.height / 2
+
+        imageScale = newScale
+        imageOffset = clampImageOffset(CGSize(
+            width: (cx - cropRect.midX) * newScale,
+            height: (cy - cropRect.midY) * newScale
+        ))
     }
 
     // MARK: - Aspect ratio
@@ -236,20 +272,18 @@ final class CropState {
 
     // MARK: - Handle hit testing
 
-    private let handleHitRadius: CGFloat = 30
-    /// Handle visual thickness (from CropOverlayView). Used as the minimum
-    /// hit radius at high zoom — tap target never smaller than the drawing.
-    private let handleVisualThickness: CGFloat = 3
-
-    /// Hit radius scaled inversely with zoom so the on-screen tap area stays
-    /// roughly constant. Floors at the visual handle thickness.
+    /// Hit radius proportional to the screen-space crop rect, so touch targets
+    /// scale with handle visuals. Converted to overlay space for hit testing.
     private var scaledHitRadius: CGFloat {
-        max(handleVisualThickness, handleHitRadius / imageScale)
+        let screenShort = min(screenCropRect.width, screenCropRect.height)
+        let screenRadius = max(22, min(screenShort * 0.08, 40))
+        return screenRadius / imageScale
     }
 
     /// Hit-test a point to determine the gesture mode.
     ///
-    /// Priority: corners → move indicator → edge lines → inside crop (move) → outside (pan).
+    /// Priority: corners → edges (bottom/left/right) → inside crop (move) → outside (pan).
+    /// Top edge is handled by the move indicator (screen-space check in coordinator).
     /// Always returns a handle — every touch point has a purpose.
     func hitTest(point: CGPoint) -> CropHandle {
         let r = cropRect
@@ -267,25 +301,12 @@ final class CropState {
             if distance(point, pos) < hr { return handle }
         }
 
-        // Move indicator above top center (3-line grab bar)
-        let indicatorRect = CGRect(
-            x: r.midX - 22, y: r.minY - 26,
-            width: 44, height: 24
-        )
-        if indicatorRect.contains(point) { return .moveCrop }
-
-        // Full edge LINES — when an edge is at the image boundary,
-        // extend the hit zone inward since the outside is unreachable.
-        let topInward: CGFloat = (r.minY - bounds.minY) < hr ? hr * 1.6 : hr
+        // Edge LINES (no top — move indicator replaces it).
+        // When an edge is at the image boundary, extend the hit zone inward.
         let bottomInward: CGFloat = (bounds.maxY - r.maxY) < hr ? hr * 1.6 : hr
         let leftInward: CGFloat = (r.minX - bounds.minX) < hr ? hr * 1.6 : hr
         let rightInward: CGFloat = (bounds.maxX - r.maxX) < hr ? hr * 1.6 : hr
 
-        if point.y >= r.minY - hr, point.y <= r.minY + topInward,
-           point.x >= r.minX - hr, point.x <= r.maxX + hr
-        {
-            return .top
-        }
         if point.y >= r.maxY - bottomInward, point.y <= r.maxY + hr,
            point.x >= r.minX - hr, point.x <= r.maxX + hr
         {
@@ -356,7 +377,7 @@ final class CropState {
         case .bottomRight:
             r.size.width += dx
             r.size.height += dy
-        case .moveCrop, .panImage:
+        case .moveCrop, .moveIndicator, .panImage:
             return
         }
 
@@ -498,5 +519,29 @@ final class CropState {
             width: translation.width / imageScale,
             height: translation.height / imageScale
         )
+    }
+
+    /// Convert an overlay-space point to view/screen space,
+    /// applying the scaleEffect + offset transforms.
+    func overlayToScreenPoint(_ point: CGPoint) -> CGPoint {
+        let cx = imageDisplayFrame.width / 2
+        let cy = imageDisplayFrame.height / 2
+        return CGPoint(
+            x: cx + (point.x - cx) * imageScale + imageOffset.width,
+            y: cy + (point.y - cy) * imageScale + imageOffset.height
+        )
+    }
+
+    /// The crop rect projected into view/screen space.
+    var screenCropRect: CGRect {
+        let tl = overlayToScreenPoint(CGPoint(x: cropRect.minX, y: cropRect.minY))
+        let br = overlayToScreenPoint(CGPoint(x: cropRect.maxX, y: cropRect.maxY))
+        return CGRect(x: tl.x, y: tl.y, width: br.x - tl.x, height: br.y - tl.y)
+    }
+
+    /// Screen-space hit rect for the move indicator above the crop top edge.
+    var moveIndicatorScreenRect: CGRect {
+        let topCenter = overlayToScreenPoint(CGPoint(x: cropRect.midX, y: cropRect.minY))
+        return CGRect(x: topCenter.x - 22, y: topCenter.y - 30, width: 44, height: 28)
     }
 }

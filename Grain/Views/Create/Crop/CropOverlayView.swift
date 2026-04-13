@@ -1,10 +1,10 @@
 import SwiftUI
 
-/// The crop overlay: dimmed region, optional rule-of-thirds grid,
-/// and border with integrated corner/edge handles.
+/// The crop overlay: dimmed region + optional rule-of-thirds grid.
 ///
-/// Everything is drawn with `Path` — no `Rectangle` views with `.position`
-/// — so the border and handles animate as one unit.
+/// Border and handles are drawn in screen-space by `CropHandlesView`.
+/// This view only handles the dim mask and grid (which must track the
+/// overlay coordinate system to align with the image transform).
 ///
 /// Conforms to `Animatable` so SwiftUI interpolates the crop rect
 /// between values, giving smooth transitions on preset/rotation changes.
@@ -34,9 +34,6 @@ struct CropOverlayView: View, @preconcurrency Animatable {
             if showGrid {
                 gridLines
             }
-            borderPath
-            handlePath
-            moveIndicator
         }
         .allowsHitTesting(false)
     }
@@ -77,72 +74,5 @@ struct CropOverlayView: View, @preconcurrency Animatable {
             }
         }
         .stroke(Color.white.opacity(0.5), lineWidth: 0.5)
-    }
-
-    // MARK: - Border (Path, not Rectangle — syncs with handles)
-
-    private var borderPath: some View {
-        Path { path in
-            path.addRect(cropRect)
-        }
-        .stroke(Color.white.opacity(0.7), lineWidth: 1)
-    }
-
-    // MARK: - Handles
-
-    private let handleLength: CGFloat = 20
-    private let handleThickness: CGFloat = 3
-
-    /// Corner L-brackets + edge midpoint bars, all in one Path.
-    private var handlePath: some View {
-        let r = cropRect
-        return Path { path in
-            corner(&path, at: CGPoint(x: r.minX, y: r.minY), xDir: 1, yDir: 1)
-            corner(&path, at: CGPoint(x: r.maxX, y: r.minY), xDir: -1, yDir: 1)
-            corner(&path, at: CGPoint(x: r.minX, y: r.maxY), xDir: 1, yDir: -1)
-            corner(&path, at: CGPoint(x: r.maxX, y: r.maxY), xDir: -1, yDir: -1)
-
-            edgeBar(&path, center: CGPoint(x: r.midX, y: r.minY), horizontal: true)
-            edgeBar(&path, center: CGPoint(x: r.midX, y: r.maxY), horizontal: true)
-            edgeBar(&path, center: CGPoint(x: r.minX, y: r.midY), horizontal: false)
-            edgeBar(&path, center: CGPoint(x: r.maxX, y: r.midY), horizontal: false)
-        }
-        .stroke(Color.white, style: StrokeStyle(lineWidth: handleThickness, lineCap: .round))
-    }
-
-    private func corner(_ path: inout Path, at point: CGPoint, xDir: CGFloat, yDir: CGFloat) {
-        path.move(to: point)
-        path.addLine(to: CGPoint(x: point.x + handleLength * xDir, y: point.y))
-        path.move(to: point)
-        path.addLine(to: CGPoint(x: point.x, y: point.y + handleLength * yDir))
-    }
-
-    private func edgeBar(_ path: inout Path, center: CGPoint, horizontal: Bool) {
-        let half = handleLength / 2
-        if horizontal {
-            path.move(to: CGPoint(x: center.x - half, y: center.y))
-            path.addLine(to: CGPoint(x: center.x + half, y: center.y))
-        } else {
-            path.move(to: CGPoint(x: center.x, y: center.y - half))
-            path.addLine(to: CGPoint(x: center.x, y: center.y + half))
-        }
-    }
-
-    // MARK: - Move indicator (3-line grab bar above top center)
-
-    private var moveIndicator: some View {
-        let cx = cropRect.midX
-        let cy = cropRect.minY - 14
-        let lineWidth: CGFloat = 16
-        let spacing: CGFloat = 3.5
-
-        return Path { path in
-            for i in -1 ... 1 {
-                let y = cy + CGFloat(i) * spacing
-                path.move(to: CGPoint(x: cx - lineWidth / 2, y: y))
-                path.addLine(to: CGPoint(x: cx + lineWidth / 2, y: y))
-            }
-        }
-        .stroke(Color.white.opacity(0.6), style: StrokeStyle(lineWidth: 2, lineCap: .round))
     }
 }
