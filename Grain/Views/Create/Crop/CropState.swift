@@ -479,13 +479,16 @@ final class CropState {
             return
         }
 
-        if r.width < minCropSize {
+        // CGRect.width/.height return absolute values, so negative sizes
+        // wouldn't trigger a `< minCropSize` check. Use size.width/height
+        // directly to catch negative (inverted) dimensions.
+        if r.size.width < minCropSize {
             r.size.width = minCropSize
             if handle == .topLeft || handle == .left || handle == .bottomLeft {
                 r.origin.x = dragStartCropRect.maxX - minCropSize
             }
         }
-        if r.height < minCropSize {
+        if r.size.height < minCropSize {
             r.size.height = minCropSize
             if handle == .topLeft || handle == .top || handle == .topRight {
                 r.origin.y = dragStartCropRect.maxY - minCropSize
