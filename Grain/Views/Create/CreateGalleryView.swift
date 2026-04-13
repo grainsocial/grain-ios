@@ -83,6 +83,7 @@ struct CreateGalleryView: View {
     @State private var isAnimatingMode = false
     @State private var editorMode: EditorMode = .preview
     @State private var showDiscardAlert = false
+    @State private var cropRequest: CropRequest?
 
     let client: XRPCClient
     var onCreated: (() -> Void)?
@@ -128,6 +129,13 @@ struct CreateGalleryView: View {
             // Lock the Form's vertical scroll while the zoom overlay is up so a
             // pinch that drifts vertically can't scroll the page underneath the
             // overlay. Also stays locked during reorder, same as before.
+            .cropSheet(request: $cropRequest) { result in
+                guard let id = selectedPhotoID,
+                      let idx = photoItems.firstIndex(where: { $0.id == id }) else { return }
+                photoItems[idx].thumbnail = PhotoItem.makeThumbnail(from: result.croppedImage)
+                photoItems[idx].carouselPreview = PhotoItem.makeCarouselPreview(from: result.croppedImage, width: UIScreen.main.bounds.width)
+                photoItems[idx].cropResult = result
+            }
             .scrollDisabled(isReordering || isAnimatingMode || imageZoomState.showOverlay)
             .scrollDismissesKeyboard(.interactively)
             .background(SheetGestureDisabler(isDisabled: isReordering))
@@ -261,7 +269,8 @@ struct CreateGalleryView: View {
                           let id = pickerItem.itemIdentifier else { return }
                     editorRemovedIDs.insert(id)
                     selectedPhotos.removeAll { $0.itemIdentifier == id }
-                }
+                },
+                cropRequest: $cropRequest
             )
         }
     }

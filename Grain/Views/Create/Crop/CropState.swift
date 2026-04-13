@@ -660,10 +660,14 @@ final class CropState {
         return CGRect(x: tl.x, y: tl.y, width: br.x - tl.x, height: br.y - tl.y)
     }
 
-    /// Screen-space hit rect for the move indicator above the crop top edge.
-    /// Generous 80×44 rect centered on the pill visual for reliable tapping.
+    /// Screen-space hit rect for the move indicator.
+    /// Mirrors the clamping in CropHandlesView.moveIndicatorCY so the hit
+    /// zone stays on top of the pill visual regardless of crop position.
     var moveIndicatorScreenRect: CGRect {
         let topCenter = overlayToScreenPoint(CGPoint(x: cropRect.midX, y: cropRect.minY))
-        return CGRect(x: topCenter.x - 40, y: topCenter.y - 36, width: 80, height: 44)
+        let rawCY = topCenter.y - 14
+        let minCY: CGFloat = 11 + 4 // pillHeight/2 + 4 margin (matches CropHandlesView)
+        let cy = max(rawCY, minCY)
+        return CGRect(x: topCenter.x - 40, y: cy - 22, width: 80, height: 44)
     }
 }
