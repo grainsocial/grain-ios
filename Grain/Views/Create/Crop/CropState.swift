@@ -67,6 +67,9 @@ final class CropState {
     // -- Image transform (view space) --
     var imageOffset: CGSize = .zero
     var imageScale: CGFloat = 1.0
+    /// Slightly above 1:1 pixel match. User can rubber-band past this
+    /// during a pinch but the scale springs back on release.
+    var maxImageScale: CGFloat = 5.0
 
     /// -- Gesture tracking --
     var activeHandle: CropHandle?
@@ -198,7 +201,7 @@ final class CropState {
     /// Zoom and pan so the current crop rect fills the frame, centered.
     func zoomToCrop() {
         let frame = imageDisplayFrame
-        let padding: CGFloat = 8
+        let padding: CGFloat = 6
         let targetW = frame.width - padding * 2
         let targetH = frame.height - padding * 2
         guard targetW > 0, targetH > 0,
@@ -206,7 +209,7 @@ final class CropState {
 
         let scaleX = targetW / cropRect.width
         let scaleY = targetH / cropRect.height
-        let newScale = max(1.0, min(scaleX, scaleY))
+        let newScale = max(1.0, min(scaleX, scaleY, maxImageScale))
 
         let cx = frame.width / 2
         let cy = frame.height / 2
@@ -663,14 +666,12 @@ final class CropState {
         return CGRect(x: tl.x, y: tl.y, width: br.x - tl.x, height: br.y - tl.y)
     }
 
-    /// Screen-space hit rect for the move indicator.
-    /// Mirrors the clamping in CropHandlesView.moveIndicatorCY so the hit
-    /// zone stays on top of the pill visual regardless of crop position.
+    /// Screen-space hit rect for the move indicator (inside the crop rect).
+    /// Matches the visual position in CropHandlesView: pillHeight/2 + 6pt
+    /// below the crop top edge.
     var moveIndicatorScreenRect: CGRect {
         let topCenter = overlayToScreenPoint(CGPoint(x: cropRect.midX, y: cropRect.minY))
-        let rawCY = topCenter.y - 14
-        let minCY: CGFloat = 11 + 4 // pillHeight/2 + 4 margin (matches CropHandlesView)
-        let cy = max(rawCY, minCY)
+        let cy = topCenter.y + 17   // 11 (pillHeight/2) + 6 (margin)
         return CGRect(x: topCenter.x - 40, y: cy - 22, width: 80, height: 44)
     }
 }
