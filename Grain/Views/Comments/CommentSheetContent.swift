@@ -175,9 +175,15 @@ struct CommentSheetContent: View {
                         }
                         .glassEffect(.regular.interactive(), in: .circle)
                         .disabled(isPostingComment)
-                        .transition(.scale.combined(with: .opacity))
+                        .transition(
+                            .asymmetric(
+                                insertion: .offset(x: 60).combined(with: .opacity),
+                                removal: .offset(x: 60).combined(with: .opacity)
+                            )
+                        )
                     }
                 }
+                .clipped()
                 .animation(.spring(response: 0.3, dampingFraction: 0.8), value: commentText.isEmpty)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
