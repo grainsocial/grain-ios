@@ -173,9 +173,6 @@ final class CropState {
         let x = imageDisplayFrame.origin.x + (maxW - newW) / 2
         let y = imageDisplayFrame.origin.y + (maxH - newH) / 2
         cropRect = CGRect(x: x, y: y, width: newW, height: newH)
-
-        imageOffset = .zero
-        imageScale = 1.0
     }
 
     // MARK: - Handle hit testing

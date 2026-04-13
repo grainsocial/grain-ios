@@ -1,10 +1,10 @@
 import SwiftUI
 
 /// The crop overlay: dimmed region, optional rule-of-thirds grid,
-/// border with integrated L-bracket corner handles and edge bar handles.
+/// and border with integrated corner/edge handles.
 ///
-/// Handles are drawn as part of the crop rect border — they're not
-/// separate floating elements. The rect and handles move as one unit.
+/// Everything is drawn with `Path` — no `Rectangle` views with `.position`
+/// — so the border and handles animate as one unit.
 struct CropOverlayView: View {
     let cropRect: CGRect
     let geometrySize: CGSize
@@ -16,7 +16,8 @@ struct CropOverlayView: View {
             if showGrid {
                 gridLines
             }
-            cropBorderAndHandles
+            borderPath
+            handlePath
         }
         .allowsHitTesting(false)
     }
@@ -59,41 +60,35 @@ struct CropOverlayView: View {
         .stroke(Color.white.opacity(0.4), lineWidth: 0.5)
     }
 
-    // MARK: - Border + handles (one unit)
+    // MARK: - Border (Path, not Rectangle — syncs with handles)
+
+    private var borderPath: some View {
+        Path { path in
+            path.addRect(cropRect)
+        }
+        .stroke(Color.white.opacity(0.6), lineWidth: 1)
+    }
+
+    // MARK: - Handles
 
     private let handleLength: CGFloat = 20
     private let handleThickness: CGFloat = 3
 
-    /// Thin border + thicker L-brackets at corners + bars at edge midpoints.
-    /// All drawn in a single Path group so they're visually one element.
-    private var cropBorderAndHandles: some View {
+    /// Corner L-brackets + edge midpoint bars, all in one Path.
+    private var handlePath: some View {
         let r = cropRect
-        return ZStack {
-            // Thin border
-            Rectangle()
-                .strokeBorder(Color.white.opacity(0.6), lineWidth: 1)
-                .frame(width: r.width, height: r.height)
-                .position(x: r.midX, y: r.midY)
+        return Path { path in
+            corner(&path, at: CGPoint(x: r.minX, y: r.minY), xDir: 1, yDir: 1)
+            corner(&path, at: CGPoint(x: r.maxX, y: r.minY), xDir: -1, yDir: 1)
+            corner(&path, at: CGPoint(x: r.minX, y: r.maxY), xDir: 1, yDir: -1)
+            corner(&path, at: CGPoint(x: r.maxX, y: r.maxY), xDir: -1, yDir: -1)
 
-            // Corner L-brackets + edge bars — drawn on top of the border
-            Path { path in
-                // Top-left
-                corner(&path, at: CGPoint(x: r.minX, y: r.minY), xDir: 1, yDir: 1)
-                // Top-right
-                corner(&path, at: CGPoint(x: r.maxX, y: r.minY), xDir: -1, yDir: 1)
-                // Bottom-left
-                corner(&path, at: CGPoint(x: r.minX, y: r.maxY), xDir: 1, yDir: -1)
-                // Bottom-right
-                corner(&path, at: CGPoint(x: r.maxX, y: r.maxY), xDir: -1, yDir: -1)
-
-                // Edge midpoint bars
-                edgeBar(&path, center: CGPoint(x: r.midX, y: r.minY), horizontal: true)
-                edgeBar(&path, center: CGPoint(x: r.midX, y: r.maxY), horizontal: true)
-                edgeBar(&path, center: CGPoint(x: r.minX, y: r.midY), horizontal: false)
-                edgeBar(&path, center: CGPoint(x: r.maxX, y: r.midY), horizontal: false)
-            }
-            .stroke(Color.white, style: StrokeStyle(lineWidth: handleThickness, lineCap: .round))
+            edgeBar(&path, center: CGPoint(x: r.midX, y: r.minY), horizontal: true)
+            edgeBar(&path, center: CGPoint(x: r.midX, y: r.maxY), horizontal: true)
+            edgeBar(&path, center: CGPoint(x: r.minX, y: r.midY), horizontal: false)
+            edgeBar(&path, center: CGPoint(x: r.maxX, y: r.midY), horizontal: false)
         }
+        .stroke(Color.white, style: StrokeStyle(lineWidth: handleThickness, lineCap: .round))
     }
 
     private func corner(_ path: inout Path, at point: CGPoint, xDir: CGFloat, yDir: CGFloat) {
