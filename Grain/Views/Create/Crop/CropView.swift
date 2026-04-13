@@ -73,17 +73,8 @@ struct CropView: View {
     // MARK: - Toolbar
 
     private var toolbar: some View {
-        HStack {
-            Button("Cancel") {
-                onCancel()
-            }
-            .foregroundStyle(.primary)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .glassEffect(.regular.interactive(), in: .capsule)
-
-            Spacer()
-
+        ZStack {
+            // Center: Reset (always horizontally centered regardless of Cancel/Done widths)
             Button("Reset") {
                 withAnimation(.smooth(duration: 0.4)) {
                     state.resetAll()
@@ -94,16 +85,27 @@ struct CropView: View {
             .padding(.vertical, 8)
             .glassEffect(.regular.interactive(), in: .capsule)
 
-            Spacer()
+            // Sides: Cancel + Done
+            HStack {
+                Button("Cancel") {
+                    onCancel()
+                }
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .glassEffect(.regular.interactive(), in: .capsule)
 
-            Button("Done") {
-                confirmCrop()
+                Spacer()
+
+                Button("Done") {
+                    confirmCrop()
+                }
+                .fontWeight(.semibold)
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .glassEffect(.regular.interactive(), in: .capsule)
             }
-            .fontWeight(.semibold)
-            .foregroundStyle(.primary)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .glassEffect(.regular.interactive(), in: .capsule)
         }
     }
 
@@ -268,61 +270,13 @@ struct CropView: View {
             .scaleEffect(state.imageScale)
             .offset(state.imageOffset)
 
-            // Gesture layer — stays in view space (outside transforms)
-            Color.clear
-                .contentShape(Rectangle())
-                .gesture(dragGesture)
-                .simultaneousGesture(magnifyGesture)
+            // Gesture layer — UIKit recognizers for anchor-based pinch + 1-finger drag
+            CropGestureOverlay(
+                state: state,
+                frameSize: CGSize(width: fitWidth, height: fitHeight)
+            )
         }
         .frame(width: fitWidth, height: fitHeight)
-    }
-
-    // MARK: - Gestures
-
-    private var dragGesture: some Gesture {
-        DragGesture(minimumDistance: 1)
-            .onChanged { value in
-                if state.activeHandle == nil {
-                    // Hit-test in overlay space
-                    let overlayPoint = state.viewToOverlayPoint(value.startLocation)
-                    guard let handle = state.hitTest(point: overlayPoint) else { return }
-                    state.activeHandle = handle
-                    state.dragStartCropRect = state.cropRect
-                    state.dragStartImageOffset = state.imageOffset
-                }
-
-                guard let handle = state.activeHandle else { return }
-
-                if handle == .panImage {
-                    // Pan stays in view space
-                    state.handleImagePan(translation: value.translation)
-                } else {
-                    // Handle drag in overlay space
-                    let overlayTranslation = state.viewToOverlayTranslation(value.translation)
-                    state.handleDrag(handle: handle, translation: overlayTranslation)
-                }
-            }
-            .onEnded { _ in
-                state.activeHandle = nil
-            }
-    }
-
-    private var magnifyGesture: some Gesture {
-        MagnifyGesture()
-            .onChanged { value in
-                if state.pinchStartScale == 1.0, state.imageScale != 1.0 {
-                    state.pinchStartScale = state.imageScale
-                } else if state.pinchStartScale == 1.0 {
-                    state.pinchStartScale = 1.0
-                }
-                let newScale = max(state.pinchStartScale * value.magnification, 1.0)
-                state.imageScale = newScale
-                state.imageOffset = state.clampImageOffset(state.imageOffset)
-            }
-            .onEnded { _ in
-                state.pinchStartScale = state.imageScale
-                state.imageOffset = state.clampImageOffset(state.imageOffset)
-            }
     }
 
     // MARK: - Actions

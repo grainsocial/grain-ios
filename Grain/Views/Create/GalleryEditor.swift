@@ -416,20 +416,20 @@ struct GalleryEditor: View {
         // MARK: Photos section
 
         Section {
-            VStack(spacing: 0) {
-                photoLayout
+            photoLayout
+                .padding(.horizontal, 8)
+                .listRowInsets(EdgeInsets())
+                .listRowSeparator(.hidden)
 
-                if let onCropTapped, let id = selectedPhotoID {
-                    Button {
-                        onCropTapped(id)
-                    } label: {
-                        Label("Crop", systemImage: "crop")
-                    }
-                    .padding(12)
+            if let onCropTapped, let id = selectedPhotoID {
+                Button {
+                    onCropTapped(id)
+                } label: {
+                    Label("Crop Photo", systemImage: "crop.rotate")
+                        .frame(maxWidth: .infinity)
                 }
+                .listRowSeparator(.hidden)
             }
-            .listRowInsets(EdgeInsets())
-            .listRowSeparator(.hidden)
         } header: {
             Picker("Mode", selection: modeBinding) {
                 ForEach(EditorMode.allCases, id: \.self) { m in

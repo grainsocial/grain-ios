@@ -36,6 +36,7 @@ struct CropOverlayView: View, @preconcurrency Animatable {
             }
             borderPath
             handlePath
+            moveIndicator
         }
         .allowsHitTesting(false)
     }
@@ -125,5 +126,23 @@ struct CropOverlayView: View, @preconcurrency Animatable {
             path.move(to: CGPoint(x: center.x, y: center.y - half))
             path.addLine(to: CGPoint(x: center.x, y: center.y + half))
         }
+    }
+
+    // MARK: - Move indicator (3-line grab bar above top center)
+
+    private var moveIndicator: some View {
+        let cx = cropRect.midX
+        let cy = cropRect.minY - 14
+        let lineWidth: CGFloat = 16
+        let spacing: CGFloat = 3.5
+
+        return Path { path in
+            for i in -1 ... 1 {
+                let y = cy + CGFloat(i) * spacing
+                path.move(to: CGPoint(x: cx - lineWidth / 2, y: y))
+                path.addLine(to: CGPoint(x: cx + lineWidth / 2, y: y))
+            }
+        }
+        .stroke(Color.white.opacity(0.6), style: StrokeStyle(lineWidth: 2, lineCap: .round))
     }
 }
