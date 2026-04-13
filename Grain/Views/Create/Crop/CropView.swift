@@ -18,6 +18,7 @@ struct CropView: View {
     @State private var hasInitialized = false
     @State private var isRotating = false
     @State private var postRotationNormalizedCrop: CGRect?
+    @State private var isProcessing = false
 
     init(
         image: UIImage,
@@ -40,9 +41,9 @@ struct CropView: View {
         ZStack {
             Color(.systemBackground).ignoresSafeArea()
 
-            // Image area — sized within safe area, but dimming overflow extends beyond
             GeometryReader { geo in
                 imageArea(in: geo)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
             // Controls — respect safe area for Dynamic Island / home indicator
@@ -58,7 +59,7 @@ struct CropView: View {
                 Spacer()
 
                 VStack(spacing: 8) {
-                    orientationToggle
+                    bottomControls
 
                     AspectRatioBar(state: state)
                 }
@@ -145,25 +146,35 @@ struct CropView: View {
         }
     }
 
-    // MARK: - Orientation toggle (portrait / landscape)
+    // MARK: - Bottom controls (lock + orientation toggle)
 
-    /// Always visible — dimmed when the selected preset doesn't support orientation
-    /// (Free, Original, Square). Active orientation is highlighted, inactive is dimmed.
-    private var orientationToggle: some View {
-        let enabled = state.showOrientationToggle
-        return HStack(spacing: 16) {
+    private var bottomControls: some View {
+        let orientationEnabled = state.showOrientationToggle
+        return HStack(spacing: 12) {
+            // Lock toggle
             Button {
-                guard enabled, state.isPortrait else { return }
+                state.toggleRatioLock()
+            } label: {
+                Image(systemName: state.isRatioLocked ? "lock.fill" : "lock.open")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(state.isRatioLocked ? .primary : .tertiary)
+                    .frame(width: 36, height: 36)
+                    .contentShape(Rectangle())
+            }
+            .glassEffect(state.isRatioLocked ? .regular.interactive() : .regular, in: .circle)
+
+            // Landscape
+            Button {
+                guard orientationEnabled, state.isPortrait else { return }
                 withAnimation(.smooth(duration: 0.3)) {
                     state.toggleOrientation()
                 }
             } label: {
-                // Landscape rectangle
                 RoundedRectangle(cornerRadius: 2)
                     .strokeBorder(lineWidth: 1.5)
                     .frame(width: 18, height: 12)
                     .foregroundStyle(
-                        enabled
+                        orientationEnabled
                             ? (!state.isPortrait ? .primary : .tertiary)
                             : .quaternary
                     )
@@ -171,22 +182,22 @@ struct CropView: View {
                     .contentShape(Rectangle())
             }
             .glassEffect(
-                enabled && !state.isPortrait ? .regular.interactive() : .regular,
+                orientationEnabled && !state.isPortrait ? .regular.interactive() : .regular,
                 in: .capsule
             )
 
+            // Portrait
             Button {
-                guard enabled, !state.isPortrait else { return }
+                guard orientationEnabled, !state.isPortrait else { return }
                 withAnimation(.smooth(duration: 0.3)) {
                     state.toggleOrientation()
                 }
             } label: {
-                // Portrait rectangle
                 RoundedRectangle(cornerRadius: 2)
                     .strokeBorder(lineWidth: 1.5)
                     .frame(width: 12, height: 18)
                     .foregroundStyle(
-                        enabled
+                        orientationEnabled
                             ? (state.isPortrait ? .primary : .tertiary)
                             : .quaternary
                     )
@@ -194,7 +205,7 @@ struct CropView: View {
                     .contentShape(Rectangle())
             }
             .glassEffect(
-                enabled && state.isPortrait ? .regular.interactive() : .regular,
+                orientationEnabled && state.isPortrait ? .regular.interactive() : .regular,
                 in: .capsule
             )
         }
@@ -226,44 +237,44 @@ struct CropView: View {
         }()
 
         ZStack {
-            // Image — sized for pre-rotation, then rotated into post-rotation frame.
-            // No clipping so zoom can overflow.
-            Image(uiImage: displayImage)
-                .resizable()
-                .frame(
-                    width: isSwapped ? fitHeight : fitWidth,
-                    height: isSwapped ? fitWidth : fitHeight
+            // Image + overlay in the same coordinate space.
+            // scaleEffect/offset are applied to both so the mask
+            // tracks the image during zoom and pan.
+            ZStack {
+                Image(uiImage: displayImage)
+                    .resizable()
+                    .frame(
+                        width: isSwapped ? fitHeight : fitWidth,
+                        height: isSwapped ? fitWidth : fitHeight
+                    )
+                    .rotationEffect(.degrees(state.rotationAngle))
+
+                CropOverlayView(
+                    cropRect: state.cropRect,
+                    geometrySize: CGSize(width: fitWidth, height: fitHeight),
+                    showGrid: state.showGrid
                 )
-                .rotationEffect(.degrees(state.rotationAngle))
-                .scaleEffect(state.imageScale)
-                .offset(state.imageOffset)
+            }
+            .frame(width: fitWidth, height: fitHeight)
+            .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .local) }) { frame in
+                state.imageDisplayFrame = frame
+                if !hasInitialized {
+                    hasInitialized = true
+                    initializeCropState()
+                } else if isRotating {
+                    state.cropRect = frame
+                }
+            }
+            .scaleEffect(state.imageScale)
+            .offset(state.imageOffset)
 
-            // Overlay — dimming extends beyond frame for zoom overflow
-            CropOverlayView(
-                cropRect: state.cropRect,
-                geometrySize: CGSize(width: fitWidth, height: fitHeight),
-                showGrid: state.showGrid
-            )
-
-            // Gesture layer
+            // Gesture layer — stays in view space (outside transforms)
             Color.clear
                 .contentShape(Rectangle())
                 .gesture(dragGesture)
                 .simultaneousGesture(magnifyGesture)
         }
         .frame(width: fitWidth, height: fitHeight)
-        .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .local) }) { frame in
-            state.imageDisplayFrame = frame
-            if !hasInitialized {
-                hasInitialized = true
-                initializeCropState()
-            } else if isRotating {
-                // During rotation animation, keep crop rect tracking the frame
-                state.cropRect = frame
-                state.imageOffset = .zero
-                state.imageScale = 1.0
-            }
-        }
     }
 
     // MARK: - Gestures
@@ -272,7 +283,9 @@ struct CropView: View {
         DragGesture(minimumDistance: 1)
             .onChanged { value in
                 if state.activeHandle == nil {
-                    guard let handle = state.hitTest(point: value.startLocation) else { return }
+                    // Hit-test in overlay space
+                    let overlayPoint = state.viewToOverlayPoint(value.startLocation)
+                    guard let handle = state.hitTest(point: overlayPoint) else { return }
                     state.activeHandle = handle
                     state.dragStartCropRect = state.cropRect
                     state.dragStartImageOffset = state.imageOffset
@@ -281,9 +294,12 @@ struct CropView: View {
                 guard let handle = state.activeHandle else { return }
 
                 if handle == .panImage {
+                    // Pan stays in view space
                     state.handleImagePan(translation: value.translation)
                 } else {
-                    state.handleDrag(handle: handle, translation: value.translation)
+                    // Handle drag in overlay space
+                    let overlayTranslation = state.viewToOverlayTranslation(value.translation)
+                    state.handleDrag(handle: handle, translation: overlayTranslation)
                 }
             }
             .onEnded { _ in
@@ -329,25 +345,27 @@ struct CropView: View {
     }
 
     private func rotate(degrees: Int) {
-        // Compute normalized crop rect in pre-rotation image space
-        let preNorm = ImageCropper.viewRectToNormalized(
-            state.cropRect,
-            imageDisplayFrame: state.imageDisplayFrame,
-            imageOffset: state.imageOffset,
-            imageScale: state.imageScale
+        // Normalize crop to 0…1 in the current frame
+        let frame = state.imageDisplayFrame
+        guard frame.width > 0, frame.height > 0 else { return }
+        let preNorm = CGRect(
+            x: (state.cropRect.minX - frame.minX) / frame.width,
+            y: (state.cropRect.minY - frame.minY) / frame.height,
+            width: state.cropRect.width / frame.width,
+            height: state.cropRect.height / frame.height
         )
 
-        // Transform normalized rect through the rotation.
-        // 90° CW:  (x,y) → (y, 1-x-w),  dims swap
-        // 270° CW (CCW): (x,y) → (1-y-h, x), dims swap
-        // 180°:   (x,y) → (1-x-w, 1-y-h), dims stay
+        // Map through rotation.
+        // 90° CW:  point (x,y) → (1-y, x)  ⇒  rect → (1-maxY, minX, h, w)
+        // 270° CW: point (x,y) → (y, 1-x)  ⇒  rect → (minY, 1-maxX, h, w)
+        // 180°:    point (x,y) → (1-x, 1-y) ⇒  rect → (1-maxX, 1-maxY, w, h)
         let normDeg = ((degrees % 360) + 360) % 360
         let postNorm: CGRect = switch normDeg {
         case 90:
-            CGRect(x: preNorm.minY, y: 1 - preNorm.maxX,
+            CGRect(x: 1 - preNorm.maxY, y: preNorm.minX,
                    width: preNorm.height, height: preNorm.width)
         case 270:
-            CGRect(x: 1 - preNorm.maxY, y: preNorm.minX,
+            CGRect(x: preNorm.minY, y: 1 - preNorm.maxX,
                    width: preNorm.height, height: preNorm.width)
         case 180:
             CGRect(x: 1 - preNorm.maxX, y: 1 - preNorm.maxY,
@@ -364,14 +382,13 @@ struct CropView: View {
             state.imageScale = 1.0
         } completion: {
             isRotating = false
-            // Convert post-rotation normalized crop back to view space
             if let norm = postRotationNormalizedCrop {
-                let frame = state.imageDisplayFrame
+                let newFrame = state.imageDisplayFrame
                 let viewRect = CGRect(
-                    x: frame.origin.x + norm.origin.x * frame.width,
-                    y: frame.origin.y + norm.origin.y * frame.height,
-                    width: norm.width * frame.width,
-                    height: norm.height * frame.height
+                    x: newFrame.origin.x + norm.origin.x * newFrame.width,
+                    y: newFrame.origin.y + norm.origin.y * newFrame.height,
+                    width: norm.width * newFrame.width,
+                    height: norm.height * newFrame.height
                 )
                 withAnimation(.smooth(duration: 0.25)) {
                     state.cropRect = state.nearestValidCrop(viewRect, ratio: state.effectiveLockedRatio)
@@ -381,19 +398,19 @@ struct CropView: View {
         }
     }
 
-    @State private var isProcessing = false
-
     private func confirmCrop() {
         guard !isProcessing else { return }
         isProcessing = true
 
-        // Validate crop rect before applying — fix any out-of-bounds issues
+        // In overlay space the image fills imageDisplayFrame,
+        // so normalized rect is just cropRect / frameSize.
+        let frame = state.imageDisplayFrame
         let validCrop = state.nearestValidCrop(state.cropRect, ratio: state.effectiveLockedRatio)
-        let normalizedRect = ImageCropper.viewRectToNormalized(
-            validCrop,
-            imageDisplayFrame: state.imageDisplayFrame,
-            imageOffset: state.imageOffset,
-            imageScale: state.imageScale
+        let normalizedRect = CGRect(
+            x: (validCrop.minX - frame.minX) / max(frame.width, 1),
+            y: (validCrop.minY - frame.minY) / max(frame.height, 1),
+            width: validCrop.width / max(frame.width, 1),
+            height: validCrop.height / max(frame.height, 1)
         )
         let rotation = state.rotationDegrees
         let sourceImage = image
