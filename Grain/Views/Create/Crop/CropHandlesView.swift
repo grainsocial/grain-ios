@@ -248,21 +248,40 @@ struct CropHandlesView: View, @preconcurrency Animatable {
 
     // MARK: - Move indicator (3-line grab bar with background pill)
 
+    /// Pill height (capsule short-axis) — a touch larger than the old fixed 18pt.
+    private var pillHeight: CGFloat {
+        22
+    }
+
+    /// Pill width: straight section = handleLength (matches edge bar length) + 2 × radius.
+    private var pillWidth: CGFloat {
+        handleLength + pillHeight
+    }
+
+    /// Line width for the 3-line grab indicator: spans 80 % of the straight section.
+    private var indicatorLineWidth: CGFloat {
+        handleLength * 0.8
+    }
+
+    /// Vertical center of the pill.  14 pt above the crop-rect top edge, but
+    /// clamped so the pill never floats above the CropHandlesView frame —
+    /// this prevents it from drifting into the toolbar on tall portrait photos.
+    private var moveIndicatorCY: CGFloat {
+        let raw = screenCropRect.minY - 14
+        let minCY = pillHeight / 2 + 4 // keep pill fully inside the view with 4 pt margin
+        return max(raw, minCY)
+    }
+
     private var moveIndicatorPill: some View {
         let cx = screenCropRect.midX
-        let cy = screenCropRect.minY - 14
-        let pillWidth: CGFloat = 28
-        let pillHeight: CGFloat = 18
+        let cy = moveIndicatorCY
+        let w = pillWidth
+        let h = pillHeight
 
         return Path { path in
             path.addRoundedRect(
-                in: CGRect(
-                    x: cx - pillWidth / 2,
-                    y: cy - pillHeight / 2,
-                    width: pillWidth,
-                    height: pillHeight
-                ),
-                cornerSize: CGSize(width: pillHeight / 2, height: pillHeight / 2)
+                in: CGRect(x: cx - w / 2, y: cy - h / 2, width: w, height: h),
+                cornerSize: CGSize(width: h / 2, height: h / 2)
             )
         }
         .fill(Color.white.opacity(0.2))
@@ -270,15 +289,15 @@ struct CropHandlesView: View, @preconcurrency Animatable {
 
     private var moveIndicatorLines: some View {
         let cx = screenCropRect.midX
-        let cy = screenCropRect.minY - 14
-        let lineWidth: CGFloat = 16
-        let spacing: CGFloat = 3.5
+        let cy = moveIndicatorCY
+        let lw = indicatorLineWidth
+        let spacing: CGFloat = 4
 
         return Path { path in
             for i in -1 ... 1 {
                 let y = cy + CGFloat(i) * spacing
-                path.move(to: CGPoint(x: cx - lineWidth / 2, y: y))
-                path.addLine(to: CGPoint(x: cx + lineWidth / 2, y: y))
+                path.move(to: CGPoint(x: cx - lw / 2, y: y))
+                path.addLine(to: CGPoint(x: cx + lw / 2, y: y))
             }
         }
         .stroke(Color.white, style: StrokeStyle(lineWidth: 2, lineCap: .round))
