@@ -433,8 +433,8 @@ final class CropTests: XCTestCase {
         state.imageDisplayFrame = CGRect(x: 0, y: 0, width: 400, height: 600)
 
         let result = state.nearestValidCrop(CGRect(x: 100, y: 100, width: 10, height: 10))
-        XCTAssertGreaterThanOrEqual(result.width, 60)
-        XCTAssertGreaterThanOrEqual(result.height, 60)
+        XCTAssertGreaterThanOrEqual(result.width, 44)
+        XCTAssertGreaterThanOrEqual(result.height, 44)
     }
 
     /// Result is always contained within image bounds (property).

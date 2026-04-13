@@ -75,7 +75,7 @@ struct CropView: View {
 
     private var toolbar: some View {
         HStack {
-            // Cancel when pristine, Reset when modified
+            // Close when pristine, Reset when modified
             Button {
                 if state.hasModifications {
                     withAnimation(.smooth(duration: 0.4)) {
@@ -85,7 +85,7 @@ struct CropView: View {
                     onCancel()
                 }
             } label: {
-                Text(state.hasModifications ? "Reset" : "Cancel")
+                Text(state.hasModifications ? "Reset" : "Close")
                     .contentTransition(.numericText())
             }
             .foregroundStyle(.primary)
@@ -95,14 +95,18 @@ struct CropView: View {
 
             Spacer()
 
-            Button("Done") {
+            Button("Apply") {
                 confirmCrop()
             }
             .fontWeight(.semibold)
-            .foregroundStyle(.primary)
+            .foregroundStyle(state.hasModifications ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
+            .disabled(!state.hasModifications)
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
-            .glassEffect(.regular.interactive(), in: .capsule)
+            .glassEffect(
+                state.hasModifications ? .regular.interactive() : .regular,
+                in: .capsule
+            )
         }
         .animation(.smooth(duration: 0.3), value: state.hasModifications)
     }
