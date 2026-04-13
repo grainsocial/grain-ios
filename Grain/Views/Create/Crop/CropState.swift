@@ -7,7 +7,9 @@ enum CropHandle: Equatable {
     case topLeft, top, topRight
     case left, right
     case bottomLeft, bottom, bottomRight
-    /// Drag inside the crop rect or while zoomed → pan image.
+    /// Drag inside the crop rect → reposition the mask.
+    case moveCrop
+    /// Pan the image (drag in masked/dim area, or 2-finger pan while zoomed).
     case panImage
 }
 
@@ -68,7 +70,6 @@ final class CropState {
     var activeHandle: CropHandle?
     var dragStartCropRect: CGRect = .zero
     var dragStartImageOffset: CGSize = .zero
-    var pinchStartScale: CGFloat = 1.0
 
     // -- Aspect ratio --
     var selectedPreset: AspectRatioPreset = .free
@@ -236,13 +237,24 @@ final class CropState {
     // MARK: - Handle hit testing
 
     private let handleHitRadius: CGFloat = 30
+    /// Handle visual thickness (from CropOverlayView). Used as the minimum
+    /// hit radius at high zoom — tap target never smaller than the drawing.
+    private let handleVisualThickness: CGFloat = 3
+
+    /// Hit radius scaled inversely with zoom so the on-screen tap area stays
+    /// roughly constant. Floors at the visual handle thickness.
+    private var scaledHitRadius: CGFloat {
+        max(handleVisualThickness, handleHitRadius / imageScale)
+    }
 
     /// Hit-test a point to determine the gesture mode.
     ///
-    /// Priority: corners → full edge lines → inside crop rect (pan) → nil.
-    /// Dragging in the dim zone far from any edge does nothing (returns nil).
-    func hitTest(point: CGPoint) -> CropHandle? {
+    /// Priority: corners → move indicator → edge lines → inside crop (move) → outside (pan).
+    /// Always returns a handle — every touch point has a purpose.
+    func hitTest(point: CGPoint) -> CropHandle {
         let r = cropRect
+        let hr = scaledHitRadius
+        let bounds = transformedImageBounds()
 
         // Corners (highest priority — overlap with edges)
         let corners: [(CropHandle, CGPoint)] = [
@@ -252,29 +264,49 @@ final class CropState {
             (.bottomRight, CGPoint(x: r.maxX, y: r.maxY)),
         ]
         for (handle, pos) in corners {
-            if distance(point, pos) < handleHitRadius { return handle }
+            if distance(point, pos) < hr { return handle }
         }
 
-        // Full edge LINES (not just midpoints) — drag anywhere along an edge
-        let hr = handleHitRadius
-        if abs(point.y - r.minY) < hr, point.x >= r.minX - hr, point.x <= r.maxX + hr {
+        // Move indicator above top center (3-line grab bar)
+        let indicatorRect = CGRect(
+            x: r.midX - 22, y: r.minY - 26,
+            width: 44, height: 24
+        )
+        if indicatorRect.contains(point) { return .moveCrop }
+
+        // Full edge LINES — when an edge is at the image boundary,
+        // extend the hit zone inward since the outside is unreachable.
+        let topInward: CGFloat = (r.minY - bounds.minY) < hr ? hr * 1.6 : hr
+        let bottomInward: CGFloat = (bounds.maxY - r.maxY) < hr ? hr * 1.6 : hr
+        let leftInward: CGFloat = (r.minX - bounds.minX) < hr ? hr * 1.6 : hr
+        let rightInward: CGFloat = (bounds.maxX - r.maxX) < hr ? hr * 1.6 : hr
+
+        if point.y >= r.minY - hr, point.y <= r.minY + topInward,
+           point.x >= r.minX - hr, point.x <= r.maxX + hr
+        {
             return .top
         }
-        if abs(point.y - r.maxY) < hr, point.x >= r.minX - hr, point.x <= r.maxX + hr {
+        if point.y >= r.maxY - bottomInward, point.y <= r.maxY + hr,
+           point.x >= r.minX - hr, point.x <= r.maxX + hr
+        {
             return .bottom
         }
-        if abs(point.x - r.minX) < hr, point.y >= r.minY - hr, point.y <= r.maxY + hr {
+        if point.x >= r.minX - hr, point.x <= r.minX + leftInward,
+           point.y >= r.minY - hr, point.y <= r.maxY + hr
+        {
             return .left
         }
-        if abs(point.x - r.maxX) < hr, point.y >= r.minY - hr, point.y <= r.maxY + hr {
+        if point.x >= r.maxX - rightInward, point.x <= r.maxX + hr,
+           point.y >= r.minY - hr, point.y <= r.maxY + hr
+        {
             return .right
         }
 
-        // Inside crop rect → pan image
-        if r.contains(point) { return .panImage }
+        // Inside crop rect → move the crop mask
+        if r.contains(point) { return .moveCrop }
 
-        // Dim zone, far from edges → no gesture
-        return nil
+        // Masked/dim zone → pan image
+        return .panImage
     }
 
     private func distance(_ a: CGPoint, _ b: CGPoint) -> CGFloat {
@@ -324,7 +356,7 @@ final class CropState {
         case .bottomRight:
             r.size.width += dx
             r.size.height += dy
-        case .panImage:
+        case .moveCrop, .panImage:
             return
         }
 
@@ -374,6 +406,18 @@ final class CropState {
         }
 
         return r
+    }
+
+    // MARK: - Crop move
+
+    func handleCropMove(translation: CGSize) {
+        let bounds = transformedImageBounds()
+        var r = dragStartCropRect.offsetBy(dx: translation.width, dy: translation.height)
+        if r.minX < bounds.minX { r.origin.x = bounds.minX }
+        if r.minY < bounds.minY { r.origin.y = bounds.minY }
+        if r.maxX > bounds.maxX { r.origin.x = bounds.maxX - r.width }
+        if r.maxY > bounds.maxY { r.origin.y = bounds.maxY - r.height }
+        cropRect = r
     }
 
     // MARK: - Image pan
