@@ -56,7 +56,7 @@ struct CreateGalleryView: View {
     @State private var errorMessage: String?
     @State private var resolvedLocation: (h3: String, name: String, address: [String: AnyCodable]?)?
     @State private var showCamera = false
-    @State private var photoItems: [PhotoItem] = []
+    @State private var photoItems: [PhotoItem]
     @State private var mentionState = MentionAutocompleteState()
     @State private var postToBluesky = false
     @State private var selectedLabels: Set<String> = []
@@ -82,12 +82,19 @@ struct CreateGalleryView: View {
     /// into different scroll contexts, producing wrong-direction morphs.
     @State private var isAnimatingMode = false
     @State private var editorMode: EditorMode = .preview
-    @State private var showCropView = false
+    @State private var cropRequest: CropRequest?
     @State private var croppingPhotoID: UUID?
     @State private var showDiscardAlert = false
 
     let client: XRPCClient
     var onCreated: (() -> Void)?
+
+    init(client: XRPCClient, initialItems: [PhotoItem] = [], onCreated: (() -> Void)? = nil) {
+        self.client = client
+        self.onCreated = onCreated
+        _photoItems = State(initialValue: initialItems)
+        _selectedPhotoID = State(initialValue: initialItems.first?.id)
+    }
 
     private let maxTitle = 100
     private let maxDescription = 1000
@@ -161,21 +168,12 @@ struct CreateGalleryView: View {
             createSignposter.emitEvent("TaskSpawned", "source=firstPhotoChange,itemCount=\(photoItems.count)")
             Task { await detectLocation() }
         }
-        .fullScreenCover(isPresented: $showCropView) {
-            if let id = croppingPhotoID,
-               let idx = photoItems.firstIndex(where: { $0.id == id }),
-               let original = photoItems[idx].originalImage ?? photoItems[idx].cameraImage
-            {
-                CropView(image: original, existingCrop: photoItems[idx].cropResult) { result in
-                    photoItems[idx].thumbnail = PhotoItem.makeThumbnail(from: result.croppedImage)
-                    photoItems[idx].carouselPreview = PhotoItem.makeCarouselPreview(from: result.croppedImage, width: UIScreen.main.bounds.width)
-                    photoItems[idx].cropResult = result
-                    showCropView = false
-                } onCancel: {
-                    showCropView = false
-                }
-                .ignoresSafeArea()
-            }
+        .cropSheet(request: $cropRequest) { result in
+            guard let id = croppingPhotoID,
+                  let idx = photoItems.firstIndex(where: { $0.id == id }) else { return }
+            photoItems[idx].thumbnail = PhotoItem.makeThumbnail(from: result.croppedImage)
+            photoItems[idx].carouselPreview = PhotoItem.makeCarouselPreview(from: result.croppedImage, width: UIScreen.main.bounds.width)
+            photoItems[idx].cropResult = result
         }
         .fullScreenCover(isPresented: $showCamera) {
             CameraPicker { image, metadata in
@@ -267,8 +265,10 @@ struct CreateGalleryView: View {
                 mode: $editorMode,
                 sendExif: sendExif,
                 onCropTapped: { id in
+                    guard let idx = photoItems.firstIndex(where: { $0.id == id }) else { return }
+                    let image = photoItems[idx].originalImage ?? photoItems[idx].cameraImage ?? photoItems[idx].carouselPreview
                     croppingPhotoID = id
-                    showCropView = true
+                    cropRequest = CropRequest(image: image, existingCrop: photoItems[idx].cropResult)
                 },
                 onDeleteItem: { item in
                     guard case let .picker(pickerItem) = item.source,
@@ -892,51 +892,11 @@ private func extractGalleryExif(from data: Data) -> [String: AnyCodable]? {
 }
 
 #Preview {
-    @Previewable @State var photos = PreviewData.photoItems
-    @Previewable @State var selectedID: UUID?
     NavigationStack {
-        CreateGalleryViewPreview(photoItems: $photos, selectedPhotoID: $selectedID)
+        CreateGalleryView(client: .preview, initialItems: PreviewData.photoItems)
     }
     .previewEnvironments()
-    .onAppear { selectedID = photos.first?.id }
-}
-
-/// Thin wrapper that exposes photoItems for preview injection
-private struct CreateGalleryViewPreview: View {
-    @Binding var photoItems: [PhotoItem]
-    @Binding var selectedPhotoID: UUID?
-
-    var body: some View {
-        Form {
-            Section("Photos") {
-                Label("5 photos selected", systemImage: "photo.on.rectangle.angled")
-                    .foregroundStyle(.secondary)
-            }
-            Section {
-                TextField("Add a title (required)...", text: .constant("Golden Hour, Kyoto"))
-                TextField("Add a description...", text: .constant("Shot on Leica M6 with Kodak Portra 400. #analog #japan #35mm"), axis: .vertical)
-                    .lineLimit(3 ... 6)
-            } header: {
-                Text("Gallery")
-            }
-            Section {
-                GalleryEditor(
-                    items: $photoItems,
-                    selectedPhotoID: $selectedPhotoID,
-                    isReordering: .constant(false),
-                    isAnimatingMode: .constant(false),
-                    mode: .constant(.preview),
-                    sendExif: true
-                )
-            }
-        }
-        .navigationTitle("New Gallery")
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) { Button("Cancel") {} }
-            ToolbarItem(placement: .topBarTrailing) { Button("Post") {}.bold() }
-        }
-        .grainPreview()
-    }
+    .grainPreview()
 }
 
 // MARK: - Sheet gesture disabler

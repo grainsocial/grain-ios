@@ -12,7 +12,7 @@ struct StoryCreateView: View {
     @State private var photoData: Data?
     @State private var previewImage: UIImage?
     @State private var showCamera = false
-    @State private var showCropView = false
+    @State private var cropRequest: CropRequest?
     @State private var originalImage: UIImage?
     @State private var cropState: CropResult?
     @State private var resolvedLocation: (h3: String, name: String, address: [String: AnyCodable]?)?
@@ -35,9 +35,11 @@ struct StoryCreateView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 12))
 
                         Button {
-                            showCropView = true
+                            if let originalImage {
+                                cropRequest = CropRequest(image: originalImage, existingCrop: cropState)
+                            }
                         } label: {
-                            Label("Crop", systemImage: "crop")
+                            Label("Crop Photo", systemImage: "crop.rotate")
                         }
                     }
 
@@ -85,17 +87,10 @@ struct StoryCreateView: View {
             .onChange(of: selectedPhoto) {
                 Task { await loadPhoto() }
             }
-            .fullScreenCover(isPresented: $showCropView) {
-                if let original = originalImage {
-                    CropView(image: original, existingCrop: cropState) { result in
-                        previewImage = result.croppedImage
-                        photoData = result.croppedImage.jpegData(compressionQuality: 1.0)
-                        cropState = result
-                        showCropView = false
-                    } onCancel: {
-                        showCropView = false
-                    }
-                }
+            .cropSheet(request: $cropRequest) { result in
+                previewImage = result.croppedImage
+                photoData = result.croppedImage.jpegData(compressionQuality: 1.0)
+                cropState = result
             }
             .fullScreenCover(isPresented: $showCamera) {
                 CameraPicker { image, _ in
