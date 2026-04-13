@@ -339,8 +339,10 @@ struct GalleryEditor: View {
     @Binding var mode: EditorMode
     let sendExif: Bool
     var onDeleteItem: ((PhotoItem) -> Void)?
+    /// Owned by the caller so fullScreenCover lives outside the Form/Section
+    /// hierarchy — avoids the SwiftUI-List cell-recycling crash.
+    @Binding var cropRequest: CropRequest?
     @State private var gridContainerWidth: CGFloat = 0
-    @State private var cropRequest: CropRequest?
     @State private var stripState = StripScrollState()
     @State private var reorderState = ReorderDragState()
 
@@ -438,19 +440,6 @@ struct GalleryEditor: View {
             }
             .pickerStyle(.segmented)
             .disabled(isAnimatingMode)
-        }
-        // fullScreenCover must NOT be on the Section — Sections inside
-        // List/Form can be recycled, which dismisses the cover immediately.
-        // .background + .cropSheet keeps the modifier in a stable view.
-        .background {
-            Color.clear
-                .cropSheet(request: $cropRequest) { result in
-                    guard let id = selectedPhotoID,
-                          let idx = items.firstIndex(where: { $0.id == id }) else { return }
-                    items[idx].thumbnail = PhotoItem.makeThumbnail(from: result.croppedImage)
-                    items[idx].carouselPreview = PhotoItem.makeCarouselPreview(from: result.croppedImage, width: UIScreen.main.bounds.width)
-                    items[idx].cropResult = result
-                }
         }
     }
 
@@ -690,6 +679,7 @@ struct GalleryEditor: View {
     @Previewable @State var isReordering = false
     @Previewable @State var isAnimatingMode = false
     @Previewable @State var zoomState = ImageZoomState()
+    @Previewable @State var cropRequest: CropRequest?
     Form {
         GalleryEditor(
             items: $state,
@@ -697,8 +687,16 @@ struct GalleryEditor: View {
             isReordering: $isReordering,
             isAnimatingMode: $isAnimatingMode,
             mode: $mode,
-            sendExif: false
+            sendExif: false,
+            cropRequest: $cropRequest
         )
+    }
+    .cropSheet(request: $cropRequest) { result in
+        guard let id = selected,
+              let idx = state.firstIndex(where: { $0.id == id }) else { return }
+        state[idx].thumbnail = PhotoItem.makeThumbnail(from: result.croppedImage)
+        state[idx].carouselPreview = PhotoItem.makeCarouselPreview(from: result.croppedImage, width: UIScreen.main.bounds.width)
+        state[idx].cropResult = result
     }
     .scrollDisabled(isReordering || isAnimatingMode)
     .environment(zoomState)

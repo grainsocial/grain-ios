@@ -282,8 +282,10 @@ struct CropView: View {
             }
             .frame(width: fitWidth, height: fitHeight)
             .clipped()
-            .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .local) }) { frame in
-                state.imageDisplayFrame = frame
+            .onGeometryChange(for: CGSize.self, of: { $0.size }) { size in
+                // Always normalise origin to (0,0) so cropRect coordinates
+                // are in the image's own local space, matching CropHandlesView.
+                state.imageDisplayFrame = CGRect(origin: .zero, size: size)
                 if !hasInitialized {
                     // When restoring an existing rotation, set rotation first
                     // and wait for the frame to update to the rotated dimensions
