@@ -1,3 +1,4 @@
+import SafariServices
 import SwiftUI
 
 struct LoginView: View {
@@ -15,6 +16,7 @@ struct LoginView: View {
     @State private var searchTask: Task<Void, Never>?
     @State private var highlightedSuggestionIndex: Int?
     @Namespace private var suggestionHighlightNS
+    @State private var safariURL: URL?
 
     var body: some View {
         GeometryReader { geo in
@@ -72,7 +74,7 @@ struct LoginView: View {
 
                         if suggestions.isEmpty {
                             // Heading
-                            Text("Log in with your atmosphere account")
+                            Text("Sign in with your atmosphere account")
                                 .font(.title3.weight(.semibold))
                                 .foregroundStyle(.white)
                                 .multilineTextAlignment(.center)
@@ -239,6 +241,13 @@ struct LoginView: View {
                                 .foregroundStyle(.white.opacity(0.5))
                                 .tint(.white.opacity(0.7))
                                 .multilineTextAlignment(.center)
+
+                            Button("What's an atmosphere account?") {
+                                safariURL = URL(string: "https://atmosphereaccount.com/")
+                            }
+                            .font(.footnote)
+                            .foregroundStyle(.white.opacity(0.5))
+                            .padding(.top, 4)
                         }
                         .padding(24)
 
@@ -275,6 +284,14 @@ struct LoginView: View {
                 }
                 .scrollDismissesKeyboard(.interactively)
                 .scrollIndicators(.hidden)
+                .environment(\.openURL, OpenURLAction { url in
+                    safariURL = url
+                    return .handled
+                })
+                .sheet(item: $safariURL) { url in
+                    LoginSafariView(url: url)
+                        .ignoresSafeArea()
+                }
             } // ScrollViewReader
         }
     }
@@ -449,6 +466,15 @@ private struct AtmosphereLogosMarquee: View {
         }
         .clipped()
     }
+}
+
+private struct LoginSafariView: UIViewControllerRepresentable {
+    let url: URL
+    func makeUIViewController(context _: Context) -> SFSafariViewController {
+        SFSafariViewController(url: url)
+    }
+
+    func updateUIViewController(_: SFSafariViewController, context _: Context) {}
 }
 
 #Preview {
