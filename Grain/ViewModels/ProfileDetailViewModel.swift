@@ -279,6 +279,9 @@ final class ProfileDetailViewModel {
         } else {
             // Optimistic follow — preserve existing block/mute state
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            if profile?.viewer == nil {
+                profile?.viewer = ActorViewerState()
+            }
             profile?.viewer?.following = "pending"
             profile?.followersCount = (prevCount ?? 0) + 1
 
