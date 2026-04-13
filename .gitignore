@@ -41,8 +41,9 @@ logo-options/
 # Zed personal config
 .zed/keymap.json
 .zed/tasks.json
-<<<<<<< HEAD
 .zed/sim
-=======
->>>>>>> 9d69c0f (feat: gallery editor — photo strip, reorder, captions, and sheet flow (#11))
 buildServer.json
+
+# Scratch / temp files
+tmp/
+*.tmp.*
