@@ -162,8 +162,16 @@ struct CropGestureOverlay: UIViewRepresentable {
             case .changed:
                 let currentLoc = imagePoint(from: gesture)
                 let rawScale = pinchStartScale * gesture.scale
-                // Allow dipping below 1.0 for rubber-band feel, floor at 0.5.
-                let newScale = max(rawScale, 0.5)
+                let maxScale = state.maxImageScale
+                let newScale: CGFloat
+                if rawScale > maxScale {
+                    // Rubber-band past max: diminishing returns (30% of excess).
+                    let excess = rawScale / maxScale - 1
+                    newScale = maxScale * (1 + excess * 0.3)
+                } else {
+                    // Allow dipping below 1.0 for rubber-band feel, floor at 0.5.
+                    newScale = max(rawScale, 0.5)
+                }
                 state.imageScale = newScale
 
                 // Offset that keeps pinchAnchorOverlay at currentLoc.
@@ -185,6 +193,7 @@ struct CropGestureOverlay: UIViewRepresentable {
                 state.imageOffset = newOffset
 
             case .ended, .cancelled, .failed:
+                let maxScale = state.maxImageScale
                 if state.imageScale < 1.0 {
                     // Spring back from under-zoom (rubber-band discoverability).
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
@@ -196,6 +205,12 @@ struct CropGestureOverlay: UIViewRepresentable {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
                         state.imageScale = 1.0
                         state.imageOffset = .zero
+                    }
+                } else if state.imageScale > maxScale {
+                    // Over max — spring back with no bounce (damping = 1).
+                    withAnimation(.spring(response: 0.35, dampingFraction: 1.0)) {
+                        state.imageScale = maxScale
+                        state.imageOffset = state.clampImageOffset(state.imageOffset)
                     }
                 } else {
                     state.imageOffset = state.clampImageOffset(state.imageOffset)

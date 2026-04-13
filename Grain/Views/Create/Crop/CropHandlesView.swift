@@ -9,6 +9,7 @@ import SwiftUI
 /// and sizes when the crop rect or view transform is animated.
 struct CropHandlesView: View, @preconcurrency Animatable {
     var screenCropRect: CGRect
+    var showGrid: Bool
 
     var animatableData: AnimatablePair<AnimatablePair<CGFloat, CGFloat>, AnimatablePair<CGFloat, CGFloat>> {
         get {
@@ -59,12 +60,20 @@ struct CropHandlesView: View, @preconcurrency Animatable {
 
     var body: some View {
         ZStack {
-            borderPath
-            handlePath
-            moveIndicatorPill
-            moveIndicatorLines
+            // Dim mask + grid drawn in the same screen-space coordinate
+            // system as the handles — impossible to desync.
+            dimmingMask
+            if showGrid { gridLines }
+
+            // Handles + border + move indicator
+            ZStack {
+                borderPath
+                handlePath
+                moveIndicatorPill
+                moveIndicatorLines
+            }
+            .shadow(color: .black.opacity(0.6), radius: 1.5, x: 0, y: 0.5)
         }
-        .shadow(color: .black.opacity(0.6), radius: 1.5, x: 0, y: 0.5)
         .allowsHitTesting(false)
     }
 
@@ -246,30 +255,60 @@ struct CropHandlesView: View, @preconcurrency Animatable {
         path.closeSubpath()
     }
 
+    // MARK: - Dim mask (screen-space, synced with handles)
+
+    /// Extends well beyond the view frame so zoomed images are still dimmed.
+    private var dimmingMask: some View {
+        let overflow: CGFloat = 2000
+        return Path { path in
+            path.addRect(CGRect(
+                x: -overflow,
+                y: -overflow,
+                width: screenCropRect.width + overflow * 4,
+                height: screenCropRect.height + overflow * 4
+            ))
+            path.addRect(screenCropRect)
+        }
+        .fill(Color.black.opacity(0.55), style: FillStyle(eoFill: true))
+    }
+
+    // MARK: - Grid (screen-space, synced with handles)
+
+    private var gridLines: some View {
+        Path { path in
+            let r = screenCropRect
+            let thirdW = r.width / 3
+            for i in 1 ... 2 {
+                let x = r.minX + thirdW * CGFloat(i)
+                path.move(to: CGPoint(x: x, y: r.minY))
+                path.addLine(to: CGPoint(x: x, y: r.maxY))
+            }
+            let thirdH = r.height / 3
+            for i in 1 ... 2 {
+                let y = r.minY + thirdH * CGFloat(i)
+                path.move(to: CGPoint(x: r.minX, y: y))
+                path.addLine(to: CGPoint(x: r.maxX, y: y))
+            }
+        }
+        .stroke(Color.white.opacity(0.5), lineWidth: 0.5)
+    }
+
     // MARK: - Move indicator (3-line grab bar with background pill)
 
     /// Pill height (capsule short-axis) — a touch larger than the old fixed 18pt.
-    private var pillHeight: CGFloat {
-        22
-    }
+    private var pillHeight: CGFloat { 22 }
 
     /// Pill width: straight section = handleLength (matches edge bar length) + 2 × radius.
-    private var pillWidth: CGFloat {
-        handleLength + pillHeight
-    }
+    private var pillWidth: CGFloat { handleLength + pillHeight }
 
     /// Line width for the 3-line grab indicator: spans 80 % of the straight section.
-    private var indicatorLineWidth: CGFloat {
-        handleLength * 0.8
-    }
+    private var indicatorLineWidth: CGFloat { handleLength * 0.8 }
 
-    /// Vertical center of the pill.  14 pt above the crop-rect top edge, but
-    /// clamped so the pill never floats above the CropHandlesView frame —
-    /// this prevents it from drifting into the toolbar on tall portrait photos.
+    /// Vertical center of the pill — locked inside the crop rect, just
+    /// below the top edge. No toolbar-overlap concerns since it never
+    /// leaves the crop area.
     private var moveIndicatorCY: CGFloat {
-        let raw = screenCropRect.minY - 14
-        let minCY = pillHeight / 2 + 4 // keep pill fully inside the view with 4 pt margin
-        return max(raw, minCY)
+        screenCropRect.minY + pillHeight / 2 + 6
     }
 
     private var moveIndicatorPill: some View {

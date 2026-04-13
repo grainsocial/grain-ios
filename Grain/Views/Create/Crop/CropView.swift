@@ -42,11 +42,14 @@ struct CropView: View {
         ZStack {
             Color(.systemBackground).ignoresSafeArea()
 
-            // VStack sandwiches the image between the controls so the
-            // GeometryReader receives only the actual image-zone height.
-            // Previously the reader filled the full screen and the image
-            // was centred in the full height rather than between the
-            // controls — visually off-centre on short landscape photos.
+            GeometryReader { geo in
+                imageArea(in: geo)
+                    .position(x: geo.size.width / 2, y: geo.size.height / 2)
+            }
+            .onGeometryChange(for: CGSize.self, of: { $0.size }) { lastGeoSize = $0 }
+
+            // Controls — separate ZStack layer so glass buttons are
+            // always rendered above the image / handles / overlay.
             VStack(spacing: 0) {
                 VStack(spacing: 8) {
                     toolbar
@@ -56,11 +59,7 @@ struct CropView: View {
                 }
                 .padding(.top, 8)
 
-                GeometryReader { geo in
-                    imageArea(in: geo)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-                .onGeometryChange(for: CGSize.self, of: { $0.size }) { lastGeoSize = $0 }
+                Spacer()
 
                 VStack(spacing: 8) {
                     bottomControls
@@ -259,6 +258,10 @@ struct CropView: View {
         let fitWidth = fit.width
         let fitHeight = fit.height
 
+        // The outer ZStack sizes to fitWidth × fitHeight (image + handles).
+        // The gesture overlay is attached as an .overlay so its +88pt frame
+        // doesn't inflate the ZStack — that extra width caused a sub-pixel
+        // centering offset on landscape photos.
         ZStack {
             // Image + overlay in the same coordinate space.
             // scaleEffect/offset are applied to both so the mask
@@ -274,12 +277,6 @@ struct CropView: View {
                         height: isSwapped ? fitWidth : fitHeight
                     )
                     .rotationEffect(.degrees(state.rotationAngle))
-
-                CropOverlayView(
-                    cropRect: state.cropRect,
-                    geometrySize: CGSize(width: fitWidth, height: fitHeight),
-                    showGrid: state.showGrid
-                )
             }
             .frame(width: fitWidth, height: fitHeight)
             .clipped()
@@ -305,11 +302,13 @@ struct CropView: View {
             .offset(state.imageOffset)
 
             // Screen-space handles (outside transform chain — constant size at any zoom)
-            CropHandlesView(screenCropRect: state.screenCropRect)
+            CropHandlesView(screenCropRect: state.screenCropRect, showGrid: state.showGrid)
                 .frame(width: fitWidth, height: fitHeight)
-
-            // Gesture layer extends 44pt beyond image frame so handles at
-            // the image boundary can be grabbed from outside.
+        }
+        // Gesture layer extends 44pt beyond image frame so handles at
+        // the image boundary can be grabbed from outside. Attached as
+        // .overlay so it doesn't widen the ZStack and skew centering.
+        .overlay {
             CropGestureOverlay(
                 state: state,
                 frameSize: CGSize(width: fitWidth, height: fitHeight),
@@ -345,20 +344,38 @@ struct CropView: View {
     private func initializeCropState() {
         state.originalImageRatio = displayImage.size.width / max(displayImage.size.height, 1)
 
-        if let existing = existingCrop {
-            // Rotation was already set in onGeometryChange (before this call),
-            // and imageDisplayFrame now has the correct rotated dimensions.
-            let frame = state.imageDisplayFrame
-            state.cropRect = CGRect(
-                x: frame.origin.x + existing.cropRect.origin.x * frame.width,
-                y: frame.origin.y + existing.cropRect.origin.y * frame.height,
-                width: existing.cropRect.width * frame.width,
-                height: existing.cropRect.height * frame.height
-            )
-            state.setBaseline(rotation: Double(existing.rotation), normalizedCrop: existing.cropRect)
-        } else {
-            state.resetCrop()
-            state.setBaseline(rotation: 0, normalizedCrop: CGRect(x: 0, y: 0, width: 1, height: 1))
+        // Max zoom: slightly above 1:1 pixel match (each source pixel = 1 screen pixel).
+        let imagePixels = max(displayImage.size.width, displayImage.size.height) * displayImage.scale
+        let framePoints = max(state.imageDisplayFrame.width, state.imageDisplayFrame.height)
+        if framePoints > 0 {
+            let screenScale: CGFloat = UITraitCollection.current.displayScale
+            let oneToOne = imagePixels / (framePoints * max(screenScale, 1))
+            state.maxImageScale = max(2.0, oneToOne * 1.2)
+        }
+
+        // Disable animation so the crop rect snaps into place immediately.
+        // Without this, the fullScreenCover presentation animation causes
+        // CropOverlayView and CropHandlesView to independently interpolate
+        // their Animatable data from .zero → final rect, desyncing the mask
+        // from the handles until the next explicit animation (e.g. rotate).
+        var t = Transaction()
+        t.animation = nil
+        withTransaction(t) {
+            if let existing = existingCrop {
+                // Rotation was already set in onGeometryChange (before this call),
+                // and imageDisplayFrame now has the correct rotated dimensions.
+                let frame = state.imageDisplayFrame
+                state.cropRect = CGRect(
+                    x: frame.origin.x + existing.cropRect.origin.x * frame.width,
+                    y: frame.origin.y + existing.cropRect.origin.y * frame.height,
+                    width: existing.cropRect.width * frame.width,
+                    height: existing.cropRect.height * frame.height
+                )
+                state.setBaseline(rotation: Double(existing.rotation), normalizedCrop: existing.cropRect)
+            } else {
+                state.resetCrop()
+                state.setBaseline(rotation: 0, normalizedCrop: CGRect(x: 0, y: 0, width: 1, height: 1))
+            }
         }
     }
 
@@ -400,29 +417,39 @@ struct CropView: View {
         let newFit = fitSize(geoSize: lastGeoSize, swapped: newSwapped)
         let newFrame = CGRect(x: 0, y: 0, width: newFit.width, height: newFit.height)
 
+        // Compute the final crop rect directly in the new frame so the
+        // animation goes straight from old position → new position without
+        // the intermediate "expand to full frame" step.
+        var finalCrop = CGRect(
+            x: postNorm.origin.x * newFrame.width,
+            y: postNorm.origin.y * newFrame.height,
+            width: postNorm.width * newFrame.width,
+            height: postNorm.height * newFrame.height
+        )
+        // Manual validation against new frame (can't use nearestValidCrop
+        // because imageDisplayFrame hasn't updated yet).
+        finalCrop.size.width = max(finalCrop.size.width, 44)
+        finalCrop.size.height = max(finalCrop.size.height, 44)
+        if finalCrop.minX < 0 { finalCrop.origin.x = 0 }
+        if finalCrop.minY < 0 { finalCrop.origin.y = 0 }
+        if finalCrop.maxX > newFrame.width { finalCrop.origin.x = newFrame.width - finalCrop.width }
+        if finalCrop.maxY > newFrame.height { finalCrop.origin.y = newFrame.height - finalCrop.height }
+        if let ratio = state.effectiveLockedRatio {
+            let currentRatio = finalCrop.width / max(finalCrop.height, 1)
+            if abs(currentRatio - ratio) > 0.01 {
+                finalCrop.size.height = finalCrop.width / ratio
+            }
+        }
+
         isRotating = true
+        postRotationNormalizedCrop = nil
         withAnimation(.smooth(duration: 0.4)) {
             state.rotationAngle += Double(degrees)
             state.imageOffset = .zero
             state.imageScale = 1.0
-            // Set cropRect to the new full frame within the animation transaction
-            // so overlay and handles interpolate smoothly with the frame transition.
-            state.cropRect = newFrame
+            state.cropRect = finalCrop
         } completion: {
             isRotating = false
-            if let norm = postRotationNormalizedCrop {
-                let currentFrame = state.imageDisplayFrame
-                let viewRect = CGRect(
-                    x: currentFrame.origin.x + norm.origin.x * currentFrame.width,
-                    y: currentFrame.origin.y + norm.origin.y * currentFrame.height,
-                    width: norm.width * currentFrame.width,
-                    height: norm.height * currentFrame.height
-                )
-                withAnimation(.smooth(duration: 0.25)) {
-                    state.cropRect = state.nearestValidCrop(viewRect, ratio: state.effectiveLockedRatio)
-                }
-            }
-            postRotationNormalizedCrop = nil
         }
     }
 
