@@ -417,46 +417,42 @@ final class CropState {
         return r
     }
 
+    /// Limit panning so the scaled image never shows empty space.
+    /// At scale 1.0 offset is locked to zero; at 2× the image extends
+    /// half-a-frame past each edge.
     func clampImageOffset(_ offset: CGSize) -> CGSize {
-        let scaledW = imageDisplayFrame.width * imageScale
-        let scaledH = imageDisplayFrame.height * imageScale
-
-        let centerX = imageDisplayFrame.midX + offset.width
-        let centerY = imageDisplayFrame.midY + offset.height
-
-        let imgMinX = centerX - scaledW / 2
-        let imgMaxX = centerX + scaledW / 2
-        let imgMinY = centerY - scaledH / 2
-        let imgMaxY = centerY + scaledH / 2
-
-        var clamped = offset
-
-        if imgMinX > cropRect.minX {
-            clamped.width -= (imgMinX - cropRect.minX)
-        }
-        if imgMaxX < cropRect.maxX {
-            clamped.width += (cropRect.maxX - imgMaxX)
-        }
-        if imgMinY > cropRect.minY {
-            clamped.height -= (imgMinY - cropRect.minY)
-        }
-        if imgMaxY < cropRect.maxY {
-            clamped.height += (cropRect.maxY - imgMaxY)
-        }
-
-        return clamped
+        let maxX = imageDisplayFrame.width * (imageScale - 1) / 2
+        let maxY = imageDisplayFrame.height * (imageScale - 1) / 2
+        return CGSize(
+            width: max(-maxX, min(maxX, offset.width)),
+            height: max(-maxY, min(maxY, offset.height))
+        )
     }
 
+    /// In overlay space the image always fills the display frame —
+    /// zoom/pan are applied as view-level transforms outside the overlay.
     func transformedImageBounds() -> CGRect {
-        let scaledW = imageDisplayFrame.width * imageScale
-        let scaledH = imageDisplayFrame.height * imageScale
-        let centerX = imageDisplayFrame.midX + imageOffset.width
-        let centerY = imageDisplayFrame.midY + imageOffset.height
-        return CGRect(
-            x: centerX - scaledW / 2,
-            y: centerY - scaledH / 2,
-            width: scaledW,
-            height: scaledH
+        imageDisplayFrame
+    }
+
+    // MARK: - Coordinate transform (view ↔ overlay)
+
+    /// Convert a view-space point to overlay (image-local) space,
+    /// undoing the scaleEffect + offset applied to the overlay container.
+    func viewToOverlayPoint(_ point: CGPoint) -> CGPoint {
+        let cx = imageDisplayFrame.width / 2
+        let cy = imageDisplayFrame.height / 2
+        return CGPoint(
+            x: cx + (point.x - cx - imageOffset.width) / imageScale,
+            y: cy + (point.y - cy - imageOffset.height) / imageScale
+        )
+    }
+
+    /// Convert a view-space translation delta to overlay space.
+    func viewToOverlayTranslation(_ translation: CGSize) -> CGSize {
+        CGSize(
+            width: translation.width / imageScale,
+            height: translation.height / imageScale
         )
     }
 }

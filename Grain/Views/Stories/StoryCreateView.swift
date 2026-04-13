@@ -95,7 +95,6 @@ struct StoryCreateView: View {
                     } onCancel: {
                         showCropView = false
                     }
-                    .ignoresSafeArea()
                 }
             }
             .fullScreenCover(isPresented: $showCamera) {

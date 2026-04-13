@@ -82,6 +82,8 @@ struct CreateGalleryView: View {
     /// into different scroll contexts, producing wrong-direction morphs.
     @State private var isAnimatingMode = false
     @State private var editorMode: EditorMode = .preview
+    @State private var showCropView = false
+    @State private var croppingPhotoID: UUID?
     @State private var showDiscardAlert = false
 
     let client: XRPCClient
@@ -159,12 +161,28 @@ struct CreateGalleryView: View {
             createSignposter.emitEvent("TaskSpawned", "source=firstPhotoChange,itemCount=\(photoItems.count)")
             Task { await detectLocation() }
         }
+        .fullScreenCover(isPresented: $showCropView) {
+            if let id = croppingPhotoID,
+               let idx = photoItems.firstIndex(where: { $0.id == id }),
+               let original = photoItems[idx].originalImage ?? photoItems[idx].cameraImage
+            {
+                CropView(image: original, existingCrop: photoItems[idx].cropResult) { result in
+                    photoItems[idx].thumbnail = PhotoItem.makeThumbnail(from: result.croppedImage)
+                    photoItems[idx].carouselPreview = PhotoItem.makeCarouselPreview(from: result.croppedImage, width: UIScreen.main.bounds.width)
+                    photoItems[idx].cropResult = result
+                    showCropView = false
+                } onCancel: {
+                    showCropView = false
+                }
+                .ignoresSafeArea()
+            }
+        }
         .fullScreenCover(isPresented: $showCamera) {
             CameraPicker { image, metadata in
                 let thumb = PhotoItem.makeThumbnail(from: image)
                 let carousel = PhotoItem.makeCarouselPreview(from: image, width: UIScreen.main.bounds.width)
                 let exif = metadata.flatMap { makeExifSummary(from: $0) }
-                let item = PhotoItem(thumbnail: thumb, carouselPreview: carousel, source: .camera(image, metadata: metadata), exifSummary: exif)
+                let item = PhotoItem(thumbnail: thumb, carouselPreview: carousel, source: .camera(image, metadata: metadata), exifSummary: exif, originalImage: image)
                 photoItems.append(item)
                 if selectedPhotoID == nil { selectedPhotoID = item.id }
             }
@@ -248,6 +266,10 @@ struct CreateGalleryView: View {
                 isAnimatingMode: $isAnimatingMode,
                 mode: $editorMode,
                 sendExif: sendExif,
+                onCropTapped: { id in
+                    croppingPhotoID = id
+                    showCropView = true
+                },
                 onDeleteItem: { item in
                     guard case let .picker(pickerItem) = item.source,
                           let id = pickerItem.itemIdentifier else { return }
@@ -394,7 +416,7 @@ struct CreateGalleryView: View {
                     let carousel = PhotoItem.makeCarouselPreview(from: image, width: carouselWidth)
                     let exif = makeExifSummary(from: data)
                     createSignposter.endInterval("LoadPhoto", state, "result=ok")
-                    return (index, PhotoItem(thumbnail: thumb, carouselPreview: carousel, source: .picker(pickerItem), exifSummary: exif))
+                    return (index, PhotoItem(thumbnail: thumb, carouselPreview: carousel, source: .picker(pickerItem), exifSummary: exif, originalImage: image))
                 }
             }
             for await (index, item) in group {
@@ -571,16 +593,23 @@ struct ExifSummary {
 
 struct PhotoItem: Identifiable {
     let id = UUID()
-    let thumbnail: UIImage
+    var thumbnail: UIImage
     /// Screen-width image for the carousel. Built at creation time via
     /// `UIGraphicsImageRenderer`, which forces a full decode during the draw
     /// call — so the resulting UIImage is backed by a decoded bitmap and
     /// displays with zero decode work. Kept in memory for the editor session
     /// so the carousel never stalls on first draw regardless of scroll speed.
-    let carouselPreview: UIImage
+    var carouselPreview: UIImage
     let source: PhotoSource
     var alt: String = ""
     var exifSummary: ExifSummary?
+    var originalImage: UIImage?
+    var cropResult: CropResult?
+
+    var cameraImage: UIImage? {
+        if case let .camera(image, _) = source { return image }
+        return nil
+    }
 
     /// Thumbnail's natural width-to-height ratio. Computed once from `thumbnail.size`
     /// and used everywhere a cell needs aspect geometry — single source of truth.
