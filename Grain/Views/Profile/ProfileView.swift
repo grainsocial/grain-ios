@@ -353,7 +353,7 @@ struct ProfileView: View {
                                 Divider()
                             }
                             if !viewModel.isBlockHidden {
-                                Button(role: profile.viewer?.muted == true ? nil : .destructive) {
+                                Button {
                                     Task { await viewModel.toggleMute(auth: auth.authContext()) }
                                 } label: {
                                     Label(
@@ -362,14 +362,17 @@ struct ProfileView: View {
                                     )
                                 }
                             }
-                            Button(role: profile.viewer?.blocking != nil ? nil : .destructive) {
-                                Task { await viewModel.toggleBlock(auth: auth.authContext()) }
-                            } label: {
-                                Label(
-                                    profile.viewer?.blocking != nil ? "Unblock" : "Block",
-                                    systemImage: profile.viewer?.blocking != nil ? "circle" : "nosign"
-                                )
+                            Section {
+                                Button(role: profile.viewer?.blocking != nil ? nil : .destructive) {
+                                    Task { await viewModel.toggleBlock(auth: auth.authContext()) }
+                                } label: {
+                                    Label(
+                                        profile.viewer?.blocking != nil ? "Unblock" : "Block",
+                                        systemImage: profile.viewer?.blocking != nil ? "circle" : "nosign"
+                                    )
+                                }
                             }
+                            .tint(profile.viewer?.blocking != nil ? .primary : .red)
                         } label: {
                             Image(systemName: "ellipsis")
                         }

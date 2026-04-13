@@ -483,16 +483,10 @@ struct StoryViewer: View {
                         HStack(spacing: 0) {
                             Color.clear
                                 .contentShape(Rectangle())
-                                .onTapGesture(count: 2, coordinateSpace: .named("storyHearts")) { location in
-                                    doubleTapLike(at: location)
-                                }
                                 .onTapGesture { goToPrevious() }
                                 .frame(width: geo.size.width / 3)
                             Color.clear
                                 .contentShape(Rectangle())
-                                .onTapGesture(count: 2, coordinateSpace: .named("storyHearts")) { location in
-                                    doubleTapLike(at: location)
-                                }
                                 .onTapGesture { goToNext() }
                                 .frame(maxWidth: .infinity)
                         }
@@ -1006,6 +1000,7 @@ struct StoryViewer: View {
             try await client.deleteRecord(collection: "social.grain.story", rkey: rkey, auth: authContext)
             stories.removeAll { $0.uri == story.uri }
             if stories.isEmpty {
+                storyStatusCache.remove(did: story.creator.did)
                 goToNextAuthor()
             } else {
                 currentStoryIndex = min(currentStoryIndex, stories.count - 1)

@@ -18,7 +18,7 @@ final class StoryStripViewModel {
         isLoading = true
         do {
             let response = try await client.getStoryAuthors(auth: auth)
-            authors = response.authors
+            authors = response.authors.filter { $0.storyCount > 0 }
             storyStatusCache?.update(from: response.authors)
         } catch {
             // Silently fail — strip just won't show

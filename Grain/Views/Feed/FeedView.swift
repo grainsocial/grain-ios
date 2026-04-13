@@ -84,6 +84,7 @@ struct FeedView: View {
             .onChange(of: storyViewerDid) {
                 if storyViewerDid == nil {
                     storyViewModel.invalidate()
+                    Task { await storyViewModel.load(auth: auth.authContext(), storyStatusCache: storyStatusCache) }
                 }
             }
             .fullScreenCover(isPresented: Binding(

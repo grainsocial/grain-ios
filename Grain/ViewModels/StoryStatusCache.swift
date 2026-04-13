@@ -49,7 +49,7 @@ final class StoryStatusCache {
     }
 
     func update(from authors: [GrainStoryAuthor]) {
-        entries = Dictionary(uniqueKeysWithValues: authors.map { author in
+        entries = Dictionary(uniqueKeysWithValues: authors.filter { $0.storyCount > 0 }.map { author in
             let expiresAt: Date = if let latestAt = Self.parseDate(author.latestAt) {
                 latestAt.addingTimeInterval(Self.storyLifetime)
             } else {
@@ -57,6 +57,11 @@ final class StoryStatusCache {
             }
             return (author.profile.did, CachedEntry(author: author, expiresAt: expiresAt))
         })
+    }
+
+    /// Remove a specific author from the cache (e.g. after deleting their last story).
+    func remove(did: String) {
+        entries.removeValue(forKey: did)
     }
 
     /// Remove entries whose stories have expired. Call on app foreground and background.

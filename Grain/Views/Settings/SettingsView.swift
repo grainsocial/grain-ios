@@ -21,10 +21,10 @@ struct SettingsView: View {
                 NavigationLink("Moderation") {
                     ModerationView(client: client)
                 }
-                NavigationLink("Appearance") {
+                NavigationLink("Feeds") {
                     AppearanceSettingsView()
                 }
-                NavigationLink("Upload Defaults") {
+                NavigationLink("Privacy") {
                     UploadDefaultsView(client: client)
                 }
             }
@@ -118,10 +118,24 @@ private struct AccountDetailView: View {
             Section {
                 if let handle = auth.userHandle {
                     LabeledContent("Handle", value: "@\(handle)")
+                        .contextMenu {
+                            Button {
+                                UIPasteboard.general.string = "@\(handle)"
+                            } label: {
+                                Label("Copy Handle", systemImage: "doc.on.doc")
+                            }
+                        }
                 }
                 if let did = auth.userDID {
                     LabeledContent("DID", value: did)
                         .font(.caption)
+                        .contextMenu {
+                            Button {
+                                UIPasteboard.general.string = did
+                            } label: {
+                                Label("Copy DID", systemImage: "doc.on.doc")
+                            }
+                        }
                 }
             }
 
@@ -160,7 +174,7 @@ private struct AppearanceSettingsView: View {
                 Toggle("Show suggested users", isOn: $showSuggestedUsers)
             }
         }
-        .navigationTitle("Appearance")
+        .navigationTitle("Feeds")
         .tint(Color("AccentColor"))
     }
 }
@@ -174,7 +188,7 @@ private struct UploadDefaultsView: View {
 
     var body: some View {
         List {
-            Section {
+            Section("Defaults for new uploads") {
                 Toggle(isOn: $includeLocation) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Include location")
@@ -207,7 +221,7 @@ private struct UploadDefaultsView: View {
                 }
             }
         }
-        .navigationTitle("Upload Defaults")
+        .navigationTitle("Privacy")
         .tint(Color("AccentColor"))
         .task {
             if let authContext = await auth.authContext(),
