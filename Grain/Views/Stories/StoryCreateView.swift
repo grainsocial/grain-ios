@@ -13,6 +13,8 @@ struct StoryCreateView: View {
     @State private var previewImage: UIImage?
     @State private var showCamera = false
     @State private var showCropView = false
+    @State private var originalImage: UIImage?
+    @State private var cropState: CropResult?
     @State private var resolvedLocation: (h3: String, name: String, address: [String: AnyCodable]?)?
     @State private var photoLocationResult: NominatimResult?
     @State private var includeLocation = true
@@ -86,8 +88,11 @@ struct StoryCreateView: View {
                 Task { await loadPhoto() }
             }
             .fullScreenCover(isPresented: $showCropView) {
-                if let previewImage {
-                    CropView(image: previewImage) { _ in
+                if let original = originalImage {
+                    CropView(image: original, existingCrop: cropState) { result in
+                        previewImage = result.croppedImage
+                        photoData = result.croppedImage.jpegData(compressionQuality: 1.0)
+                        cropState = result
                         showCropView = false
                     } onCancel: {
                         showCropView = false
@@ -126,7 +131,9 @@ struct StoryCreateView: View {
     // MARK: - Camera
 
     private func handleCameraImage(_ image: UIImage) {
+        originalImage = image
         previewImage = image
+        cropState = nil
         if let data = image.jpegData(compressionQuality: 1.0) {
             photoData = data
         }
@@ -147,7 +154,9 @@ struct StoryCreateView: View {
             return
         }
         photoData = data
+        originalImage = image
         previewImage = image
+        cropState = nil
 
         resolvedLocation = nil
         photoLocationResult = nil

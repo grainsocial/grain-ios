@@ -12,7 +12,7 @@ struct AspectRatioBar: View {
             } label: {
                 Image(systemName: state.isRatioLocked ? "lock.fill" : "lock.open")
                     .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(state.isRatioLocked ? .white : .white.opacity(0.35))
+                    .foregroundStyle(state.isRatioLocked ? .primary : .tertiary)
                     .frame(width: 36, height: 36)
                     .contentShape(Rectangle())
             }
@@ -31,8 +31,8 @@ struct AspectRatioBar: View {
                                 .font(.subheadline.weight(.medium))
                                 .foregroundStyle(
                                     state.selectedPreset == preset
-                                        ? .white
-                                        : .white.opacity(0.35)
+                                        ? .primary
+                                        : .tertiary
                                 )
                                 .padding(.horizontal, 14)
                                 .padding(.vertical, 8)

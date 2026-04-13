@@ -1,4 +1,7 @@
+import os
 import UIKit
+
+private let cropSignposter = OSSignposter(subsystem: "social.grain.grain", category: "ImageCropper")
 
 /// Pure utility — no views, no state. Handles coordinate space conversions
 /// and the actual pixel-level crop/rotate operations.
@@ -8,6 +11,9 @@ enum ImageCropper {
     /// in visual coordinates.
     static func normalizeOrientation(_ image: UIImage) -> UIImage {
         guard image.imageOrientation != .up else { return image }
+        let spid = cropSignposter.makeSignpostID()
+        let state = cropSignposter.beginInterval("normalizeOrientation", id: spid, "\(Int(image.size.width))x\(Int(image.size.height))")
+        defer { cropSignposter.endInterval("normalizeOrientation", state) }
         let format = UIGraphicsImageRendererFormat()
         format.scale = image.scale
         let renderer = UIGraphicsImageRenderer(size: image.size, format: format)
@@ -20,6 +26,9 @@ enum ImageCropper {
     /// `degrees` must be 0, 90, 180, or 270.
     static func rotate(_ image: UIImage, degrees: Int) -> UIImage {
         guard degrees != 0 else { return image }
+        let spid = cropSignposter.makeSignpostID()
+        let state = cropSignposter.beginInterval("rotate", id: spid, "\(degrees)° \(Int(image.size.width))x\(Int(image.size.height))")
+        defer { cropSignposter.endInterval("rotate", state) }
         let radians = CGFloat(degrees) * .pi / 180
 
         let swapDimensions = degrees == 90 || degrees == 270
@@ -47,6 +56,10 @@ enum ImageCropper {
     ///     POST-ROTATION image.
     ///   - rotation: Clockwise degrees (0, 90, 180, 270) applied BEFORE cropping.
     static func applyCrop(to image: UIImage, normalizedRect: CGRect, rotation: Int) -> UIImage {
+        let spid = cropSignposter.makeSignpostID()
+        let state = cropSignposter.beginInterval("applyCrop", id: spid, "\(Int(image.size.width))x\(Int(image.size.height)) rot=\(rotation)")
+        defer { cropSignposter.endInterval("applyCrop", state) }
+
         let normalized = normalizeOrientation(image)
         let rotated = rotate(normalized, degrees: rotation)
 
