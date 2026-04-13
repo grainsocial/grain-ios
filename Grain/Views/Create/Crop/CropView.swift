@@ -155,7 +155,7 @@ struct CropView: View {
                 pillButton("minus.magnifyingglass",
                            active: state.isViewModified)
                 {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 1.0)) {
                         state.resetView()
                     }
                 }
@@ -176,11 +176,14 @@ struct CropView: View {
         return HStack(spacing: 12) {
             // Lock toggle
             Button {
-                state.toggleRatioLock()
+                withAnimation(.smooth(duration: 0.3)) {
+                    state.toggleRatioLock()
+                }
             } label: {
-                Image(systemName: state.isRatioLocked ? "lock.fill" : "lock.open")
+                Image(systemName: state.isRatioLocked ? "lock.fill" : "lock.open.fill")
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(state.isRatioLocked ? .primary : .tertiary)
+                    .contentTransition(.symbolEffect(.replace))
                     .frame(width: 36, height: 36)
                     .contentShape(Rectangle())
             }
@@ -302,8 +305,12 @@ struct CropView: View {
             .offset(state.imageOffset)
 
             // Screen-space handles (outside transform chain — constant size at any zoom)
-            CropHandlesView(screenCropRect: state.screenCropRect, showGrid: state.showGrid)
-                .frame(width: fitWidth, height: fitHeight)
+            CropHandlesView(
+                screenCropRect: state.screenCropRect,
+                showGrid: state.showGrid,
+                zoomReference: min(fitWidth, fitHeight) * state.imageScale
+            )
+            .frame(width: fitWidth, height: fitHeight)
         }
         // Gesture layer extends 44pt beyond image frame so handles at
         // the image boundary can be grabbed from outside. Attached as
@@ -495,7 +502,7 @@ struct CropView: View {
 
 #Preview {
     let sampleImage: UIImage = {
-        guard let path = Bundle.main.url(forResource: "Mount_Hood_reflected_in_Mirror_Lake,_Oregon", withExtension: "jpg")?.path,
+        guard let path = Bundle.main.url(forResource: "Union_Bank_Tower,_Portland_(2024)-L1006272", withExtension: "jpg")?.path,
               let img = UIImage(contentsOfFile: path)
         else {
             return PreviewData.gradientThumb(

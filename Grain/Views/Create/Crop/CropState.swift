@@ -388,14 +388,13 @@ final class CropState {
             if distance(point, pos) < cornerHR { return handle }
         }
 
-        // Edge midpoint bars only — hit zone covers the visible bar, not
-        // the entire edge. Hidden when crop rect is too small (matches
-        // CropHandlesView threshold: 3× bar length + padding).
+        // Edge midpoint bars only — hit zone matches CropHandlesView's
+        // zoom-based fullHandleLength threshold (not crop-rect-based).
         let scr = screenCropRect
-        let screenShort = min(scr.width, scr.height)
-        let screenBarLen = min(max(screenShort * 0.12, 28), 44)
-        let edgeMinSize = screenBarLen * 3 + screenBarLen
-        let barHalf = (screenBarLen / imageScale) / 2 + hr
+        let zoomRef = min(imageDisplayFrame.width, imageDisplayFrame.height) * imageScale
+        let fullHL = min(max(zoomRef * 0.12, 28), 44)
+        let edgeMinSize = fullHL * 4
+        let barHalf = (fullHL / imageScale) / 2 + hr
         // No top edge — move indicator handles that zone.
         let bottomInward: CGFloat = (bounds.maxY - r.maxY) < hr ? hr * 1.6 : hr
         let leftInward: CGFloat = (r.minX - bounds.minX) < hr ? hr * 1.6 : hr
@@ -436,8 +435,8 @@ final class CropState {
 
     // MARK: - Handle drag
 
-    /// Minimum crop dimension in overlay points (~132px at 3x).
-    private let minCropSize: CGFloat = 44
+    /// Minimum crop dimension in overlay points (~200px at 3x).
+    private let minCropSize: CGFloat = 66
 
     func handleDrag(handle: CropHandle, translation: CGSize) {
         // If user drags a handle while a preset is selected but lock is off,

@@ -10,6 +10,9 @@ import SwiftUI
 struct CropHandlesView: View, @preconcurrency Animatable {
     var screenCropRect: CGRect
     var showGrid: Bool
+    /// `min(frameWidth, frameHeight) * imageScale` — drives stroke/thickness
+    /// sizing so handles scale with zoom but not with crop rect size.
+    var zoomReference: CGFloat
 
     var animatableData: AnimatablePair<AnimatablePair<CGFloat, CGFloat>, AnimatablePair<CGFloat, CGFloat>> {
         get {
@@ -28,27 +31,37 @@ struct CropHandlesView: View, @preconcurrency Animatable {
 
     // MARK: - Proportional dimensions
 
-    /// Short side of the screen-space crop rect, drives all proportional sizing.
-    private var shortSide: CGFloat {
+    /// Short side of the screen-space crop rect.
+    private var cropShortSide: CGFloat {
         min(screenCropRect.width, screenCropRect.height)
     }
 
-    /// Corner/edge handle arm length — 12% of short side, min 28pt for HIG tappability.
+    /// Full arm length — zoom-driven. Used for edge bar sizing and thresholds.
+    private var fullHandleLength: CGFloat {
+        min(max(zoomReference * 0.12, 28), 44)
+    }
+
+    /// Corner bracket arm length — stays at full size while edge bars are
+    /// visible, then shrinks proportionally after they're fully gone.
     private var handleLength: CGFloat {
-        min(max(shortSide * 0.12, 28), 44)
+        let edgeBarsGone = fullHandleLength * 3
+        if cropShortSide >= edgeBarsGone { return fullHandleLength }
+        let minArm = max(fullHandleLength * 0.45, 14)
+        let t = cropShortSide / max(edgeBarsGone, 1)
+        return minArm + (fullHandleLength - minArm) * t
     }
 
-    /// Handle stroke thickness — bold enough to be visually grabbable.
+    /// Handle stroke thickness — zoom-driven (constant regardless of crop size).
     private var handleThickness: CGFloat {
-        min(max(shortSide * 0.025, 5), 8)
+        min(max(zoomReference * 0.025, 5), 8)
     }
 
-    /// Border line thickness — proportional but thinner than handles.
+    /// Border line thickness — zoom-driven.
     private var borderThickness: CGFloat {
-        min(max(shortSide * 0.006, 1), 2)
+        min(max(zoomReference * 0.006, 1), 2)
     }
 
-    /// Half-width at the tapered arm end — visible but thinner than the full handle.
+    /// Half-width at the tapered arm end — follows thickness (zoom-driven).
     private var armEndHalf: CGFloat {
         handleThickness * 0.3
     }
@@ -68,11 +81,13 @@ struct CropHandlesView: View, @preconcurrency Animatable {
             // Handles + border + move indicator
             ZStack {
                 borderPath
-                handlePath
-                moveIndicatorPill
-                moveIndicatorLines
+                cornerHandlePath
+                edgeBarViews
             }
             .shadow(color: .black.opacity(0.6), radius: 1.5, x: 0, y: 0.5)
+
+            moveIndicatorPill
+            moveIndicatorLines
         }
         .allowsHitTesting(false)
     }
@@ -86,21 +101,14 @@ struct CropHandlesView: View, @preconcurrency Animatable {
         .stroke(Color.white.opacity(0.7), lineWidth: borderThickness)
     }
 
-    // MARK: - Corner + edge handles
+    // MARK: - Corner handles
 
-    /// Draws single-polygon L-bracket corners with constant-width section
-    /// tapering to a visible minimum at the tips, plus edge midpoint bars.
-    /// Edge bars are hidden when the crop rect is too small.
-    private var handlePath: some View {
+    private var cornerHandlePath: some View {
         let r = screenCropRect
         let thin = borderThickness / 2
         let thick = handleThickness / 2
 
-        // Edge bars hidden when crop too small: need room for both corners + bar + padding
-        let edgeMinSize = handleLength * 3 + handleLength
-
         return Path { path in
-            // Corners — single L-bracket polygon per corner
             cornerBracket(&path, at: CGPoint(x: r.minX, y: r.minY), xDir: 1, yDir: 1,
                           armLen: handleLength, thick: thick, thin: thin)
             cornerBracket(&path, at: CGPoint(x: r.maxX, y: r.minY), xDir: -1, yDir: 1,
@@ -109,20 +117,41 @@ struct CropHandlesView: View, @preconcurrency Animatable {
                           armLen: handleLength, thick: thick, thin: thin)
             cornerBracket(&path, at: CGPoint(x: r.maxX, y: r.maxY), xDir: -1, yDir: -1,
                           armLen: handleLength, thick: thick, thin: thin)
-
-            // Edge bars — bottom, left, right (no top — move indicator replaces it)
-            if r.width >= edgeMinSize {
-                edgeBar(&path, center: CGPoint(x: r.midX, y: r.maxY), horizontal: true,
-                        barLen: handleLength, thick: thick, thin: thin)
-            }
-            if r.height >= edgeMinSize {
-                edgeBar(&path, center: CGPoint(x: r.minX, y: r.midY), horizontal: false,
-                        barLen: handleLength, thick: thick, thin: thin)
-                edgeBar(&path, center: CGPoint(x: r.maxX, y: r.midY), horizontal: false,
-                        barLen: handleLength, thick: thick, thin: thin)
-            }
         }
         .fill(Color.white)
+    }
+
+    // MARK: - Edge bars (separate views for insert/remove transitions)
+
+    private var showHBars: Bool { screenCropRect.width >= fullHandleLength * 4 }
+    private var showVBars: Bool { screenCropRect.height >= fullHandleLength * 4 }
+
+    private var edgeBarViews: some View {
+        let r = screenCropRect
+        let thick = handleThickness / 2
+        let thin = borderThickness / 2
+        let fhl = fullHandleLength
+
+        // Bars are always drawn — visibility is purely opacity.
+        return ZStack {
+            Path { path in
+                edgeBar(&path, center: CGPoint(x: r.midX, y: r.maxY), horizontal: true,
+                        barLen: fhl, thick: thick, thin: thin)
+            }
+            .fill(Color.white)
+            .opacity(showHBars ? 1 : 0)
+            .animation(.easeOut(duration: 0.15), value: showHBars)
+
+            Path { path in
+                edgeBar(&path, center: CGPoint(x: r.minX, y: r.midY), horizontal: false,
+                        barLen: fhl, thick: thick, thin: thin)
+                edgeBar(&path, center: CGPoint(x: r.maxX, y: r.midY), horizontal: false,
+                        barLen: fhl, thick: thick, thin: thin)
+            }
+            .fill(Color.white)
+            .opacity(showVBars ? 1 : 0)
+            .animation(.easeOut(duration: 0.15), value: showVBars)
+        }
     }
 
     /// A single corner L-bracket as one continuous 10-vertex polygon.
@@ -312,18 +341,10 @@ struct CropHandlesView: View, @preconcurrency Animatable {
     }
 
     private var moveIndicatorPill: some View {
-        let cx = screenCropRect.midX
-        let cy = moveIndicatorCY
-        let w = pillWidth
-        let h = pillHeight
-
-        return Path { path in
-            path.addRoundedRect(
-                in: CGRect(x: cx - w / 2, y: cy - h / 2, width: w, height: h),
-                cornerSize: CGSize(width: h / 2, height: h / 2)
-            )
-        }
-        .fill(Color.white.opacity(0.2))
+        Capsule()
+            .glassEffect(.regular, in: .capsule)
+            .frame(width: pillWidth, height: pillHeight)
+            .position(x: screenCropRect.midX, y: moveIndicatorCY)
     }
 
     private var moveIndicatorLines: some View {
