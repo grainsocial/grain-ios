@@ -131,6 +131,8 @@ final class CropState {
             applyCropRatio(ratio)
         } else if !isRatioLocked {
             lockedRatio = nil
+            // Even free-form: validate current crop against image bounds
+            cropRect = nearestValidCrop(cropRect)
         }
     }
 
@@ -159,8 +161,9 @@ final class CropState {
     }
 
     private func applyCropRatio(_ ratio: CGFloat) {
-        let maxW = imageDisplayFrame.width
-        let maxH = imageDisplayFrame.height
+        let bounds = transformedImageBounds()
+        let maxW = bounds.width
+        let maxH = bounds.height
         guard maxW > 0, maxH > 0 else { return }
 
         var newW = maxW
@@ -170,9 +173,64 @@ final class CropState {
             newW = newH * ratio
         }
 
-        let x = imageDisplayFrame.origin.x + (maxW - newW) / 2
-        let y = imageDisplayFrame.origin.y + (maxH - newH) / 2
-        cropRect = CGRect(x: x, y: y, width: newW, height: newH)
+        let x = bounds.origin.x + (maxW - newW) / 2
+        let y = bounds.origin.y + (maxH - newH) / 2
+        cropRect = clampCropToImage(CGRect(x: x, y: y, width: newW, height: newH))
+    }
+
+    // MARK: - Crop validation
+
+    /// Whether the current crop rect is fully contained within the transformed image bounds.
+    func isCropValid() -> Bool {
+        let bounds = transformedImageBounds()
+        return bounds.contains(cropRect)
+    }
+
+    /// Returns the nearest valid crop rect that fits within the transformed image bounds,
+    /// optionally enforcing an aspect ratio. Preserves size when possible, shifts position
+    /// to fit; shrinks only if necessary.
+    func nearestValidCrop(_ rect: CGRect, ratio: CGFloat? = nil) -> CGRect {
+        let bounds = transformedImageBounds()
+        guard bounds.width > 0, bounds.height > 0 else { return rect }
+
+        var r = rect
+
+        // Apply ratio if requested
+        if let ratio {
+            let currentRatio = r.width / max(r.height, 1)
+            if abs(currentRatio - ratio) > 0.001 {
+                // Adjust height to match ratio, keeping width
+                let newH = r.width / ratio
+                if newH <= bounds.height {
+                    r.size.height = newH
+                } else {
+                    r.size.height = bounds.height
+                    r.size.width = bounds.height * ratio
+                }
+            }
+        }
+
+        // Shrink to fit within bounds if needed
+        if r.width > bounds.width {
+            r.size.width = bounds.width
+            if let ratio { r.size.height = r.width / ratio }
+        }
+        if r.height > bounds.height {
+            r.size.height = bounds.height
+            if let ratio { r.size.width = r.height * ratio }
+        }
+
+        // Enforce minimum size
+        r.size.width = max(r.width, minCropSize)
+        r.size.height = max(r.height, minCropSize)
+
+        // Shift position so rect is inside bounds
+        if r.minX < bounds.minX { r.origin.x = bounds.minX }
+        if r.minY < bounds.minY { r.origin.y = bounds.minY }
+        if r.maxX > bounds.maxX { r.origin.x = bounds.maxX - r.width }
+        if r.maxY > bounds.maxY { r.origin.y = bounds.maxY - r.height }
+
+        return r
     }
 
     // MARK: - Handle hit testing
@@ -228,6 +286,13 @@ final class CropState {
     private let minCropSize: CGFloat = 60
 
     func handleDrag(handle: CropHandle, translation: CGSize) {
+        // If user drags a handle while a preset is selected but lock is off,
+        // switch to free-form so they can reshape freely.
+        if !isRatioLocked, selectedPreset != .free {
+            selectedPreset = .free
+            lockedRatio = nil
+        }
+
         var r = dragStartCropRect
         let dx = translation.width
         let dy = translation.height
@@ -278,9 +343,10 @@ final class CropState {
 
         if let ratio = effectiveLockedRatio {
             r = applyAspectRatio(ratio, to: r, anchor: handle)
+            cropRect = clampCropToImage(r, maintainRatio: ratio)
+        } else {
+            cropRect = clampCropToImage(r)
         }
-
-        cropRect = clampCropToImage(r)
     }
 
     private func applyAspectRatio(_ ratio: CGFloat, to rect: CGRect, anchor: CropHandle) -> CGRect {
@@ -322,14 +388,31 @@ final class CropState {
 
     // MARK: - Clamping
 
-    private func clampCropToImage(_ rect: CGRect) -> CGRect {
+    private func clampCropToImage(_ rect: CGRect, maintainRatio: CGFloat? = nil) -> CGRect {
         let imageBounds = transformedImageBounds()
         var r = rect
 
-        if r.minX < imageBounds.minX { r.origin.x = imageBounds.minX }
-        if r.minY < imageBounds.minY { r.origin.y = imageBounds.minY }
-        if r.maxX > imageBounds.maxX { r.size.width = imageBounds.maxX - r.origin.x }
-        if r.maxY > imageBounds.maxY { r.size.height = imageBounds.maxY - r.origin.y }
+        if let ratio = maintainRatio {
+            // When ratio-locked, shrink to fit rather than breaking the ratio.
+            if r.width > imageBounds.width {
+                r.size.width = imageBounds.width
+                r.size.height = r.width / ratio
+            }
+            if r.height > imageBounds.height {
+                r.size.height = imageBounds.height
+                r.size.width = r.height * ratio
+            }
+            // Shift into bounds
+            if r.minX < imageBounds.minX { r.origin.x = imageBounds.minX }
+            if r.minY < imageBounds.minY { r.origin.y = imageBounds.minY }
+            if r.maxX > imageBounds.maxX { r.origin.x = imageBounds.maxX - r.width }
+            if r.maxY > imageBounds.maxY { r.origin.y = imageBounds.maxY - r.height }
+        } else {
+            if r.minX < imageBounds.minX { r.origin.x = imageBounds.minX }
+            if r.minY < imageBounds.minY { r.origin.y = imageBounds.minY }
+            if r.maxX > imageBounds.maxX { r.size.width = imageBounds.maxX - r.origin.x }
+            if r.maxY > imageBounds.maxY { r.size.height = imageBounds.maxY - r.origin.y }
+        }
 
         return r
     }

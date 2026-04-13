@@ -1,4 +1,7 @@
+import os
 import SwiftUI
+
+private let cropViewSignposter = OSSignposter(subsystem: "social.grain.grain", category: "CropView")
 
 /// Full-screen crop tool. Presented as `.fullScreenCover` from both story
 /// and gallery create flows.
@@ -14,6 +17,7 @@ struct CropView: View {
     @State private var displayImage: UIImage
     @State private var hasInitialized = false
     @State private var isRotating = false
+    @State private var postRotationNormalizedCrop: CGRect?
 
     init(
         image: UIImage,
@@ -33,34 +37,32 @@ struct CropView: View {
     }
 
     var body: some View {
-        GeometryReader { geo in
-            ZStack {
-                Color.black.ignoresSafeArea()
+        ZStack {
+            Color(.systemBackground).ignoresSafeArea()
 
-                // Image fills available space — controls float on top
+            // Image area — sized within safe area, but dimming overflow extends beyond
+            GeometryReader { geo in
                 imageArea(in: geo)
+            }
 
-                // Floating controls
-                VStack(spacing: 0) {
-                    // Top: toolbar + tool buttons
-                    VStack(spacing: 8) {
-                        toolbar
-                            .padding(.horizontal, 16)
+            // Controls — respect safe area for Dynamic Island / home indicator
+            VStack(spacing: 0) {
+                VStack(spacing: 8) {
+                    toolbar
+                        .padding(.horizontal, 16)
 
-                        toolButtons
-                    }
-                    .padding(.top, 8)
-
-                    Spacer()
-
-                    // Bottom: orientation toggle + ratio strip
-                    VStack(spacing: 8) {
-                        orientationToggle
-
-                        AspectRatioBar(state: state)
-                    }
-                    .padding(.bottom, 16)
+                    toolButtons
                 }
+                .padding(.top, 8)
+
+                Spacer()
+
+                VStack(spacing: 8) {
+                    orientationToggle
+
+                    AspectRatioBar(state: state)
+                }
+                .padding(.bottom, 16)
             }
         }
         .statusBarHidden()
@@ -74,7 +76,7 @@ struct CropView: View {
             Button("Cancel") {
                 onCancel()
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(.primary)
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
             .glassEffect(.regular.interactive(), in: .capsule)
@@ -86,7 +88,7 @@ struct CropView: View {
                     state.resetAll()
                 }
             }
-            .foregroundStyle(.white.opacity(0.5))
+            .foregroundStyle(.secondary)
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
             .glassEffect(.regular.interactive(), in: .capsule)
@@ -97,7 +99,7 @@ struct CropView: View {
                 confirmCrop()
             }
             .fontWeight(.semibold)
-            .foregroundStyle(.white)
+            .foregroundStyle(.primary)
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
             .glassEffect(.regular.interactive(), in: .capsule)
@@ -113,7 +115,7 @@ struct CropView: View {
             } label: {
                 Image(systemName: "rotate.left")
                     .font(.system(size: 18))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(.primary)
                     .frame(width: 40, height: 40)
                     .contentShape(Rectangle())
             }
@@ -124,7 +126,7 @@ struct CropView: View {
             } label: {
                 Image(systemName: "grid")
                     .font(.system(size: 18))
-                    .foregroundStyle(state.showGrid ? .white : .white.opacity(0.35))
+                    .foregroundStyle(state.showGrid ? .primary : .tertiary)
                     .frame(width: 40, height: 40)
                     .contentShape(Rectangle())
             }
@@ -135,7 +137,7 @@ struct CropView: View {
             } label: {
                 Image(systemName: "rotate.right")
                     .font(.system(size: 18))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(.primary)
                     .frame(width: 40, height: 40)
                     .contentShape(Rectangle())
             }
@@ -162,8 +164,8 @@ struct CropView: View {
                     .frame(width: 18, height: 12)
                     .foregroundStyle(
                         enabled
-                            ? (!state.isPortrait ? .white : .white.opacity(0.35))
-                            : .white.opacity(0.15)
+                            ? (!state.isPortrait ? .primary : .tertiary)
+                            : .quaternary
                     )
                     .frame(width: 40, height: 36)
                     .contentShape(Rectangle())
@@ -185,8 +187,8 @@ struct CropView: View {
                     .frame(width: 12, height: 18)
                     .foregroundStyle(
                         enabled
-                            ? (state.isPortrait ? .white : .white.opacity(0.35))
-                            : .white.opacity(0.15)
+                            ? (state.isPortrait ? .primary : .tertiary)
+                            : .quaternary
                     )
                     .frame(width: 40, height: 36)
                     .contentShape(Rectangle())
@@ -205,11 +207,8 @@ struct CropView: View {
 
     @ViewBuilder
     private func imageArea(in geo: GeometryProxy) -> some View {
-        let safeArea = geo.safeAreaInsets
         let availableWidth = geo.size.width - 32
-        let availableHeight = geo.size.height
-            - Self.controlsHeight
-            - safeArea.top - safeArea.bottom
+        let availableHeight = geo.size.height - Self.controlsHeight
 
         let baseW = displayImage.size.width
         let baseH = displayImage.size.height
@@ -330,33 +329,93 @@ struct CropView: View {
     }
 
     private func rotate(degrees: Int) {
-        isRotating = true
-        withAnimation(.smooth(duration: 0.4)) {
-            state.rotationAngle += Double(degrees)
-        } completion: {
-            isRotating = false
-        }
-    }
-
-    private func confirmCrop() {
-        let normalizedRect = ImageCropper.viewRectToNormalized(
+        // Compute normalized crop rect in pre-rotation image space
+        let preNorm = ImageCropper.viewRectToNormalized(
             state.cropRect,
             imageDisplayFrame: state.imageDisplayFrame,
             imageOffset: state.imageOffset,
             imageScale: state.imageScale
         )
 
-        let croppedImage = ImageCropper.applyCrop(
-            to: image,
-            normalizedRect: normalizedRect,
-            rotation: state.rotationDegrees
-        )
+        // Transform normalized rect through the rotation.
+        // 90° CW:  (x,y) → (y, 1-x-w),  dims swap
+        // 270° CW (CCW): (x,y) → (1-y-h, x), dims swap
+        // 180°:   (x,y) → (1-x-w, 1-y-h), dims stay
+        let normDeg = ((degrees % 360) + 360) % 360
+        let postNorm: CGRect = switch normDeg {
+        case 90:
+            CGRect(x: preNorm.minY, y: 1 - preNorm.maxX,
+                   width: preNorm.height, height: preNorm.width)
+        case 270:
+            CGRect(x: 1 - preNorm.maxY, y: preNorm.minX,
+                   width: preNorm.height, height: preNorm.width)
+        case 180:
+            CGRect(x: 1 - preNorm.maxX, y: 1 - preNorm.maxY,
+                   width: preNorm.width, height: preNorm.height)
+        default:
+            preNorm
+        }
+        postRotationNormalizedCrop = postNorm
 
-        onDone(CropResult(
-            croppedImage: croppedImage,
-            rotation: state.rotationDegrees,
-            cropRect: normalizedRect
-        ))
+        isRotating = true
+        withAnimation(.smooth(duration: 0.4)) {
+            state.rotationAngle += Double(degrees)
+            state.imageOffset = .zero
+            state.imageScale = 1.0
+        } completion: {
+            isRotating = false
+            // Convert post-rotation normalized crop back to view space
+            if let norm = postRotationNormalizedCrop {
+                let frame = state.imageDisplayFrame
+                let viewRect = CGRect(
+                    x: frame.origin.x + norm.origin.x * frame.width,
+                    y: frame.origin.y + norm.origin.y * frame.height,
+                    width: norm.width * frame.width,
+                    height: norm.height * frame.height
+                )
+                withAnimation(.smooth(duration: 0.25)) {
+                    state.cropRect = state.nearestValidCrop(viewRect, ratio: state.effectiveLockedRatio)
+                }
+            }
+            postRotationNormalizedCrop = nil
+        }
+    }
+
+    @State private var isProcessing = false
+
+    private func confirmCrop() {
+        guard !isProcessing else { return }
+        isProcessing = true
+
+        // Validate crop rect before applying — fix any out-of-bounds issues
+        let validCrop = state.nearestValidCrop(state.cropRect, ratio: state.effectiveLockedRatio)
+        let normalizedRect = ImageCropper.viewRectToNormalized(
+            validCrop,
+            imageDisplayFrame: state.imageDisplayFrame,
+            imageOffset: state.imageOffset,
+            imageScale: state.imageScale
+        )
+        let rotation = state.rotationDegrees
+        let sourceImage = image
+
+        Task.detached {
+            let spid = cropViewSignposter.makeSignpostID()
+            let spState = cropViewSignposter.beginInterval("confirmCrop", id: spid)
+            let croppedImage = ImageCropper.applyCrop(
+                to: sourceImage,
+                normalizedRect: normalizedRect,
+                rotation: rotation
+            )
+            cropViewSignposter.endInterval("confirmCrop", spState)
+
+            await MainActor.run {
+                onDone(CropResult(
+                    croppedImage: croppedImage,
+                    rotation: rotation,
+                    cropRect: normalizedRect
+                ))
+            }
+        }
     }
 }
 
