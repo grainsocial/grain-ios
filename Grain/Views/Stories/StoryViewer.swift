@@ -668,13 +668,13 @@ struct StoryViewer: View {
     }
 
     private func startTimerIfSafe() {
-        guard imageLoaded, !isCommentSheetOpen else { return }
+        guard imageLoaded, !isCommentSheetOpen, !showDeleteConfirm else { return }
         let action = storyLabelResult.action
         if action == .none || action == .badge { timer.start() }
     }
 
     private func resumeTimerIfSafe() {
-        guard imageLoaded, !isCommentSheetOpen else { return }
+        guard imageLoaded, !isCommentSheetOpen, !showDeleteConfirm else { return }
         let action = storyLabelResult.action
         if action == .none || action == .badge { timer.resume() }
     }
