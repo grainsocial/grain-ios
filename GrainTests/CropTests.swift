@@ -35,12 +35,9 @@ final class CropTests: XCTestCase {
     func testViewToNormalized_identity() {
         let frame = CGRect(x: 50, y: 100, width: 300, height: 400)
         let result = ImageCropper.viewRectToNormalized(
-<<<<<<< Updated upstream
             frame, imageDisplayFrame: frame, imageOffset: .zero, imageScale: 1
         )
-=======
-            frame, imageDisplayFrame: frame, imageOffset: .zero, imageScale: 1)
->>>>>>> Stashed changes
+
         assertRectEqual(result, CGRect(x: 0, y: 0, width: 1, height: 1))
     }
 
@@ -49,12 +46,9 @@ final class CropTests: XCTestCase {
         let frame = CGRect(x: 50, y: 100, width: 300, height: 400)
         let crop = CGRect(x: 50, y: 100, width: 150, height: 400)
         let result = ImageCropper.viewRectToNormalized(
-<<<<<<< Updated upstream
             crop, imageDisplayFrame: frame, imageOffset: .zero, imageScale: 1
         )
-=======
-            crop, imageDisplayFrame: frame, imageOffset: .zero, imageScale: 1)
->>>>>>> Stashed changes
+
         assertRectEqual(result, CGRect(x: 0, y: 0, width: 0.5, height: 1))
     }
 
@@ -65,12 +59,9 @@ final class CropTests: XCTestCase {
     func testViewToNormalized_zoom2x() {
         let frame = CGRect(x: 0, y: 0, width: 200, height: 200)
         let result = ImageCropper.viewRectToNormalized(
-<<<<<<< Updated upstream
             frame, imageDisplayFrame: frame, imageOffset: .zero, imageScale: 2
         )
-=======
-            frame, imageDisplayFrame: frame, imageOffset: .zero, imageScale: 2)
->>>>>>> Stashed changes
+
         assertRectEqual(result, CGRect(x: 0.25, y: 0.25, width: 0.5, height: 0.5))
     }
 
@@ -80,12 +71,9 @@ final class CropTests: XCTestCase {
         let frame = CGRect(x: 0, y: 0, width: 200, height: 200)
         let result = ImageCropper.viewRectToNormalized(
             frame, imageDisplayFrame: frame,
-<<<<<<< Updated upstream
             imageOffset: CGSize(width: 50, height: 0), imageScale: 1
         )
-=======
-            imageOffset: CGSize(width: 50, height: 0), imageScale: 1)
->>>>>>> Stashed changes
+
         XCTAssertEqual(result.origin.x, -0.25, accuracy: eps)
         XCTAssertEqual(result.width, 1, accuracy: eps)
     }
@@ -97,12 +85,9 @@ final class CropTests: XCTestCase {
         let frame = CGRect(x: 0, y: 0, width: 200, height: 200)
         let result = ImageCropper.viewRectToNormalized(
             frame, imageDisplayFrame: frame,
-<<<<<<< Updated upstream
             imageOffset: CGSize(width: 40, height: 0), imageScale: 2
         )
-=======
-            imageOffset: CGSize(width: 40, height: 0), imageScale: 2)
->>>>>>> Stashed changes
+
         XCTAssertEqual(result.origin.x, 0.15, accuracy: eps)
         XCTAssertEqual(result.origin.y, 0.25, accuracy: eps)
         XCTAssertEqual(result.width, 0.5, accuracy: eps)
@@ -114,12 +99,9 @@ final class CropTests: XCTestCase {
     func testNormalizedToPixels_full() {
         let result = ImageCropper.normalizedRectToPixels(
             CGRect(x: 0, y: 0, width: 1, height: 1),
-<<<<<<< Updated upstream
             imageSize: CGSize(width: 3000, height: 4000)
         )
-=======
-            imageSize: CGSize(width: 3000, height: 4000))
->>>>>>> Stashed changes
+
         assertRectEqual(result, CGRect(x: 0, y: 0, width: 3000, height: 4000))
     }
 
@@ -127,12 +109,9 @@ final class CropTests: XCTestCase {
     func testNormalizedToPixels_quarter() {
         let result = ImageCropper.normalizedRectToPixels(
             CGRect(x: 0, y: 0, width: 0.5, height: 0.5),
-<<<<<<< Updated upstream
             imageSize: CGSize(width: 1000, height: 800)
         )
-=======
-            imageSize: CGSize(width: 1000, height: 800))
->>>>>>> Stashed changes
+
         assertRectEqual(result, CGRect(x: 0, y: 0, width: 500, height: 400))
     }
 
@@ -144,12 +123,9 @@ final class CropTests: XCTestCase {
         let imageSize = CGSize(width: 3500, height: 5000)
 
         let norm = ImageCropper.viewRectToNormalized(
-<<<<<<< Updated upstream
             frame, imageDisplayFrame: frame, imageOffset: .zero, imageScale: 1
         )
-=======
-            frame, imageDisplayFrame: frame, imageOffset: .zero, imageScale: 1)
->>>>>>> Stashed changes
+
         let px = ImageCropper.normalizedRectToPixels(norm, imageSize: imageSize)
 
         XCTAssertEqual(px.origin.x, 0, accuracy: eps)
@@ -190,12 +166,9 @@ final class CropTests: XCTestCase {
     func testApplyCrop_identity() {
         let img = makeImage(width: 100, height: 200)
         let result = ImageCropper.applyCrop(
-<<<<<<< Updated upstream
             to: img, normalizedRect: CGRect(x: 0, y: 0, width: 1, height: 1), rotation: 0
         )
-=======
-            to: img, normalizedRect: CGRect(x: 0, y: 0, width: 1, height: 1), rotation: 0)
->>>>>>> Stashed changes
+
         XCTAssertEqual(Int(result.size.width), 100)
         XCTAssertEqual(Int(result.size.height), 200)
     }
@@ -204,12 +177,9 @@ final class CropTests: XCTestCase {
     func testApplyCrop_topLeftQuarter() {
         let img = makeImage(width: 100, height: 200)
         let result = ImageCropper.applyCrop(
-<<<<<<< Updated upstream
             to: img, normalizedRect: CGRect(x: 0, y: 0, width: 0.5, height: 0.5), rotation: 0
         )
-=======
-            to: img, normalizedRect: CGRect(x: 0, y: 0, width: 0.5, height: 0.5), rotation: 0)
->>>>>>> Stashed changes
+
         XCTAssertEqual(Int(result.size.width), 50)
         XCTAssertEqual(Int(result.size.height), 100)
     }
@@ -218,12 +188,9 @@ final class CropTests: XCTestCase {
     func testApplyCrop_rotation90_fullCrop() {
         let img = makeImage(width: 100, height: 200)
         let result = ImageCropper.applyCrop(
-<<<<<<< Updated upstream
             to: img, normalizedRect: CGRect(x: 0, y: 0, width: 1, height: 1), rotation: 90
         )
-=======
-            to: img, normalizedRect: CGRect(x: 0, y: 0, width: 1, height: 1), rotation: 90)
->>>>>>> Stashed changes
+
         XCTAssertEqual(Int(result.size.width), 200)
         XCTAssertEqual(Int(result.size.height), 100)
     }
@@ -233,12 +200,9 @@ final class CropTests: XCTestCase {
     func testApplyCrop_rotation90_thenHalfCrop() {
         let img = makeImage(width: 100, height: 200)
         let result = ImageCropper.applyCrop(
-<<<<<<< Updated upstream
             to: img, normalizedRect: CGRect(x: 0, y: 0, width: 0.5, height: 1), rotation: 90
         )
-=======
-            to: img, normalizedRect: CGRect(x: 0, y: 0, width: 0.5, height: 1), rotation: 90)
->>>>>>> Stashed changes
+
         XCTAssertEqual(Int(result.size.width), 100)
         XCTAssertEqual(Int(result.size.height), 100)
     }
@@ -247,12 +211,9 @@ final class CropTests: XCTestCase {
     func testApplyCrop_rotation270_fullCrop() {
         let img = makeImage(width: 100, height: 200)
         let result = ImageCropper.applyCrop(
-<<<<<<< Updated upstream
             to: img, normalizedRect: CGRect(x: 0, y: 0, width: 1, height: 1), rotation: 270
         )
-=======
-            to: img, normalizedRect: CGRect(x: 0, y: 0, width: 1, height: 1), rotation: 270)
->>>>>>> Stashed changes
+
         XCTAssertEqual(Int(result.size.width), 200)
         XCTAssertEqual(Int(result.size.height), 100)
     }
@@ -261,12 +222,9 @@ final class CropTests: XCTestCase {
     func testApplyCrop_rotation180_fullCrop() {
         let img = makeImage(width: 100, height: 200)
         let result = ImageCropper.applyCrop(
-<<<<<<< Updated upstream
             to: img, normalizedRect: CGRect(x: 0, y: 0, width: 1, height: 1), rotation: 180
         )
-=======
-            to: img, normalizedRect: CGRect(x: 0, y: 0, width: 1, height: 1), rotation: 180)
->>>>>>> Stashed changes
+
         XCTAssertEqual(Int(result.size.width), 100)
         XCTAssertEqual(Int(result.size.height), 200)
     }
@@ -288,7 +246,6 @@ final class CropTests: XCTestCase {
     }
 
     @MainActor
-<<<<<<< Updated upstream
     func testEffectiveLockedRatio_4x3Landscape() throws {
         let state = CropState()
         state.selectedPreset = .ratio4x3
@@ -298,22 +255,10 @@ final class CropTests: XCTestCase {
 
     @MainActor
     func testEffectiveLockedRatio_4x3Portrait() throws {
-=======
-    func testEffectiveLockedRatio_4x3Landscape() {
-        let state = CropState()
-        state.selectedPreset = .ratio4x3
-        state.isPortrait = false
-        XCTAssertEqual(state.effectiveLockedRatio!, 4.0 / 3.0, accuracy: eps)
-    }
-
-    @MainActor
-    func testEffectiveLockedRatio_4x3Portrait() {
->>>>>>> Stashed changes
         let state = CropState()
         state.selectedPreset = .ratio4x3
         state.isPortrait = true
         // Portrait flips: 1 / (4/3) = 3/4
-<<<<<<< Updated upstream
         XCTAssertEqual(try XCTUnwrap(state.effectiveLockedRatio), 3.0 / 4.0, accuracy: eps)
     }
 
@@ -323,17 +268,6 @@ final class CropTests: XCTestCase {
         state.selectedPreset = .original
         state.originalImageRatio = 16.0 / 9.0
         XCTAssertEqual(try XCTUnwrap(state.effectiveLockedRatio), 16.0 / 9.0, accuracy: eps)
-=======
-        XCTAssertEqual(state.effectiveLockedRatio!, 3.0 / 4.0, accuracy: eps)
-    }
-
-    @MainActor
-    func testEffectiveLockedRatio_original() {
-        let state = CropState()
-        state.selectedPreset = .original
-        state.originalImageRatio = 16.0 / 9.0
-        XCTAssertEqual(state.effectiveLockedRatio!, 16.0 / 9.0, accuracy: eps)
->>>>>>> Stashed changes
     }
 
     /// Square ignores portrait toggle (1/1 = 1).
@@ -409,8 +343,9 @@ final class CropTests: XCTestCase {
         let state = CropState()
         state.cropRect = CGRect(x: 100, y: 100, width: 200, height: 300)
 
-        // Midpoint of each edge, far from corners
-        XCTAssertEqual(state.hitTest(point: CGPoint(x: 200, y: 100)), .top)
+        // Top edge now handled by move indicator (screen-space, in coordinator),
+        // so hitTest returns .moveCrop for the top edge midpoint (it's inside crop).
+        XCTAssertEqual(state.hitTest(point: CGPoint(x: 200, y: 100)), .moveCrop)
         XCTAssertEqual(state.hitTest(point: CGPoint(x: 200, y: 400)), .bottom)
         XCTAssertEqual(state.hitTest(point: CGPoint(x: 100, y: 250)), .left)
         XCTAssertEqual(state.hitTest(point: CGPoint(x: 300, y: 250)), .right)
@@ -595,11 +530,7 @@ final class CropTests: XCTestCase {
     }
 
     @MainActor
-<<<<<<< Updated upstream
     func testSelectPreset_originalUsesImageRatio() throws {
-=======
-    func testSelectPreset_originalUsesImageRatio() {
->>>>>>> Stashed changes
         let state = CropState()
         state.imageDisplayFrame = CGRect(x: 0, y: 0, width: 400, height: 600)
         state.cropRect = CGRect(x: 0, y: 0, width: 400, height: 600)
@@ -607,37 +538,22 @@ final class CropTests: XCTestCase {
 
         state.selectPreset(.original)
 
-<<<<<<< Updated upstream
         XCTAssertEqual(try XCTUnwrap(state.lockedRatio), 3.0 / 2.0, accuracy: eps)
-=======
-        XCTAssertEqual(state.lockedRatio!, 3.0 / 2.0, accuracy: eps)
->>>>>>> Stashed changes
     }
 
     // MARK: - CropState: toggleOrientation
 
     @MainActor
-<<<<<<< Updated upstream
     func testToggleOrientation_flipsRatio() throws {
-=======
-    func testToggleOrientation_flipsRatio() {
->>>>>>> Stashed changes
         let state = CropState()
         state.imageDisplayFrame = CGRect(x: 0, y: 0, width: 400, height: 600)
         state.cropRect = CGRect(x: 0, y: 0, width: 400, height: 600)
 
         state.selectPreset(.ratio4x3)
-<<<<<<< Updated upstream
         let landscapeRatio = try XCTUnwrap(state.lockedRatio)
 
         state.toggleOrientation()
         let portraitRatio = try XCTUnwrap(state.lockedRatio)
-=======
-        let landscapeRatio = state.lockedRatio!
-
-        state.toggleOrientation()
-        let portraitRatio = state.lockedRatio!
->>>>>>> Stashed changes
 
         // 4:3 landscape → 3:4 portrait
         XCTAssertEqual(landscapeRatio * portraitRatio, 1.0, accuracy: eps)
@@ -646,11 +562,7 @@ final class CropTests: XCTestCase {
     // MARK: - CropState: toggleRatioLock
 
     @MainActor
-<<<<<<< Updated upstream
     func testToggleRatioLock_capturesCurrentRatio() throws {
-=======
-    func testToggleRatioLock_capturesCurrentRatio() {
->>>>>>> Stashed changes
         let state = CropState()
         state.imageDisplayFrame = CGRect(x: 0, y: 0, width: 400, height: 600)
         state.cropRect = CGRect(x: 0, y: 0, width: 200, height: 100)
@@ -661,11 +573,7 @@ final class CropTests: XCTestCase {
 
         XCTAssertTrue(state.isRatioLocked)
         // Locked ratio = width/height of current crop = 200/100 = 2.0
-<<<<<<< Updated upstream
         XCTAssertEqual(try XCTUnwrap(state.lockedRatio), 2.0, accuracy: eps)
-=======
-        XCTAssertEqual(state.lockedRatio!, 2.0, accuracy: eps)
->>>>>>> Stashed changes
     }
 
     @MainActor
@@ -674,13 +582,8 @@ final class CropTests: XCTestCase {
         state.selectedPreset = .free
         state.cropRect = CGRect(x: 0, y: 0, width: 200, height: 100)
 
-<<<<<<< Updated upstream
         state.toggleRatioLock() // lock
         state.toggleRatioLock() // unlock
-=======
-        state.toggleRatioLock()  // lock
-        state.toggleRatioLock()  // unlock
->>>>>>> Stashed changes
 
         XCTAssertFalse(state.isRatioLocked)
         XCTAssertNil(state.lockedRatio)
@@ -731,7 +634,6 @@ final class CropTests: XCTestCase {
 
     // MARK: - AspectRatioPreset properties
 
-<<<<<<< Updated upstream
     func testAspectRatioPreset_baseRatios() throws {
         XCTAssertNil(AspectRatioPreset.free.baseRatio)
         XCTAssertNil(AspectRatioPreset.original.baseRatio)
@@ -739,15 +641,6 @@ final class CropTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(AspectRatioPreset.ratio4x3.baseRatio), 4.0 / 3.0, accuracy: eps)
         XCTAssertEqual(try XCTUnwrap(AspectRatioPreset.ratio4x5.baseRatio), 4.0 / 5.0, accuracy: eps)
         XCTAssertEqual(try XCTUnwrap(AspectRatioPreset.ratio16x9.baseRatio), 16.0 / 9.0, accuracy: eps)
-=======
-    func testAspectRatioPreset_baseRatios() {
-        XCTAssertNil(AspectRatioPreset.free.baseRatio)
-        XCTAssertNil(AspectRatioPreset.original.baseRatio)
-        XCTAssertEqual(AspectRatioPreset.square.baseRatio, 1)
-        XCTAssertEqual(AspectRatioPreset.ratio4x3.baseRatio!, 4.0 / 3.0, accuracy: eps)
-        XCTAssertEqual(AspectRatioPreset.ratio4x5.baseRatio!, 4.0 / 5.0, accuracy: eps)
-        XCTAssertEqual(AspectRatioPreset.ratio16x9.baseRatio!, 16.0 / 9.0, accuracy: eps)
->>>>>>> Stashed changes
     }
 
     func testAspectRatioPreset_allPresetsCount() {

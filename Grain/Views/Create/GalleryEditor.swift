@@ -424,6 +424,7 @@ struct GalleryEditor: View {
                     Label("Crop Photo", systemImage: "crop.rotate")
                         .frame(maxWidth: .infinity)
                 }
+                .listRowInsets(EdgeInsets(top: -6, leading: 20, bottom: 8, trailing: 20))
                 .listRowSeparator(.hidden)
             }
         } header: {
