@@ -339,6 +339,7 @@ struct GalleryEditor: View {
     @Binding var isAnimatingMode: Bool
     @Binding var mode: EditorMode
     let sendExif: Bool
+    var onCropTapped: ((UUID) -> Void)?
     var onDeleteItem: ((PhotoItem) -> Void)?
     @State private var gridContainerWidth: CGFloat = 0
     @State private var stripState = StripScrollState()
@@ -415,92 +416,20 @@ struct GalleryEditor: View {
         // MARK: Photos section
 
         Section {
-            AdaptivePhotoLayout(
-                mode: mode,
-                containerWidth: gridContainerWidth,
-                stripScrollOffset: stripState.currentOffset,
-                dragPlacement: dragPlacement
-            ) {
-                ForEach($items) { $item in
-                    let index = items.firstIndex(where: { $0.id == item.id }) ?? 0
-                    let exifState: ExifState = {
-                        guard item.exifSummary != nil else { return .absent }
-                        return sendExif ? .active : .inactive
-                    }()
+            VStack(spacing: 0) {
+                photoLayout
 
-                    cellView(item: $item, index: index, exifState: exifState)
-                        // Live drag position: offset tracks the finger without animation.
-                        // dragOffset is kept out of the Layout so the sibling spring
-                        // animation is never contaminated by the immediate offset update.
-                        .offset(
-                            x: reorderState.draggedID == item.id ? reorderState.dragOffset.width : 0,
-                            y: reorderState.draggedID == item.id ? reorderState.dragOffset.height : 0
-                        )
-                        .zIndex(reorderState.draggedID == item.id ? 1000 : 0)
-                        .gesture(
-                            ReorderRecognizer(isEnabled: mode == .reorder) { phase, translation in
-                                handleReorder(phase: phase, translation: translation, itemID: item.id, index: index)
-                            }
-                        )
-                        .transition(mode == .preview ? .walletRemove : .opacity)
-                        .layoutValue(key: PhotoIndexKey.self, value: index)
+                if let onCropTapped, let id = selectedPhotoID {
+                    Button {
+                        onCropTapped(id)
+                    } label: {
+                        Label("Crop", systemImage: "crop")
+                    }
+                    .padding(12)
                 }
             }
-            // No explicit .clipped() — the Form Section row clips its content
-            // naturally. Adding .clipped() here over-clips cells at strip edges
-            // (the X button and cell frame extend past the layout bounds when
-            // partially scrolled off-screen, cutting into the visible portion).
-            .contentShape(Rectangle())
-            .animation(.smooth, value: mode)
-            .gesture(
-                StripPanRecognizer(
-                    isEnabled: mode == .preview,
-                    onChanged: { stripState.dragTranslation = $0 },
-                    onEnded: { t, p in
-                        stripState.handleDragEnded(
-                            translation: t,
-                            predictedEnd: p,
-                            containerWidth: gridContainerWidth,
-                            itemCount: items.count
-                        )
-                    }
-                )
-            )
             .listRowInsets(EdgeInsets())
             .listRowSeparator(.hidden)
-            .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { newHeight in
-                // Signpost the actual rendered row height so Instruments shows
-                // whether the section box is sized correctly per mode.
-                morphSignposter.emitEvent("LayoutRowHeight", "mode=\(mode.label),h=\(Int(newHeight))")
-            }
-            .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { newWidth in
-                guard newWidth > 0 else { return }
-                var t = Transaction()
-                t.animation = nil
-                withTransaction(t) { gridContainerWidth = newWidth }
-            }
-            .onChange(of: gridContainerWidth) { _, newWidth in
-                guard newWidth > 0, !isAnimatingMode else { return }
-                if let id = selectedPhotoID,
-                   let idx = items.firstIndex(where: { $0.id == id })
-                {
-                    stripState.scrollToIndex(idx, itemCount: items.count, containerWidth: newWidth, animated: false)
-                }
-            }
-            .onChange(of: selectedPhotoID) { _, newID in
-                guard mode == .preview, !isAnimatingMode,
-                      let newID, let idx = items.firstIndex(where: { $0.id == newID })
-                else { return }
-                stripState.scrollToIndex(idx, itemCount: items.count, containerWidth: gridContainerWidth)
-            }
-            .onChange(of: mode) { _, newMode in
-                if newMode == .preview, gridContainerWidth > 0,
-                   let id = selectedPhotoID,
-                   let idx = items.firstIndex(where: { $0.id == id })
-                {
-                    stripState.scrollToIndex(idx, itemCount: items.count, containerWidth: gridContainerWidth, animated: false)
-                }
-            }
         } header: {
             Picker("Mode", selection: modeBinding) {
                 ForEach(EditorMode.allCases, id: \.self) { m in
@@ -509,6 +438,90 @@ struct GalleryEditor: View {
             }
             .pickerStyle(.segmented)
             .disabled(isAnimatingMode)
+        }
+    }
+
+    // MARK: - Photo layout
+
+    private var photoLayout: some View {
+        AdaptivePhotoLayout(
+            mode: mode,
+            containerWidth: gridContainerWidth,
+            stripScrollOffset: stripState.currentOffset,
+            dragPlacement: dragPlacement
+        ) {
+            ForEach($items) { $item in
+                let index = items.firstIndex(where: { $0.id == item.id }) ?? 0
+                let exifState: ExifState = {
+                    guard item.exifSummary != nil else { return .absent }
+                    return sendExif ? .active : .inactive
+                }()
+
+                cellView(item: $item, index: index, exifState: exifState)
+                    .offset(
+                        x: reorderState.draggedID == item.id ? reorderState.dragOffset.width : 0,
+                        y: reorderState.draggedID == item.id ? reorderState.dragOffset.height : 0
+                    )
+                    .zIndex(reorderState.draggedID == item.id ? 1000 : 0)
+                    .gesture(
+                        ReorderRecognizer(isEnabled: mode == .reorder) { phase, translation in
+                            handleReorder(phase: phase, translation: translation, itemID: item.id, index: index)
+                        }
+                    )
+                    .transition(mode == .preview ? .walletRemove : .opacity)
+                    .layoutValue(key: PhotoIndexKey.self, value: index)
+            }
+        }
+        // No explicit .clipped() — the Form Section row clips its content
+        // naturally. Adding .clipped() here over-clips cells at strip edges
+        // (the X button and cell frame extend past the layout bounds when
+        // partially scrolled off-screen, cutting into the visible portion).
+        .contentShape(Rectangle())
+        .animation(.smooth, value: mode)
+        .gesture(
+            StripPanRecognizer(
+                isEnabled: mode == .preview,
+                onChanged: { stripState.dragTranslation = $0 },
+                onEnded: { t, p in
+                    stripState.handleDragEnded(
+                        translation: t,
+                        predictedEnd: p,
+                        containerWidth: gridContainerWidth,
+                        itemCount: items.count
+                    )
+                }
+            )
+        )
+        .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { newHeight in
+            morphSignposter.emitEvent("LayoutRowHeight", "mode=\(mode.label),h=\(Int(newHeight))")
+        }
+        .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { newWidth in
+            guard newWidth > 0 else { return }
+            var t = Transaction()
+            t.animation = nil
+            withTransaction(t) { gridContainerWidth = newWidth }
+        }
+        .onChange(of: gridContainerWidth) { _, newWidth in
+            guard newWidth > 0, !isAnimatingMode else { return }
+            if let id = selectedPhotoID,
+               let idx = items.firstIndex(where: { $0.id == id })
+            {
+                stripState.scrollToIndex(idx, itemCount: items.count, containerWidth: newWidth, animated: false)
+            }
+        }
+        .onChange(of: selectedPhotoID) { _, newID in
+            guard mode == .preview, !isAnimatingMode,
+                  let newID, let idx = items.firstIndex(where: { $0.id == newID })
+            else { return }
+            stripState.scrollToIndex(idx, itemCount: items.count, containerWidth: gridContainerWidth)
+        }
+        .onChange(of: mode) { _, newMode in
+            if newMode == .preview, gridContainerWidth > 0,
+               let id = selectedPhotoID,
+               let idx = items.firstIndex(where: { $0.id == id })
+            {
+                stripState.scrollToIndex(idx, itemCount: items.count, containerWidth: gridContainerWidth, animated: false)
+            }
         }
     }
 
