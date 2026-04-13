@@ -90,6 +90,7 @@ private struct CommentSheetHostView: View {
             .environment(auth)
             .environment(storyStatusCache)
             .environment(viewedStories)
+            .presentationDetents([.medium])
             // Disables iOS's own dim + the default "tap dim to expand detent"
             // behavior. We draw our own dim above (tappable to dismiss), and
             // this also lets background taps reach it.

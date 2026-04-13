@@ -216,6 +216,7 @@ struct StoryViewer: View {
                 onDragCancel: { startTimerIfSafe() },
                 onSwipeLeft: { goToNextAuthor() },
                 onSwipeRight: { goToPreviousAuthor() },
+                onSwipeUp: { openCommentSheet(focusInput: false) },
                 onHorizontalDragStart: { forward in beginSwipe(forward: forward) },
                 onSwipeDragging: { tx in updateSwipeDrag(tx) },
                 onHorizontalDragCancel: { cancelSwipe() },
@@ -755,6 +756,8 @@ struct StoryViewer: View {
             }
             i -= 1
         }
+        // No previous author found — resume the timer
+        startTimerIfSafe()
     }
 
     private func beginSwipe(forward: Bool) {
@@ -1065,8 +1068,9 @@ struct StoryViewer: View {
         return story.viewer?.fav != nil
     }
 
-    private func bottomInputBar(interactive: Bool, story _: GrainStory?) -> some View {
-        HStack(spacing: 12) {
+    private func bottomInputBar(interactive: Bool, story: GrainStory?) -> some View {
+        let favState = interactive ? isFavorited : (story?.viewer?.fav != nil)
+        return HStack(spacing: 12) {
             // "Add a comment..." — opens sheet with keyboard
             if interactive {
                 Button {
@@ -1095,17 +1099,17 @@ struct StoryViewer: View {
             // Heart — favorite/unfavorite
             if interactive {
                 Button {
-                    if !isFavorited { heartBeatTrigger &+= 1 }
+                    if !favState { heartBeatTrigger &+= 1 }
                     triggerFavoriteToggle()
                 } label: {
-                    heartIcon(isFavorited: isFavorited)
+                    heartIcon(isFavorited: favState)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             } else {
-                heartIcon(isFavorited: isFavorited)
-                    .onChange(of: isFavorited) { oldValue, newValue in
-                        if !oldValue, newValue { heartBeatTrigger &+= 1 }
+                heartIcon(isFavorited: favState)
+                    .onChange(of: favState) { oldValue, newValue in
+                        if oldValue != true, newValue == true { heartBeatTrigger &+= 1 }
                     }
             }
         }
@@ -1117,7 +1121,6 @@ struct StoryViewer: View {
         Image(systemName: isFavorited ? "heart.fill" : "heart")
             .font(.title)
             .foregroundStyle(isFavorited ? Color("AccentColor") : .white)
-            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isFavorited)
             .keyframeAnimator(initialValue: 1.0, trigger: heartBeatTrigger) { content, scale in
                 content.scaleEffect(scale)
             } keyframes: { _ in

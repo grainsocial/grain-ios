@@ -135,20 +135,29 @@ struct CommentSheetContent: View {
         VStack(spacing: 0) {
             if let replyTarget = replyingTo {
                 HStack {
-                    Text("Replying to @\(replyTarget.author.handle)")
-                        .font(.caption)
+                    Image(systemName: "arrowshape.turn.up.left.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.primary)
+                    Text("Replying to")
                         .foregroundStyle(.secondary)
+                    Text("@\(replyTarget.author.handle)")
+                        .foregroundStyle(.primary)
                     Spacer()
                     Button {
                         replyingTo = nil
                     } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        Image(systemName: "xmark")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Color("AccentColor"))
+                            .frame(width: 32, height: 32)
+                            .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 4)
+                .font(.subheadline.weight(.medium))
+                .padding(.leading, 16)
+                .padding(.trailing, 8)
+                .padding(.top, 6)
             }
 
             GlassEffectContainer(spacing: 8) {

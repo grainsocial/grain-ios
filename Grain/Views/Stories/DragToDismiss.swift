@@ -42,6 +42,7 @@ struct DragToDismissInstaller: UIViewRepresentable {
     let onDragCancel: () -> Void
     let onSwipeLeft: () -> Void
     let onSwipeRight: () -> Void
+    var onSwipeUp: (() -> Void)?
     var onHorizontalDragStart: ((Bool) -> Void)? // true = swiping left (forward)
     var onSwipeDragging: ((CGFloat) -> Void)? // raw translation.x during drag
     var onHorizontalDragCancel: (() -> Void)?
@@ -66,6 +67,7 @@ struct DragToDismissInstaller: UIViewRepresentable {
         context.coordinator.onDragCancel = onDragCancel
         context.coordinator.onSwipeLeft = onSwipeLeft
         context.coordinator.onSwipeRight = onSwipeRight
+        context.coordinator.onSwipeUp = onSwipeUp
         context.coordinator.onHorizontalDragStart = onHorizontalDragStart
         context.coordinator.onSwipeDragging = onSwipeDragging
         context.coordinator.onHorizontalDragCancel = onHorizontalDragCancel
@@ -98,6 +100,7 @@ struct DragToDismissInstaller: UIViewRepresentable {
         var onDragCancel: () -> Void
         var onSwipeLeft: () -> Void
         var onSwipeRight: () -> Void
+        var onSwipeUp: (() -> Void)?
         var onHorizontalDragStart: ((Bool) -> Void)?
         var onSwipeDragging: ((CGFloat) -> Void)?
         var onHorizontalDragCancel: (() -> Void)?
@@ -124,6 +127,7 @@ struct DragToDismissInstaller: UIViewRepresentable {
             self.onDragCancel = onDragCancel
             self.onSwipeLeft = onSwipeLeft
             self.onSwipeRight = onSwipeRight
+            onSwipeUp = nil
             self.onHorizontalDragStart = onHorizontalDragStart
             self.onSwipeDragging = onSwipeDragging
             self.onHorizontalDragCancel = onHorizontalDragCancel
@@ -169,6 +173,8 @@ struct DragToDismissInstaller: UIViewRepresentable {
                         if absY > absX, translation.y > 0 {
                             direction = .vertical
                             onDragStart()
+                        } else if absY > absX, translation.y < 0, onSwipeUp != nil {
+                            direction = .vertical
                         } else if absX > absY {
                             direction = .horizontal
                             onHorizontalDragStart?(translation.x < 0)
@@ -189,6 +195,12 @@ struct DragToDismissInstaller: UIViewRepresentable {
                 }
 
             case .ended, .cancelled:
+                if direction == .vertical, translation.y < -80 || velocity.y < -500 {
+                    onSwipeUp?()
+                    direction = .none
+                    return
+                }
+
                 if direction == .vertical {
                     let ty = max(translation.y, 0)
 

@@ -542,8 +542,6 @@ struct GalleryCardView: View {
             Text(gallery.title ?? "")
                 .font(.subheadline.weight(.semibold))
                 .lineLimit(3)
-                .contentShape(Rectangle())
-                .onTapGesture { onNavigate() }
 
             if let description = gallery.description, !description.isEmpty {
                 ExpandableDescriptionView(
