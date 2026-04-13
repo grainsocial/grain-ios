@@ -417,9 +417,6 @@ struct GalleryEditor: View {
 
         Section {
             photoLayout
-                .padding(.horizontal, 8)
-                .listRowInsets(EdgeInsets())
-                .listRowSeparator(.hidden)
 
             if let onCropTapped, let id = selectedPhotoID {
                 Button {
@@ -492,6 +489,8 @@ struct GalleryEditor: View {
                 }
             )
         )
+        .listRowInsets(EdgeInsets())
+        .listRowSeparator(.hidden)
         .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { newHeight in
             morphSignposter.emitEvent("LayoutRowHeight", "mode=\(mode.label),h=\(Int(newHeight))")
         }
