@@ -43,14 +43,14 @@ final class DateFormattingTests: XCTestCase {
     }
 
     func testRelativeTimeMinutesAgo() {
-        let fiveMinutesAgo = Date().addingTimeInterval(-300)
+        let fiveMinutesAgo = Date().addingTimeInterval(-330) // 5.5 min, well within the 5m bucket
         let iso = isoString(from: fiveMinutesAgo)
         let result = DateFormatting.relativeTime(iso)
         XCTAssertEqual(result, "5m")
     }
 
     func testRelativeTimeHoursAgo() {
-        let threeHoursAgo = Date().addingTimeInterval(-10800)
+        let threeHoursAgo = Date().addingTimeInterval(-12600) // 3.5 hours, well within the 3h bucket
         let iso = isoString(from: threeHoursAgo)
         let result = DateFormatting.relativeTime(iso)
         XCTAssertEqual(result, "3h")
