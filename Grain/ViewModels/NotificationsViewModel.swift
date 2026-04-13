@@ -1,13 +1,17 @@
 import Foundation
 import Nuke
 import SwiftUI
+import UserNotifications
 
 @Observable
 @MainActor
 final class NotificationsViewModel {
     var notifications: [GrainNotification] = []
     var grouped: [GroupedNotification] = []
-    var unseenCount: Int = 0
+    var unseenCount: Int = 0 {
+        didSet { UNUserNotificationCenter.current().setBadgeCount(unseenCount) }
+    }
+
     var isLoading = false
     var error: Error?
 
