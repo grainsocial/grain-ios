@@ -32,19 +32,19 @@ struct CropHandlesView: View, @preconcurrency Animatable {
         min(screenCropRect.width, screenCropRect.height)
     }
 
-    /// Corner/edge handle arm length — 10% of short side, clamped.
+    /// Corner/edge handle arm length — 12% of short side, min 28pt for HIG tappability.
     private var handleLength: CGFloat {
-        min(max(shortSide * 0.10, 20), 36)
+        min(max(shortSide * 0.12, 28), 44)
     }
 
-    /// Handle stroke thickness — noticeably thicker than the border.
+    /// Handle stroke thickness — bold enough to be visually grabbable.
     private var handleThickness: CGFloat {
-        min(max(shortSide * 0.02, 4), 7)
+        min(max(shortSide * 0.025, 5), 8)
     }
 
     /// Border line thickness — proportional but thinner than handles.
     private var borderThickness: CGFloat {
-        min(max(shortSide * 0.005, 1), 2)
+        min(max(shortSide * 0.006, 1), 2)
     }
 
     var body: some View {
@@ -162,7 +162,7 @@ struct CropHandlesView: View, @preconcurrency Animatable {
 
     private var moveIndicatorPill: some View {
         let cx = screenCropRect.midX
-        let cy = screenCropRect.minY - 10
+        let cy = screenCropRect.minY + 14
         let pillWidth: CGFloat = 28
         let pillHeight: CGFloat = 18
 
@@ -182,7 +182,7 @@ struct CropHandlesView: View, @preconcurrency Animatable {
 
     private var moveIndicatorLines: some View {
         let cx = screenCropRect.midX
-        let cy = screenCropRect.minY - 10
+        let cy = screenCropRect.minY + 14
         let lineWidth: CGFloat = 16
         let spacing: CGFloat = 3.5
 

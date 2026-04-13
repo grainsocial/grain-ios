@@ -560,9 +560,9 @@ final class CropState {
         return CGRect(x: tl.x, y: tl.y, width: br.x - tl.x, height: br.y - tl.y)
     }
 
-    /// Screen-space hit rect for the move indicator above the crop top edge.
+    /// Screen-space hit rect for the move indicator inside the crop top edge.
     var moveIndicatorScreenRect: CGRect {
         let topCenter = overlayToScreenPoint(CGPoint(x: cropRect.midX, y: cropRect.minY))
-        return CGRect(x: topCenter.x - 22, y: topCenter.y - 30, width: 44, height: 28)
+        return CGRect(x: topCenter.x - 22, y: topCenter.y + 2, width: 44, height: 28)
     }
 }
