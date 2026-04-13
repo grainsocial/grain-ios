@@ -1,19 +1,30 @@
 import SwiftUI
 
+/// UIView subclass that extends its touch-responsive area by 44pt on each
+/// side. This lets gesture recognizers fire for touches near handles that
+/// sit at the image boundary without inflating the SwiftUI layout size.
+final class ExtendedTouchView: UIView {
+    override func point(inside point: CGPoint, with _: UIEvent?) -> Bool {
+        bounds.insetBy(dx: -44, dy: -44).contains(point)
+    }
+}
+
 /// UIKit gesture overlay for the crop view.
 ///
 /// Replaces SwiftUI's `DragGesture` / `MagnifyGesture` with UIKit recognizers
 /// so we can read the pinch location for anchor-based zoom. Handles:
 /// - 1-finger drag: hit-test determines handle resize / crop move / image pan
 /// - Pinch: anchor-based zoom with natural pan tracking
+///
+/// Uses `ExtendedTouchView` so touches up to 44pt outside the image frame
+/// still reach the gesture recognizers — handles at the image boundary
+/// can be grabbed from the surrounding area.
 struct CropGestureOverlay: UIViewRepresentable {
     let state: CropState
     let frameSize: CGSize
-    /// Extra padding beyond the image frame for edge/corner touch targets.
-    var touchInset: CGFloat = 44
 
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView()
+    func makeUIView(context: Context) -> ExtendedTouchView {
+        let view = ExtendedTouchView()
         view.backgroundColor = .clear
 
         let drag = UIPanGestureRecognizer(
@@ -35,13 +46,12 @@ struct CropGestureOverlay: UIViewRepresentable {
         return view
     }
 
-    func updateUIView(_: UIView, context: Context) {
+    func updateUIView(_: ExtendedTouchView, context: Context) {
         context.coordinator.frameSize = frameSize
-        context.coordinator.touchInset = touchInset
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(state: state, frameSize: frameSize, touchInset: touchInset)
+        Coordinator(state: state, frameSize: frameSize)
     }
 
     // MARK: - Coordinator
@@ -50,9 +60,6 @@ struct CropGestureOverlay: UIViewRepresentable {
     class Coordinator: NSObject, UIGestureRecognizerDelegate {
         let state: CropState
         var frameSize: CGSize
-        /// The gesture view extends this far beyond the image frame on each
-        /// side. Subtracted from raw touch locations to get image-local coords.
-        var touchInset: CGFloat
 
         // Pinch tracking
         private var pinchStartScale: CGFloat = 1
@@ -62,17 +69,9 @@ struct CropGestureOverlay: UIViewRepresentable {
         /// Kept fixed so the image zooms around this point.
         private var pinchAnchorOverlay: CGPoint = .zero
 
-        init(state: CropState, frameSize: CGSize, touchInset: CGFloat) {
+        init(state: CropState, frameSize: CGSize) {
             self.state = state
             self.frameSize = frameSize
-            self.touchInset = touchInset
-        }
-
-        /// Convert a raw gesture location to image-local coordinates
-        /// by removing the touchInset padding.
-        private func imagePoint(from gesture: UIGestureRecognizer) -> CGPoint {
-            let raw = gesture.location(in: gesture.view)
-            return CGPoint(x: raw.x - touchInset, y: raw.y - touchInset)
         }
 
         /// Allow pinch + drag to coexist (different touch counts, no conflict).
@@ -88,7 +87,7 @@ struct CropGestureOverlay: UIViewRepresentable {
         @objc func handleDrag(_ gesture: UIPanGestureRecognizer) {
             switch gesture.state {
             case .began:
-                let viewPoint = imagePoint(from: gesture)
+                let viewPoint = gesture.location(in: gesture.view)
 
                 // Check move indicator in screen space first — it may be
                 // outside the image bounds and is never promoted to panImage.
@@ -149,7 +148,7 @@ struct CropGestureOverlay: UIViewRepresentable {
             case .began:
                 pinchStartScale = state.imageScale
                 pinchStartOffset = state.imageOffset
-                pinchStartLocation = imagePoint(from: gesture)
+                pinchStartLocation = gesture.location(in: gesture.view)
 
                 // Find the overlay-space point under the pinch so we can
                 // keep it visually fixed as scale changes.
@@ -161,7 +160,7 @@ struct CropGestureOverlay: UIViewRepresentable {
                 )
 
             case .changed:
-                let currentLoc = imagePoint(from: gesture)
+                let currentLoc = gesture.location(in: gesture.view)
                 let rawScale = pinchStartScale * gesture.scale
                 // Allow dipping below 1.0 for rubber-band feel, floor at 0.5.
                 let newScale = max(rawScale, 0.5)

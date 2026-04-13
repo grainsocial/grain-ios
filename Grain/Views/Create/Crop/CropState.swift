@@ -220,19 +220,33 @@ final class CropState {
 
     private func applyCropRatio(_ ratio: CGFloat) {
         let bounds = transformedImageBounds()
-        let maxW = bounds.width
-        let maxH = bounds.height
-        guard maxW > 0, maxH > 0 else { return }
+        guard bounds.width > 0, bounds.height > 0 else { return }
 
-        var newW = maxW
-        var newH = newW / ratio
-        if newH > maxH {
-            newH = maxH
+        // Preserve the current crop's area: solve for new dimensions
+        // that match the target ratio while keeping area ≈ constant.
+        let area = cropRect.width * cropRect.height
+        var newW = sqrt(area * ratio)
+        var newH = sqrt(area / ratio)
+
+        // Clamp to image bounds
+        if newW > bounds.width {
+            newW = bounds.width
+            newH = newW / ratio
+        }
+        if newH > bounds.height {
+            newH = bounds.height
             newW = newH * ratio
         }
 
-        let x = bounds.origin.x + (maxW - newW) / 2
-        let y = bounds.origin.y + (maxH - newH) / 2
+        // Enforce minimum
+        newW = max(newW, minCropSize)
+        newH = max(newH, minCropSize)
+
+        // Center on the current crop's center, clamped to bounds
+        let cx = cropRect.midX
+        let cy = cropRect.midY
+        let x = max(bounds.minX, min(bounds.maxX - newW, cx - newW / 2))
+        let y = max(bounds.minY, min(bounds.maxY - newH, cy - newH / 2))
         cropRect = clampCropToImage(CGRect(x: x, y: y, width: newW, height: newH))
     }
 

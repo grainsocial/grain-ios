@@ -155,7 +155,7 @@ struct CropView: View {
                     }
                 }
                 pillButton("plus.magnifyingglass") {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 1.0)) {
                         state.zoomToCrop()
                     }
                 }
@@ -290,14 +290,13 @@ struct CropView: View {
             // Screen-space handles (outside transform chain — constant size at any zoom)
             CropHandlesView(screenCropRect: state.screenCropRect)
 
-            // Gesture layer extends 44pt beyond image frame so handles at
-            // the image boundary can be grabbed from outside.
+            // Gesture layer — ExtendedTouchView extends touch area 44pt
+            // beyond bounds so boundary handles are reachable.
             CropGestureOverlay(
                 state: state,
-                frameSize: CGSize(width: fitWidth, height: fitHeight),
-                touchInset: 44
+                frameSize: CGSize(width: fitWidth, height: fitHeight)
             )
-            .frame(width: fitWidth + 88, height: fitHeight + 88)
+            .frame(width: fitWidth, height: fitHeight)
         }
     }
 
