@@ -2,9 +2,6 @@ import SwiftUI
 
 /// Full-screen crop tool. Presented as `.fullScreenCover` from both story
 /// and gallery create flows.
-///
-/// Takes the original image + an optional previous crop result (for re-entry).
-/// Returns a `CropResult` on done.
 struct CropView: View {
     let image: UIImage
     let existingCrop: CropResult?
@@ -16,6 +13,7 @@ struct CropView: View {
     /// is applied visually via `.rotationEffect()`.
     @State private var displayImage: UIImage
     @State private var hasInitialized = false
+    @State private var isRotating = false
 
     init(
         image: UIImage,
@@ -30,7 +28,6 @@ struct CropView: View {
         _displayImage = State(initialValue: ImageCropper.normalizeOrientation(image))
     }
 
-    /// Whether the current rotation swaps width/height.
     private var isSwapped: Bool {
         state.rotationDegrees == 90 || state.rotationDegrees == 270
     }
@@ -40,21 +37,29 @@ struct CropView: View {
             ZStack {
                 Color.black.ignoresSafeArea()
 
+                // Image fills available space — controls float on top
                 imageArea(in: geo)
 
-                // Floating controls — on top of everything
+                // Floating controls
                 VStack(spacing: 0) {
-                    toolbar
-                        .padding(.horizontal, 16)
-                        .padding(.top, 8)
+                    // Top: toolbar + tool buttons
+                    VStack(spacing: 8) {
+                        toolbar
+                            .padding(.horizontal, 16)
+
+                        toolButtons
+                    }
+                    .padding(.top, 8)
 
                     Spacer()
 
-                    AspectRatioBar(state: state)
-                        .padding(.bottom, 8)
+                    // Bottom: orientation toggle + ratio strip
+                    VStack(spacing: 8) {
+                        orientationToggle
 
-                    bottomControls
-                        .padding(.bottom, 16)
+                        AspectRatioBar(state: state)
+                    }
+                    .padding(.bottom, 16)
                 }
             }
         }
@@ -81,7 +86,7 @@ struct CropView: View {
                     state.resetAll()
                 }
             }
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.white.opacity(0.5))
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
             .glassEffect(.regular.interactive(), in: .capsule)
@@ -99,20 +104,113 @@ struct CropView: View {
         }
     }
 
+    // MARK: - Tool buttons (rotation + grid) — top row
+
+    private var toolButtons: some View {
+        HStack(spacing: 24) {
+            Button {
+                rotate(degrees: -90)
+            } label: {
+                Image(systemName: "rotate.left")
+                    .font(.system(size: 18))
+                    .foregroundStyle(.white)
+                    .frame(width: 40, height: 40)
+                    .contentShape(Rectangle())
+            }
+            .glassEffect(.regular.interactive(), in: .circle)
+
+            Button {
+                state.showGrid.toggle()
+            } label: {
+                Image(systemName: "grid")
+                    .font(.system(size: 18))
+                    .foregroundStyle(state.showGrid ? .white : .white.opacity(0.35))
+                    .frame(width: 40, height: 40)
+                    .contentShape(Rectangle())
+            }
+            .glassEffect(state.showGrid ? .regular.interactive() : .regular, in: .circle)
+
+            Button {
+                rotate(degrees: 90)
+            } label: {
+                Image(systemName: "rotate.right")
+                    .font(.system(size: 18))
+                    .foregroundStyle(.white)
+                    .frame(width: 40, height: 40)
+                    .contentShape(Rectangle())
+            }
+            .glassEffect(.regular.interactive(), in: .circle)
+        }
+    }
+
+    // MARK: - Orientation toggle (portrait / landscape)
+
+    /// Always visible — dimmed when the selected preset doesn't support orientation
+    /// (Free, Original, Square). Active orientation is highlighted, inactive is dimmed.
+    private var orientationToggle: some View {
+        let enabled = state.showOrientationToggle
+        return HStack(spacing: 16) {
+            Button {
+                guard enabled, state.isPortrait else { return }
+                withAnimation(.smooth(duration: 0.3)) {
+                    state.toggleOrientation()
+                }
+            } label: {
+                // Landscape rectangle
+                RoundedRectangle(cornerRadius: 2)
+                    .strokeBorder(lineWidth: 1.5)
+                    .frame(width: 18, height: 12)
+                    .foregroundStyle(
+                        enabled
+                            ? (!state.isPortrait ? .white : .white.opacity(0.35))
+                            : .white.opacity(0.15)
+                    )
+                    .frame(width: 40, height: 36)
+                    .contentShape(Rectangle())
+            }
+            .glassEffect(
+                enabled && !state.isPortrait ? .regular.interactive() : .regular,
+                in: .capsule
+            )
+
+            Button {
+                guard enabled, !state.isPortrait else { return }
+                withAnimation(.smooth(duration: 0.3)) {
+                    state.toggleOrientation()
+                }
+            } label: {
+                // Portrait rectangle
+                RoundedRectangle(cornerRadius: 2)
+                    .strokeBorder(lineWidth: 1.5)
+                    .frame(width: 12, height: 18)
+                    .foregroundStyle(
+                        enabled
+                            ? (state.isPortrait ? .white : .white.opacity(0.35))
+                            : .white.opacity(0.15)
+                    )
+                    .frame(width: 40, height: 36)
+                    .contentShape(Rectangle())
+            }
+            .glassEffect(
+                enabled && state.isPortrait ? .regular.interactive() : .regular,
+                in: .capsule
+            )
+        }
+    }
+
     // MARK: - Image area
+
+    /// Height reserved by all controls above and below the image.
+    private static let controlsHeight: CGFloat = 44 + 48 + 44 + 44 + 48
 
     @ViewBuilder
     private func imageArea(in geo: GeometryProxy) -> some View {
         let safeArea = geo.safeAreaInsets
         let availableWidth = geo.size.width - 32
         let availableHeight = geo.size.height
-            - 56 // toolbar
-            - 32 // spacers
-            - 44 // aspect bar
-            - 56 // bottom controls
+            - Self.controlsHeight
             - safeArea.top - safeArea.bottom
 
-        // Post-rotation aspect ratio
         let baseW = displayImage.size.width
         let baseH = displayImage.size.height
         let postW = isSwapped ? baseH : baseW
@@ -129,8 +227,8 @@ struct CropView: View {
         }()
 
         ZStack {
-            // Image layer — sized for pre-rotation, then rotated into post-rotation frame.
-            // No clipping — image can overflow when zoomed.
+            // Image — sized for pre-rotation, then rotated into post-rotation frame.
+            // No clipping so zoom can overflow.
             Image(uiImage: displayImage)
                 .resizable()
                 .frame(
@@ -141,68 +239,31 @@ struct CropView: View {
                 .scaleEffect(state.imageScale)
                 .offset(state.imageOffset)
 
-            // Overlay — dimming extends far beyond frame for zoom overflow
+            // Overlay — dimming extends beyond frame for zoom overflow
             CropOverlayView(
                 cropRect: state.cropRect,
                 geometrySize: CGSize(width: fitWidth, height: fitHeight),
                 showGrid: state.showGrid
             )
 
-            // Gesture layer — covers the full frame
+            // Gesture layer
             Color.clear
                 .contentShape(Rectangle())
                 .gesture(dragGesture)
                 .simultaneousGesture(magnifyGesture)
         }
         .frame(width: fitWidth, height: fitHeight)
-        // No .clipped() — image overflows when zoomed, dimming covers it
         .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .local) }) { frame in
-            if state.imageDisplayFrame != frame {
-                state.imageDisplayFrame = frame
-                if !hasInitialized {
-                    hasInitialized = true
-                    initializeCropState()
-                }
+            state.imageDisplayFrame = frame
+            if !hasInitialized {
+                hasInitialized = true
+                initializeCropState()
+            } else if isRotating {
+                // During rotation animation, keep crop rect tracking the frame
+                state.cropRect = frame
+                state.imageOffset = .zero
+                state.imageScale = 1.0
             }
-        }
-    }
-
-    // MARK: - Bottom controls (rotation + grid toggle)
-
-    private var bottomControls: some View {
-        HStack(spacing: 32) {
-            Button {
-                rotate(degrees: -90)
-            } label: {
-                Image(systemName: "rotate.left")
-                    .font(.system(size: 20))
-                    .foregroundStyle(.white)
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
-            }
-            .glassEffect(.regular.interactive(), in: .circle)
-
-            Button {
-                state.showGrid.toggle()
-            } label: {
-                Image(systemName: state.showGrid ? "grid" : "grid.slash")
-                    .font(.system(size: 20))
-                    .foregroundStyle(state.showGrid ? .white : .secondary)
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
-            }
-            .glassEffect(.regular.interactive(), in: .circle)
-
-            Button {
-                rotate(degrees: 90)
-            } label: {
-                Image(systemName: "rotate.right")
-                    .font(.system(size: 20))
-                    .foregroundStyle(.white)
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
-            }
-            .glassEffect(.regular.interactive(), in: .circle)
         }
     }
 
@@ -269,9 +330,11 @@ struct CropView: View {
     }
 
     private func rotate(degrees: Int) {
+        isRotating = true
         withAnimation(.smooth(duration: 0.4)) {
             state.rotationAngle += Double(degrees)
-            state.resetCrop()
+        } completion: {
+            isRotating = false
         }
     }
 
@@ -300,33 +363,17 @@ struct CropView: View {
 // MARK: - Preview
 
 #Preview {
-    let size = CGSize(width: 600, height: 400)
-    let renderer = UIGraphicsImageRenderer(size: size)
-    let sampleImage = renderer.image { ctx in
-        let colors = [UIColor.systemOrange.cgColor, UIColor.systemPurple.cgColor]
-        let gradient = CGGradient(
-            colorsSpace: CGColorSpaceCreateDeviceRGB(),
-            colors: colors as CFArray,
-            locations: [0, 1]
-        )!
-        ctx.cgContext.drawLinearGradient(
-            gradient,
-            start: .zero,
-            end: CGPoint(x: size.width, y: size.height),
-            options: []
-        )
-        ctx.cgContext.setStrokeColor(UIColor.white.withAlphaComponent(0.3).cgColor)
-        ctx.cgContext.setLineWidth(1)
-        for x in stride(from: 0, to: size.width, by: 50) {
-            ctx.cgContext.move(to: CGPoint(x: x, y: 0))
-            ctx.cgContext.addLine(to: CGPoint(x: x, y: size.height))
+    let sampleImage: UIImage = {
+        guard let path = Bundle.main.url(forResource: "Mount_Hood_reflected_in_Mirror_Lake,_Oregon", withExtension: "jpg")?.path,
+              let img = UIImage(contentsOfFile: path)
+        else {
+            return PreviewData.gradientThumb(
+                colors: [UIColor.systemOrange.cgColor, UIColor.systemPurple.cgColor],
+                size: CGSize(width: 600, height: 400)
+            )
         }
-        for y in stride(from: 0, to: size.height, by: 50) {
-            ctx.cgContext.move(to: CGPoint(x: 0, y: y))
-            ctx.cgContext.addLine(to: CGPoint(x: size.width, y: y))
-        }
-        ctx.cgContext.strokePath()
-    }
+        return img
+    }()
 
     CropView(
         image: sampleImage,
