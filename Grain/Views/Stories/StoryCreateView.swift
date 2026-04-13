@@ -12,6 +12,7 @@ struct StoryCreateView: View {
     @State private var photoData: Data?
     @State private var previewImage: UIImage?
     @State private var showCamera = false
+    @State private var showCropView = false
     @State private var resolvedLocation: (h3: String, name: String, address: [String: AnyCodable]?)?
     @State private var photoLocationResult: NominatimResult?
     @State private var includeLocation = true
@@ -30,6 +31,12 @@ struct StoryCreateView: View {
                             .scaledToFit()
                             .frame(maxHeight: 300)
                             .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                        Button {
+                            showCropView = true
+                        } label: {
+                            Label("Crop", systemImage: "crop")
+                        }
                     }
 
                     PhotosPicker(selection: $selectedPhoto, matching: .images) {
@@ -77,6 +84,16 @@ struct StoryCreateView: View {
             }
             .onChange(of: selectedPhoto) {
                 Task { await loadPhoto() }
+            }
+            .fullScreenCover(isPresented: $showCropView) {
+                if let previewImage {
+                    CropView(image: previewImage) { _ in
+                        showCropView = false
+                    } onCancel: {
+                        showCropView = false
+                    }
+                    .ignoresSafeArea()
+                }
             }
             .fullScreenCover(isPresented: $showCamera) {
                 CameraPicker { image, _ in
