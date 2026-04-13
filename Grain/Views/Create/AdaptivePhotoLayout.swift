@@ -23,7 +23,8 @@ struct AdaptivePhotoLayout: Layout {
     // Strip — values must match StripScrollState.thumbSize / .spacing
     private let stripThumbSize: CGFloat = 72
     private let stripSpacing: CGFloat = 20
-    private let stripVerticalPadding: CGFloat = 22
+    private let stripTopPadding: CGFloat = 12
+    private let stripBottomPadding: CGFloat = 0
 
     // Grid
     private let gridColumnCount = 3
@@ -57,7 +58,7 @@ struct AdaptivePhotoLayout: Layout {
 
         switch mode {
         case .preview:
-            return CGSize(width: width, height: stripThumbSize + stripVerticalPadding * 2)
+            return CGSize(width: width, height: stripThumbSize + stripTopPadding + stripBottomPadding)
 
         case .reorder:
             let rows = Int(ceil(Double(subviews.count) / Double(gridColumnCount)))
@@ -95,7 +96,7 @@ struct AdaptivePhotoLayout: Layout {
 
     private func placeAsStrip(in bounds: CGRect, subviews: Subviews) {
         let proposal = ProposedViewSize(width: stripThumbSize, height: stripThumbSize)
-        let centerY = bounds.midY
+        let centerY = bounds.minY + stripTopPadding + stripThumbSize / 2
         for subview in subviews {
             let index = subview[PhotoIndexKey.self]
             let x = bounds.minX + stripScrollOffset

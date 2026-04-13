@@ -311,7 +311,9 @@ final class CropState {
         let hr = scaledHitRadius
         let bounds = transformedImageBounds()
 
-        // Corners (highest priority — overlap with edges)
+        // Corners (highest priority). Use 1.5× radius so corners always
+        // win over adjacent edge zones — prevents single-axis lock near corners.
+        let cornerHR = hr * 1.5
         let corners: [(CropHandle, CGPoint)] = [
             (.topLeft, CGPoint(x: r.minX, y: r.minY)),
             (.topRight, CGPoint(x: r.maxX, y: r.minY)),
@@ -319,27 +321,40 @@ final class CropState {
             (.bottomRight, CGPoint(x: r.maxX, y: r.maxY)),
         ]
         for (handle, pos) in corners {
-            if distance(point, pos) < hr { return handle }
+            if distance(point, pos) < cornerHR { return handle }
         }
 
-        // Edge LINES (no top — move indicator replaces it).
-        // When an edge is at the image boundary, extend the hit zone inward.
+        // Edge midpoint bars only — hit zone covers the visible bar, not
+        // the entire edge. Hidden when crop rect is too small (matches
+        // CropHandlesView threshold: 3× bar length + padding).
+        let scr = screenCropRect
+        let screenShort = min(scr.width, scr.height)
+        let screenBarLen = min(max(screenShort * 0.12, 28), 44)
+        let edgeMinSize = screenBarLen * 3 + screenBarLen
+        let barHalf = (screenBarLen / imageScale) / 2 + hr
+        // No top edge — move indicator handles that zone.
         let bottomInward: CGFloat = (bounds.maxY - r.maxY) < hr ? hr * 1.6 : hr
         let leftInward: CGFloat = (r.minX - bounds.minX) < hr ? hr * 1.6 : hr
         let rightInward: CGFloat = (bounds.maxX - r.maxX) < hr ? hr * 1.6 : hr
 
-        if point.y >= r.maxY - bottomInward, point.y <= r.maxY + hr,
-           point.x >= r.minX - hr, point.x <= r.maxX + hr
+        // Bottom bar — only if crop is wide enough
+        if scr.width >= edgeMinSize,
+           point.y >= r.maxY - bottomInward, point.y <= r.maxY + hr,
+           point.x >= r.midX - barHalf, point.x <= r.midX + barHalf
         {
             return .bottom
         }
-        if point.x >= r.minX - hr, point.x <= r.minX + leftInward,
-           point.y >= r.minY - hr, point.y <= r.maxY + hr
+        // Left bar — only if crop is tall enough
+        if scr.height >= edgeMinSize,
+           point.x >= r.minX - hr, point.x <= r.minX + leftInward,
+           point.y >= r.midY - barHalf, point.y <= r.midY + barHalf
         {
             return .left
         }
-        if point.x >= r.maxX - rightInward, point.x <= r.maxX + hr,
-           point.y >= r.minY - hr, point.y <= r.maxY + hr
+        // Right bar — only if crop is tall enough
+        if scr.height >= edgeMinSize,
+           point.x >= r.maxX - rightInward, point.x <= r.maxX + hr,
+           point.y >= r.midY - barHalf, point.y <= r.midY + barHalf
         {
             return .right
         }
@@ -560,9 +575,9 @@ final class CropState {
         return CGRect(x: tl.x, y: tl.y, width: br.x - tl.x, height: br.y - tl.y)
     }
 
-    /// Screen-space hit rect for the move indicator inside the crop top edge.
+    /// Screen-space hit rect for the move indicator above the crop top edge.
     var moveIndicatorScreenRect: CGRect {
         let topCenter = overlayToScreenPoint(CGPoint(x: cropRect.midX, y: cropRect.minY))
-        return CGRect(x: topCenter.x - 22, y: topCenter.y + 2, width: 44, height: 28)
+        return CGRect(x: topCenter.x - 22, y: topCenter.y - 28, width: 44, height: 28)
     }
 }

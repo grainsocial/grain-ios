@@ -76,30 +76,22 @@ struct CropView: View {
     private var toolbar: some View {
         HStack {
             // Cancel when pristine, Reset when modified
-            if state.hasModifications {
-                Button {
+            Button {
+                if state.hasModifications {
                     withAnimation(.smooth(duration: 0.4)) {
                         state.resetAll()
                     }
-                } label: {
-                    Label("Reset", systemImage: "arrow.counterclockwise")
-                        .font(.body)
-                }
-                .foregroundStyle(.primary)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .glassEffect(.regular.interactive(), in: .capsule)
-                .transition(.blurReplace)
-            } else {
-                Button("Cancel") {
+                } else {
                     onCancel()
                 }
-                .foregroundStyle(.primary)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .glassEffect(.regular.interactive(), in: .capsule)
-                .transition(.blurReplace)
+            } label: {
+                Text(state.hasModifications ? "Reset" : "Cancel")
+                    .contentTransition(.numericText())
             }
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .glassEffect(.regular.interactive(), in: .capsule)
 
             Spacer()
 
@@ -117,6 +109,7 @@ struct CropView: View {
 
     // MARK: - Tool buttons — top row
 
+    /// Standalone tool button with its own glass circle.
     private func toolButton(_ icon: String, active: Bool = true, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: icon)
@@ -128,26 +121,46 @@ struct CropView: View {
         .glassEffect(active ? .regular.interactive() : .regular, in: .circle)
     }
 
+    /// Button inside a shared pill — no individual glass.
+    private func pillButton(_ icon: String, active: Bool = true, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 18))
+                .foregroundStyle(active ? .primary : .tertiary)
+                .frame(width: 40, height: 40)
+                .contentShape(Rectangle())
+        }
+    }
+
     private var toolButtons: some View {
         HStack(spacing: 16) {
-            toolButton("rotate.left") { rotate(degrees: -90) }
-            toolButton("rotate.right") { rotate(degrees: 90) }
+            // Rotate pair in a single pill
+            HStack(spacing: 0) {
+                pillButton("rotate.left") { rotate(degrees: -90) }
+                    .offset(y: -1) // optical center — arrow weight sits low
+                pillButton("rotate.right") { rotate(degrees: 90) }
+                    .offset(y: -1)
+            }
+            .glassEffect(.regular.interactive(), in: .capsule)
+
             toolButton("grid", active: state.showGrid) { state.showGrid.toggle() }
 
-            toolButton("plus.magnifyingglass") {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
-                    state.zoomToCrop()
-                }
-            }
-
-            if state.isViewModified {
-                toolButton("minus.magnifyingglass") {
+            // Zoom pair in a single pill — minus (fit) left, plus (zoom) right
+            HStack(spacing: 0) {
+                pillButton("minus.magnifyingglass",
+                           active: state.isViewModified)
+                {
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
                         state.resetView()
                     }
                 }
-                .transition(.opacity.combined(with: .scale(scale: 0.8)))
+                pillButton("plus.magnifyingglass") {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+                        state.zoomToCrop()
+                    }
+                }
             }
+            .glassEffect(.regular.interactive(), in: .capsule)
         }
     }
 
@@ -168,49 +181,46 @@ struct CropView: View {
             }
             .glassEffect(state.isRatioLocked ? .regular.interactive() : .regular, in: .circle)
 
-            // Landscape
-            Button {
-                guard orientationEnabled, state.isPortrait else { return }
-                withAnimation(.smooth(duration: 0.3)) {
-                    state.toggleOrientation()
+            // Landscape / Portrait pair in a single pill
+            HStack(spacing: 0) {
+                Button {
+                    guard orientationEnabled, state.isPortrait else { return }
+                    withAnimation(.smooth(duration: 0.3)) {
+                        state.toggleOrientation()
+                    }
+                } label: {
+                    RoundedRectangle(cornerRadius: 2)
+                        .strokeBorder(lineWidth: 1.5)
+                        .frame(width: 18, height: 12)
+                        .foregroundStyle(
+                            orientationEnabled
+                                ? (!state.isPortrait ? .primary : .tertiary)
+                                : .quaternary
+                        )
+                        .frame(width: 40, height: 36)
+                        .contentShape(Rectangle())
                 }
-            } label: {
-                RoundedRectangle(cornerRadius: 2)
-                    .strokeBorder(lineWidth: 1.5)
-                    .frame(width: 18, height: 12)
-                    .foregroundStyle(
-                        orientationEnabled
-                            ? (!state.isPortrait ? .primary : .tertiary)
-                            : .quaternary
-                    )
-                    .frame(width: 40, height: 36)
-                    .contentShape(Rectangle())
-            }
-            .glassEffect(
-                orientationEnabled && !state.isPortrait ? .regular.interactive() : .regular,
-                in: .capsule
-            )
 
-            // Portrait
-            Button {
-                guard orientationEnabled, !state.isPortrait else { return }
-                withAnimation(.smooth(duration: 0.3)) {
-                    state.toggleOrientation()
+                Button {
+                    guard orientationEnabled, !state.isPortrait else { return }
+                    withAnimation(.smooth(duration: 0.3)) {
+                        state.toggleOrientation()
+                    }
+                } label: {
+                    RoundedRectangle(cornerRadius: 2)
+                        .strokeBorder(lineWidth: 1.5)
+                        .frame(width: 12, height: 18)
+                        .foregroundStyle(
+                            orientationEnabled
+                                ? (state.isPortrait ? .primary : .tertiary)
+                                : .quaternary
+                        )
+                        .frame(width: 40, height: 36)
+                        .contentShape(Rectangle())
                 }
-            } label: {
-                RoundedRectangle(cornerRadius: 2)
-                    .strokeBorder(lineWidth: 1.5)
-                    .frame(width: 12, height: 18)
-                    .foregroundStyle(
-                        orientationEnabled
-                            ? (state.isPortrait ? .primary : .tertiary)
-                            : .quaternary
-                    )
-                    .frame(width: 40, height: 36)
-                    .contentShape(Rectangle())
             }
             .glassEffect(
-                orientationEnabled && state.isPortrait ? .regular.interactive() : .regular,
+                orientationEnabled ? .regular.interactive() : .regular,
                 in: .capsule
             )
         }
@@ -246,6 +256,9 @@ struct CropView: View {
             // scaleEffect/offset are applied to both so the mask
             // tracks the image during zoom and pan.
             ZStack {
+                // Black fill prevents white corners during rotation animation
+                Color.black
+
                 Image(uiImage: displayImage)
                     .resizable()
                     .frame(
@@ -261,6 +274,7 @@ struct CropView: View {
                 )
             }
             .frame(width: fitWidth, height: fitHeight)
+            .clipped()
             .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .local) }) { frame in
                 state.imageDisplayFrame = frame
                 if !hasInitialized {
@@ -276,13 +290,15 @@ struct CropView: View {
             // Screen-space handles (outside transform chain — constant size at any zoom)
             CropHandlesView(screenCropRect: state.screenCropRect)
 
-            // Gesture layer — UIKit recognizers for anchor-based pinch + 1-finger drag
+            // Gesture layer extends 44pt beyond image frame so handles at
+            // the image boundary can be grabbed from outside.
             CropGestureOverlay(
                 state: state,
-                frameSize: CGSize(width: fitWidth, height: fitHeight)
+                frameSize: CGSize(width: fitWidth, height: fitHeight),
+                touchInset: 44
             )
+            .frame(width: fitWidth + 88, height: fitHeight + 88)
         }
-        .frame(width: fitWidth, height: fitHeight)
     }
 
     // MARK: - Actions

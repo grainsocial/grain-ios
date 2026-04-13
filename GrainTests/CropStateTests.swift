@@ -358,7 +358,7 @@ final class CropStateTests: XCTestCase {
     func testEdgeHitTestOnBottomEdge() {
         state.cropRect = CGRect(x: 50, y: 100, width: 300, height: 400)
 
-        // Point along the bottom edge, midway horizontally
+        // Point along the bottom edge, midway horizontally (at the bar)
         let result = state.hitTest(point: CGPoint(x: 200, y: 500))
         XCTAssertEqual(result, .bottom)
     }
@@ -366,7 +366,7 @@ final class CropStateTests: XCTestCase {
     func testEdgeHitTestOnLeftEdge() {
         state.cropRect = CGRect(x: 50, y: 100, width: 300, height: 400)
 
-        // Point along the left edge, midway vertically (away from corners)
+        // Point along the left edge, midway vertically (at the bar)
         let result = state.hitTest(point: CGPoint(x: 50, y: 300))
         XCTAssertEqual(result, .left)
     }
@@ -374,7 +374,7 @@ final class CropStateTests: XCTestCase {
     func testEdgeHitTestOnRightEdge() {
         state.cropRect = CGRect(x: 50, y: 100, width: 300, height: 400)
 
-        // Point along the right edge, midway vertically
+        // Point along the right edge, midway vertically (at the bar)
         let result = state.hitTest(point: CGPoint(x: 350, y: 300))
         XCTAssertEqual(result, .right)
     }
@@ -385,6 +385,45 @@ final class CropStateTests: XCTestCase {
         // Point near top-left corner — within corner hit radius but also near top edge
         let result = state.hitTest(point: CGPoint(x: 52, y: 50))
         XCTAssertEqual(result, .topLeft)
+    }
+
+    func testEdgeBetweenCornerAndBarReturnsMoveOrPan() {
+        // Large crop so edge bars are visible
+        state.cropRect = CGRect(x: 50, y: 50, width: 300, height: 400)
+
+        // Point on the bottom edge but far from both corner and midpoint bar —
+        // between the corner arm tip and the edge bar. Should NOT return .bottom.
+        let result = state.hitTest(point: CGPoint(x: 120, y: 450))
+        XCTAssertNotEqual(result, .bottom,
+                          "Gap between corner and edge bar should not register as edge handle")
+    }
+
+    func testEdgeHandlesHiddenOnSmallCrop() {
+        // Tiny crop where edge bars would overlap corners
+        state.cropRect = CGRect(x: 150, y: 250, width: 80, height: 80)
+
+        // Midpoint of bottom edge — should NOT return .bottom when crop is too small
+        let result = state.hitTest(point: CGPoint(x: 190, y: 330))
+        XCTAssertNotEqual(result, .bottom,
+                          "Edge handles should be hidden when crop rect is too small")
+    }
+
+    func testEdgeHandlesVisibleOnLargeCrop() {
+        // Large crop where edge bars fit comfortably
+        state.cropRect = CGRect(x: 0, y: 0, width: 400, height: 600)
+
+        // Midpoint of bottom edge
+        let result = state.hitTest(point: CGPoint(x: 200, y: 600))
+        XCTAssertEqual(result, .bottom)
+    }
+
+    func testCornerWinsOverEdgeNearDiagonal() {
+        state.cropRect = CGRect(x: 50, y: 50, width: 300, height: 400)
+
+        // Point slightly off the bottom-left corner diagonally — should still
+        // be caught by the 1.5× corner radius, not the left or bottom edge
+        let result = state.hitTest(point: CGPoint(x: 65, y: 435))
+        XCTAssertEqual(result, .bottomLeft)
     }
 
     // MARK: - Image offset clamping
