@@ -440,12 +440,18 @@ struct GalleryEditor: View {
             .pickerStyle(.segmented)
             .disabled(isAnimatingMode)
         }
-        .cropSheet(request: $cropRequest) { result in
-            guard let id = selectedPhotoID,
-                  let idx = items.firstIndex(where: { $0.id == id }) else { return }
-            items[idx].thumbnail = PhotoItem.makeThumbnail(from: result.croppedImage)
-            items[idx].carouselPreview = PhotoItem.makeCarouselPreview(from: result.croppedImage, width: UIScreen.main.bounds.width)
-            items[idx].cropResult = result
+        // fullScreenCover must NOT be on the Section — Sections inside
+        // List/Form can be recycled, which dismisses the cover immediately.
+        // .background + .cropSheet keeps the modifier in a stable view.
+        .background {
+            Color.clear
+                .cropSheet(request: $cropRequest) { result in
+                    guard let id = selectedPhotoID,
+                          let idx = items.firstIndex(where: { $0.id == id }) else { return }
+                    items[idx].thumbnail = PhotoItem.makeThumbnail(from: result.croppedImage)
+                    items[idx].carouselPreview = PhotoItem.makeCarouselPreview(from: result.croppedImage, width: UIScreen.main.bounds.width)
+                    items[idx].cropResult = result
+                }
         }
     }
 
