@@ -5,10 +5,28 @@ import SwiftUI
 ///
 /// Everything is drawn with `Path` — no `Rectangle` views with `.position`
 /// — so the border and handles animate as one unit.
-struct CropOverlayView: View {
-    let cropRect: CGRect
+///
+/// Conforms to `Animatable` so SwiftUI interpolates the crop rect
+/// between values, giving smooth transitions on preset/rotation changes.
+struct CropOverlayView: View, @preconcurrency Animatable {
+    var cropRect: CGRect
     let geometrySize: CGSize
     let showGrid: Bool
+
+    var animatableData: AnimatablePair<AnimatablePair<CGFloat, CGFloat>, AnimatablePair<CGFloat, CGFloat>> {
+        get {
+            .init(.init(cropRect.origin.x, cropRect.origin.y),
+                  .init(cropRect.size.width, cropRect.size.height))
+        }
+        set {
+            cropRect = CGRect(
+                x: newValue.first.first,
+                y: newValue.first.second,
+                width: newValue.second.first,
+                height: newValue.second.second
+            )
+        }
+    }
 
     var body: some View {
         ZStack {
@@ -57,7 +75,7 @@ struct CropOverlayView: View {
                 path.addLine(to: CGPoint(x: r.maxX, y: y))
             }
         }
-        .stroke(Color.white.opacity(0.4), lineWidth: 0.5)
+        .stroke(Color.white.opacity(0.5), lineWidth: 0.5)
     }
 
     // MARK: - Border (Path, not Rectangle — syncs with handles)
@@ -66,7 +84,7 @@ struct CropOverlayView: View {
         Path { path in
             path.addRect(cropRect)
         }
-        .stroke(Color.white.opacity(0.6), lineWidth: 1)
+        .stroke(Color.white.opacity(0.7), lineWidth: 1)
     }
 
     // MARK: - Handles
