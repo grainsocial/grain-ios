@@ -136,10 +136,22 @@ final class CropState {
         imageScale != 1.0 || imageOffset != .zero
     }
 
-    /// Zoom and pan so the current crop rect fills the frame (with padding).
+    /// True when any crop, rotation, or zoom change has been made.
+    var hasModifications: Bool {
+        rotationAngle != 0
+            || selectedPreset != .free
+            || isRatioLocked
+            || isViewModified
+            || abs(cropRect.minX - imageDisplayFrame.minX) > 1
+            || abs(cropRect.minY - imageDisplayFrame.minY) > 1
+            || abs(cropRect.width - imageDisplayFrame.width) > 1
+            || abs(cropRect.height - imageDisplayFrame.height) > 1
+    }
+
+    /// Zoom and pan so the current crop rect fills the frame, centered.
     func zoomToCrop() {
         let frame = imageDisplayFrame
-        let padding: CGFloat = 24
+        let padding: CGFloat = 8
         let targetW = frame.width - padding * 2
         let targetH = frame.height - padding * 2
         guard targetW > 0, targetH > 0,
@@ -153,10 +165,19 @@ final class CropState {
         let cy = frame.height / 2
 
         imageScale = newScale
-        imageOffset = clampImageOffset(CGSize(
+        // Center the crop area on screen — allow offset beyond normal
+        // clamping range so the crop is truly centered even near edges.
+        let idealOffset = CGSize(
             width: (cx - cropRect.midX) * newScale,
             height: (cy - cropRect.midY) * newScale
-        ))
+        )
+        // Only clamp enough to keep the IMAGE visible (not the crop).
+        let maxX = frame.width * (newScale - 1) / 2
+        let maxY = frame.height * (newScale - 1) / 2
+        imageOffset = CGSize(
+            width: max(-maxX, min(maxX, idealOffset.width)),
+            height: max(-maxY, min(maxY, idealOffset.height))
+        )
     }
 
     // MARK: - Aspect ratio
