@@ -19,6 +19,7 @@ struct CropView: View {
     @State private var isRotating = false
     @State private var postRotationNormalizedCrop: CGRect?
     @State private var isProcessing = false
+    @State private var lastGeoSize: CGSize = .zero
 
     init(
         image: UIImage,
@@ -45,6 +46,7 @@ struct CropView: View {
                 imageArea(in: geo)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            .onGeometryChange(for: CGSize.self, of: { $0.size }) { lastGeoSize = $0 }
 
             // Controls — respect safe area for Dynamic Island / home indicator
             VStack(spacing: 0) {
@@ -78,9 +80,7 @@ struct CropView: View {
             // Close when pristine, Reset when modified
             Button {
                 if state.hasModifications {
-                    withAnimation(.smooth(duration: 0.4)) {
-                        state.resetAll()
-                    }
+                    resetToBaseline()
                 } else {
                     onCancel()
                 }
@@ -235,25 +235,28 @@ struct CropView: View {
     /// Height reserved by all controls above and below the image.
     private static let controlsHeight: CGFloat = 44 + 48 + 44 + 44 + 48
 
-    @ViewBuilder
-    private func imageArea(in geo: GeometryProxy) -> some View {
-        let availableWidth = geo.size.width - 32
-        let availableHeight = geo.size.height - Self.controlsHeight
-
+    /// Compute the fitted image dimensions for a given rotation state.
+    private func fitSize(geoSize: CGSize, swapped: Bool) -> (width: CGFloat, height: CGFloat) {
+        let availableWidth = geoSize.width - 32
+        let availableHeight = geoSize.height - Self.controlsHeight
         let baseW = displayImage.size.width
         let baseH = displayImage.size.height
-        let postW = isSwapped ? baseH : baseW
-        let postH = isSwapped ? baseW : baseH
+        let postW = swapped ? baseH : baseW
+        let postH = swapped ? baseW : baseH
         let imgAspect = postW / max(postH, 1)
+        let w = min(availableWidth, availableHeight * imgAspect)
+        let h = w / imgAspect
+        if h > availableHeight {
+            return (availableHeight * imgAspect, availableHeight)
+        }
+        return (w, h)
+    }
 
-        let (fitWidth, fitHeight): (CGFloat, CGFloat) = {
-            let w = min(availableWidth, availableHeight * imgAspect)
-            let h = w / imgAspect
-            if h > availableHeight {
-                return (availableHeight * imgAspect, availableHeight)
-            }
-            return (w, h)
-        }()
+    @ViewBuilder
+    private func imageArea(in geo: GeometryProxy) -> some View {
+        let fit = fitSize(geoSize: geo.size, swapped: isSwapped)
+        let fitWidth = fit.width
+        let fitHeight = fit.height
 
         ZStack {
             // Image + overlay in the same coordinate space.
@@ -282,10 +285,17 @@ struct CropView: View {
             .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .local) }) { frame in
                 state.imageDisplayFrame = frame
                 if !hasInitialized {
+                    // When restoring an existing rotation, set rotation first
+                    // and wait for the frame to update to the rotated dimensions
+                    // before placing the crop rect.
+                    if let existing = existingCrop, existing.rotation != 0,
+                       state.rotationAngle != Double(existing.rotation)
+                    {
+                        state.rotationAngle = Double(existing.rotation)
+                        return
+                    }
                     hasInitialized = true
                     initializeCropState()
-                } else if isRotating {
-                    state.cropRect = frame
                 }
             }
             .scaleEffect(state.imageScale)
@@ -293,24 +303,48 @@ struct CropView: View {
 
             // Screen-space handles (outside transform chain — constant size at any zoom)
             CropHandlesView(screenCropRect: state.screenCropRect)
+                .frame(width: fitWidth, height: fitHeight)
 
-            // Gesture layer — ExtendedTouchView extends touch area 44pt
-            // beyond bounds so boundary handles are reachable.
+            // Gesture layer extends 44pt beyond image frame so handles at
+            // the image boundary can be grabbed from outside.
             CropGestureOverlay(
                 state: state,
-                frameSize: CGSize(width: fitWidth, height: fitHeight)
+                frameSize: CGSize(width: fitWidth, height: fitHeight),
+                touchInset: 44
             )
-            .frame(width: fitWidth, height: fitHeight)
+            .frame(width: fitWidth + 88, height: fitHeight + 88)
         }
     }
 
     // MARK: - Actions
 
+    private func resetToBaseline() {
+        // Precompute the baseline frame in case rotation changes isSwapped.
+        let baseRotDeg = Int(state.baselineRotation.truncatingRemainder(dividingBy: 360))
+        let baseSwapped = (baseRotDeg + 360) % 360 == 90 || (baseRotDeg + 360) % 360 == 270
+        let baseFit = fitSize(geoSize: lastGeoSize, swapped: baseSwapped)
+        let baseFrame = CGRect(x: 0, y: 0, width: baseFit.width, height: baseFit.height)
+        let base = state.baselineNormalizedCrop
+        let baseCrop = CGRect(
+            x: base.origin.x * baseFrame.width,
+            y: base.origin.y * baseFrame.height,
+            width: base.width * baseFrame.width,
+            height: base.height * baseFrame.height
+        )
+
+        withAnimation(.smooth(duration: 0.4)) {
+            state.resetAll()
+            // Override the cropRect that resetAll set (it used the old frame).
+            state.cropRect = baseCrop
+        }
+    }
+
     private func initializeCropState() {
         state.originalImageRatio = displayImage.size.width / max(displayImage.size.height, 1)
 
         if let existing = existingCrop {
-            state.rotationAngle = Double(existing.rotation)
+            // Rotation was already set in onGeometryChange (before this call),
+            // and imageDisplayFrame now has the correct rotated dimensions.
             let frame = state.imageDisplayFrame
             state.cropRect = CGRect(
                 x: frame.origin.x + existing.cropRect.origin.x * frame.width,
@@ -318,8 +352,10 @@ struct CropView: View {
                 width: existing.cropRect.width * frame.width,
                 height: existing.cropRect.height * frame.height
             )
+            state.setBaseline(rotation: Double(existing.rotation), normalizedCrop: existing.cropRect)
         } else {
             state.resetCrop()
+            state.setBaseline(rotation: 0, normalizedCrop: CGRect(x: 0, y: 0, width: 1, height: 1))
         }
     }
 
@@ -354,20 +390,30 @@ struct CropView: View {
         }
         postRotationNormalizedCrop = postNorm
 
+        // Precompute the new frame so cropRect can be set inside withAnimation
+        // (onGeometryChange callbacks don't inherit the animation transaction).
+        let newRotDeg = ((state.rotationDegrees + normDeg) % 360)
+        let newSwapped = newRotDeg == 90 || newRotDeg == 270
+        let newFit = fitSize(geoSize: lastGeoSize, swapped: newSwapped)
+        let newFrame = CGRect(x: 0, y: 0, width: newFit.width, height: newFit.height)
+
         isRotating = true
         withAnimation(.smooth(duration: 0.4)) {
             state.rotationAngle += Double(degrees)
             state.imageOffset = .zero
             state.imageScale = 1.0
+            // Set cropRect to the new full frame within the animation transaction
+            // so overlay and handles interpolate smoothly with the frame transition.
+            state.cropRect = newFrame
         } completion: {
             isRotating = false
             if let norm = postRotationNormalizedCrop {
-                let newFrame = state.imageDisplayFrame
+                let currentFrame = state.imageDisplayFrame
                 let viewRect = CGRect(
-                    x: newFrame.origin.x + norm.origin.x * newFrame.width,
-                    y: newFrame.origin.y + norm.origin.y * newFrame.height,
-                    width: norm.width * newFrame.width,
-                    height: norm.height * newFrame.height
+                    x: currentFrame.origin.x + norm.origin.x * currentFrame.width,
+                    y: currentFrame.origin.y + norm.origin.y * currentFrame.height,
+                    width: norm.width * currentFrame.width,
+                    height: norm.height * currentFrame.height
                 )
                 withAnimation(.smooth(duration: 0.25)) {
                     state.cropRect = state.nearestValidCrop(viewRect, ratio: state.effectiveLockedRatio)

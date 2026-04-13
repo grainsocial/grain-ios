@@ -97,6 +97,20 @@ final class CropState {
     /// -- Layout reference --
     var imageDisplayFrame: CGRect = .zero
 
+<<<<<<< Updated upstream
+    /// -- Baseline (incoming crop state, used for hasModifications / resetAll) --
+    /// Normalized crop rect from the incoming CropResult (0…1 in post-rotation space).
+    /// Full image = (0, 0, 1, 1).
+    private(set) var baselineNormalizedCrop: CGRect = .init(x: 0, y: 0, width: 1, height: 1)
+=======
+    // -- Baseline (incoming crop state, used for hasModifications / resetAll) --
+    /// Normalized crop rect from the incoming CropResult (0…1 in post-rotation space).
+    /// Full image = (0, 0, 1, 1).
+    private(set) var baselineNormalizedCrop: CGRect = CGRect(x: 0, y: 0, width: 1, height: 1)
+>>>>>>> Stashed changes
+    /// Incoming rotation in degrees (0, 90, 180, 270).
+    private(set) var baselineRotation: Double = 0
+
     var effectiveLockedRatio: CGFloat? {
         if selectedPreset == .original {
             return originalImageRatio
@@ -110,19 +124,37 @@ final class CropState {
 
     // MARK: - Initialization
 
+    /// Store the incoming crop state as baseline for hasModifications / resetAll.
+    func setBaseline(rotation: Double, normalizedCrop: CGRect) {
+        baselineRotation = rotation
+        baselineNormalizedCrop = normalizedCrop
+    }
+
     func resetCrop() {
         cropRect = imageDisplayFrame
         imageOffset = .zero
         imageScale = 1.0
     }
 
+    /// Restores state to the incoming (baseline) crop, not the uncropped original.
     func resetAll() {
-        rotationAngle = 0
         selectedPreset = .free
         isRatioLocked = false
         lockedRatio = nil
         isPortrait = false
-        resetCrop()
+        imageOffset = .zero
+        imageScale = 1.0
+        rotationAngle = baselineRotation
+        // Restore crop rect from baseline normalized coordinates.
+        // imageDisplayFrame may change after rotation — caller must handle
+        // the frame update via onGeometryChange if rotation changed.
+        let frame = imageDisplayFrame
+        cropRect = CGRect(
+            x: frame.origin.x + baselineNormalizedCrop.origin.x * frame.width,
+            y: frame.origin.y + baselineNormalizedCrop.origin.y * frame.height,
+            width: baselineNormalizedCrop.width * frame.width,
+            height: baselineNormalizedCrop.height * frame.height
+        )
     }
 
     /// Resets only zoom and pan, preserving crop rect and rotation.
@@ -136,16 +168,38 @@ final class CropState {
         imageScale != 1.0 || imageOffset != .zero
     }
 
-    /// True when any crop, rotation, or zoom change has been made.
+    /// Current crop as a normalized rect (0…1) in the image display frame.
+    var normalizedCropRect: CGRect {
+        let frame = imageDisplayFrame
+        guard frame.width > 0, frame.height > 0 else { return .zero }
+        return CGRect(
+            x: (cropRect.minX - frame.minX) / frame.width,
+            y: (cropRect.minY - frame.minY) / frame.height,
+            width: cropRect.width / frame.width,
+            height: cropRect.height / frame.height
+        )
+    }
+
+    /// True when any crop, rotation, or zoom change has been made
+    /// relative to the incoming (baseline) state.
     var hasModifications: Bool {
-        rotationAngle != 0
-            || selectedPreset != .free
-            || isRatioLocked
-            || isViewModified
-            || abs(cropRect.minX - imageDisplayFrame.minX) > 1
-            || abs(cropRect.minY - imageDisplayFrame.minY) > 1
-            || abs(cropRect.width - imageDisplayFrame.width) > 1
-            || abs(cropRect.height - imageDisplayFrame.height) > 1
+        // Rotation changed?
+        let rotDiff = (rotationAngle - baselineRotation).truncatingRemainder(dividingBy: 360)
+        if abs(rotDiff) > 0.1 { return true }
+
+        // Zoom/pan?
+        if isViewModified { return true }
+
+        // Crop rect changed? Compare normalized to avoid frame-size dependency.
+        let norm = normalizedCropRect
+        let base = baselineNormalizedCrop
+        if abs(norm.minX - base.minX) > 0.005
+            || abs(norm.minY - base.minY) > 0.005
+            || abs(norm.width - base.width) > 0.005
+            || abs(norm.height - base.height) > 0.005
+        { return true }
+
+        return false
     }
 
     /// Zoom and pan so the current crop rect fills the frame, centered.
