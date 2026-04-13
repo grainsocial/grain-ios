@@ -82,8 +82,6 @@ struct CreateGalleryView: View {
     /// into different scroll contexts, producing wrong-direction morphs.
     @State private var isAnimatingMode = false
     @State private var editorMode: EditorMode = .preview
-    @State private var cropRequest: CropRequest?
-    @State private var croppingPhotoID: UUID?
     @State private var showDiscardAlert = false
 
     let client: XRPCClient
@@ -167,13 +165,6 @@ struct CreateGalleryView: View {
         .onChange(of: photoItems.first?.id) {
             createSignposter.emitEvent("TaskSpawned", "source=firstPhotoChange,itemCount=\(photoItems.count)")
             Task { await detectLocation() }
-        }
-        .cropSheet(request: $cropRequest) { result in
-            guard let id = croppingPhotoID,
-                  let idx = photoItems.firstIndex(where: { $0.id == id }) else { return }
-            photoItems[idx].thumbnail = PhotoItem.makeThumbnail(from: result.croppedImage)
-            photoItems[idx].carouselPreview = PhotoItem.makeCarouselPreview(from: result.croppedImage, width: UIScreen.main.bounds.width)
-            photoItems[idx].cropResult = result
         }
         .fullScreenCover(isPresented: $showCamera) {
             CameraPicker { image, metadata in
@@ -264,12 +255,6 @@ struct CreateGalleryView: View {
                 isAnimatingMode: $isAnimatingMode,
                 mode: $editorMode,
                 sendExif: sendExif,
-                onCropTapped: { id in
-                    guard let idx = photoItems.firstIndex(where: { $0.id == id }) else { return }
-                    let image = photoItems[idx].originalImage ?? photoItems[idx].cameraImage ?? photoItems[idx].carouselPreview
-                    croppingPhotoID = id
-                    cropRequest = CropRequest(image: image, existingCrop: photoItems[idx].cropResult)
-                },
                 onDeleteItem: { item in
                     guard case let .picker(pickerItem) = item.source,
                           let id = pickerItem.itemIdentifier else { return }

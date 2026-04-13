@@ -338,9 +338,9 @@ struct GalleryEditor: View {
     @Binding var isAnimatingMode: Bool
     @Binding var mode: EditorMode
     let sendExif: Bool
-    var onCropTapped: ((UUID) -> Void)?
     var onDeleteItem: ((PhotoItem) -> Void)?
     @State private var gridContainerWidth: CGFloat = 0
+    @State private var cropRequest: CropRequest?
     @State private var stripState = StripScrollState()
     @State private var reorderState = ReorderDragState()
 
@@ -417,14 +417,17 @@ struct GalleryEditor: View {
         Section {
             photoLayout
 
-            if let onCropTapped, let id = selectedPhotoID {
+            if let id = selectedPhotoID,
+               let idx = items.firstIndex(where: { $0.id == id })
+            {
                 Button {
-                    onCropTapped(id)
+                    let image = items[idx].originalImage ?? items[idx].cameraImage ?? items[idx].carouselPreview
+                    cropRequest = CropRequest(image: image, existingCrop: items[idx].cropResult)
                 } label: {
                     Label("Crop Photo", systemImage: "crop.rotate")
                         .frame(maxWidth: .infinity)
                 }
-                .listRowInsets(EdgeInsets(top: -6, leading: 20, bottom: 8, trailing: 20))
+                .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 11, trailing: 20))
                 .listRowSeparator(.hidden)
             }
         } header: {
@@ -435,6 +438,13 @@ struct GalleryEditor: View {
             }
             .pickerStyle(.segmented)
             .disabled(isAnimatingMode)
+        }
+        .cropSheet(request: $cropRequest) { result in
+            guard let id = selectedPhotoID,
+                  let idx = items.firstIndex(where: { $0.id == id }) else { return }
+            items[idx].thumbnail = PhotoItem.makeThumbnail(from: result.croppedImage)
+            items[idx].carouselPreview = PhotoItem.makeCarouselPreview(from: result.croppedImage, width: UIScreen.main.bounds.width)
+            items[idx].cropResult = result
         }
     }
 
