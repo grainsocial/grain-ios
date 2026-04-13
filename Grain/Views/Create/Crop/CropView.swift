@@ -75,13 +75,31 @@ struct CropView: View {
 
     private var toolbar: some View {
         HStack {
-            Button("Cancel") {
-                onCancel()
+            // Cancel when pristine, Reset when modified
+            if state.hasModifications {
+                Button {
+                    withAnimation(.smooth(duration: 0.4)) {
+                        state.resetAll()
+                    }
+                } label: {
+                    Label("Reset", systemImage: "arrow.counterclockwise")
+                        .font(.body)
+                }
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .glassEffect(.regular.interactive(), in: .capsule)
+                .transition(.blurReplace)
+            } else {
+                Button("Cancel") {
+                    onCancel()
+                }
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .glassEffect(.regular.interactive(), in: .capsule)
+                .transition(.blurReplace)
             }
-            .foregroundStyle(.primary)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .glassEffect(.regular.interactive(), in: .capsule)
 
             Spacer()
 
@@ -94,6 +112,7 @@ struct CropView: View {
             .padding(.vertical, 8)
             .glassEffect(.regular.interactive(), in: .capsule)
         }
+        .animation(.smooth(duration: 0.3), value: state.hasModifications)
     }
 
     // MARK: - Tool buttons — top row
@@ -115,20 +134,14 @@ struct CropView: View {
             toolButton("rotate.right") { rotate(degrees: 90) }
             toolButton("grid", active: state.showGrid) { state.showGrid.toggle() }
 
-            toolButton("square.arrowtriangle.4.outward") {
+            toolButton("plus.magnifyingglass") {
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
                     state.zoomToCrop()
                 }
             }
 
-            toolButton("arrow.counterclockwise") {
-                withAnimation(.smooth(duration: 0.4)) {
-                    state.resetAll()
-                }
-            }
-
             if state.isViewModified {
-                toolButton("arrow.uturn.backward") {
+                toolButton("minus.magnifyingglass") {
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
                         state.resetView()
                     }
