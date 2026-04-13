@@ -47,6 +47,16 @@ struct CropHandlesView: View, @preconcurrency Animatable {
         min(max(shortSide * 0.006, 1), 2)
     }
 
+    /// Half-width at the tapered arm end — visible but thinner than the full handle.
+    private var armEndHalf: CGFloat {
+        handleThickness * 0.3
+    }
+
+    /// Length of the constant-width section before the taper begins.
+    private var armConstant: CGFloat {
+        handleLength * 0.35
+    }
+
     var body: some View {
         ZStack {
             borderPath
@@ -54,6 +64,7 @@ struct CropHandlesView: View, @preconcurrency Animatable {
             moveIndicatorPill
             moveIndicatorLines
         }
+        .shadow(color: .black.opacity(0.6), radius: 1.5, x: 0, y: 0.5)
         .allowsHitTesting(false)
     }
 
@@ -68,101 +79,178 @@ struct CropHandlesView: View, @preconcurrency Animatable {
 
     // MARK: - Corner + edge handles
 
-    /// Draws tapered corner L-brackets that transition from thick handle → thin
-    /// border, plus edge midpoint bars.  All filled shapes, not strokes, so the
-    /// taper is smooth.
+    /// Draws single-polygon L-bracket corners with constant-width section
+    /// tapering to a visible minimum at the tips, plus edge midpoint bars.
+    /// Edge bars are hidden when the crop rect is too small.
     private var handlePath: some View {
         let r = screenCropRect
         let thin = borderThickness / 2
         let thick = handleThickness / 2
 
+        // Edge bars hidden when crop too small: need room for both corners + bar + padding
+        let edgeMinSize = handleLength * 3 + handleLength
+
         return Path { path in
-            // Corners — tapered L-brackets
-            taperCorner(&path, at: CGPoint(x: r.minX, y: r.minY), xDir: 1, yDir: 1,
-                        armLen: handleLength, thick: thick, thin: thin)
-            taperCorner(&path, at: CGPoint(x: r.maxX, y: r.minY), xDir: -1, yDir: 1,
-                        armLen: handleLength, thick: thick, thin: thin)
-            taperCorner(&path, at: CGPoint(x: r.minX, y: r.maxY), xDir: 1, yDir: -1,
-                        armLen: handleLength, thick: thick, thin: thin)
-            taperCorner(&path, at: CGPoint(x: r.maxX, y: r.maxY), xDir: -1, yDir: -1,
-                        armLen: handleLength, thick: thick, thin: thin)
+            // Corners — single L-bracket polygon per corner
+            cornerBracket(&path, at: CGPoint(x: r.minX, y: r.minY), xDir: 1, yDir: 1,
+                          armLen: handleLength, thick: thick, thin: thin)
+            cornerBracket(&path, at: CGPoint(x: r.maxX, y: r.minY), xDir: -1, yDir: 1,
+                          armLen: handleLength, thick: thick, thin: thin)
+            cornerBracket(&path, at: CGPoint(x: r.minX, y: r.maxY), xDir: 1, yDir: -1,
+                          armLen: handleLength, thick: thick, thin: thin)
+            cornerBracket(&path, at: CGPoint(x: r.maxX, y: r.maxY), xDir: -1, yDir: -1,
+                          armLen: handleLength, thick: thick, thin: thin)
 
             // Edge bars — bottom, left, right (no top — move indicator replaces it)
-            edgeBar(&path, center: CGPoint(x: r.midX, y: r.maxY), horizontal: true,
-                    barLen: handleLength, thick: thick, thin: thin)
-            edgeBar(&path, center: CGPoint(x: r.minX, y: r.midY), horizontal: false,
-                    barLen: handleLength, thick: thick, thin: thin)
-            edgeBar(&path, center: CGPoint(x: r.maxX, y: r.midY), horizontal: false,
-                    barLen: handleLength, thick: thick, thin: thin)
+            if r.width >= edgeMinSize {
+                edgeBar(&path, center: CGPoint(x: r.midX, y: r.maxY), horizontal: true,
+                        barLen: handleLength, thick: thick, thin: thin)
+            }
+            if r.height >= edgeMinSize {
+                edgeBar(&path, center: CGPoint(x: r.minX, y: r.midY), horizontal: false,
+                        barLen: handleLength, thick: thick, thin: thin)
+                edgeBar(&path, center: CGPoint(x: r.maxX, y: r.midY), horizontal: false,
+                        barLen: handleLength, thick: thick, thin: thin)
+            }
         }
-        .fill(Color.accentColor)
+        .fill(Color.white)
     }
 
-    /// A single corner L-bracket drawn as two filled trapezoids that taper from
-    /// `thick` (at the corner) to `thin` (at the arm ends).
-    private func taperCorner(
+    /// A single corner L-bracket as one continuous 10-vertex polygon.
+    /// Both arms have a constant-width section near the corner that
+    /// tapers to `armEndHalf` at the tips.
+    private func cornerBracket(
         _ path: inout Path,
         at pt: CGPoint,
         xDir: CGFloat, yDir: CGFloat,
         armLen: CGFloat,
-        thick: CGFloat, thin: CGFloat
+        thick: CGFloat, thin _: CGFloat
     ) {
-        // Horizontal arm
-        let hEnd = CGPoint(x: pt.x + armLen * xDir, y: pt.y)
-        path.move(to: CGPoint(x: pt.x, y: pt.y - thick * yDir))
-        path.addLine(to: CGPoint(x: hEnd.x, y: hEnd.y - thin * yDir))
-        path.addLine(to: CGPoint(x: hEnd.x, y: hEnd.y + thin * yDir))
-        path.addLine(to: CGPoint(x: pt.x, y: pt.y + thick * yDir))
-        path.closeSubpath()
+        let endHalf = armEndHalf
+        let constLen = armConstant
+        let taperLen = armLen - constLen
 
-        // Vertical arm
+        // Key points along horizontal arm
+        let hConst = CGPoint(x: pt.x + constLen * xDir, y: pt.y)
+        let hEnd = CGPoint(x: pt.x + armLen * xDir, y: pt.y)
+
+        // Key points along vertical arm
+        let vConst = CGPoint(x: pt.x, y: pt.y + constLen * yDir)
         let vEnd = CGPoint(x: pt.x, y: pt.y + armLen * yDir)
-        path.move(to: CGPoint(x: pt.x - thick * xDir, y: pt.y))
-        path.addLine(to: CGPoint(x: vEnd.x - thin * xDir, y: vEnd.y))
-        path.addLine(to: CGPoint(x: vEnd.x + thin * xDir, y: vEnd.y))
-        path.addLine(to: CGPoint(x: pt.x + thick * xDir, y: pt.y))
-        path.closeSubpath()
+
+        // Corner rounding radius — proportional to thickness
+        let cornerR = thick * 0.5
+        // Tip rounding radius — smaller
+        let tipR = endHalf * 0.8
+
+        // 10-vertex L-bracket polygon, clockwise from horizontal arm outer tip
+        let vertices: [CGPoint] = [
+            // Horizontal arm — outer edge (away from corner center)
+            CGPoint(x: hEnd.x, y: hEnd.y - endHalf * yDir), // 0: h-arm tip outer
+            CGPoint(x: hConst.x, y: hConst.y - thick * yDir), // 1: h-arm constant outer
+            // Inner corner junction
+            CGPoint(x: pt.x - thick * xDir, y: pt.y - thick * yDir), // 2: outer corner
+            // Vertical arm — outer edge
+            CGPoint(x: vConst.x - thick * xDir, y: vConst.y), // 3: v-arm constant outer
+            CGPoint(x: vEnd.x - endHalf * xDir, y: vEnd.y), // 4: v-arm tip outer
+            // Vertical arm — inner edge
+            CGPoint(x: vEnd.x + endHalf * xDir, y: vEnd.y), // 5: v-arm tip inner
+            CGPoint(x: vConst.x + thick * xDir, y: vConst.y), // 6: v-arm constant inner
+            // Inner L junction
+            CGPoint(x: pt.x + thick * xDir, y: pt.y + thick * yDir), // 7: inner corner
+            // Horizontal arm — inner edge
+            CGPoint(x: hConst.x, y: hConst.y + thick * yDir), // 8: h-arm constant inner
+            CGPoint(x: hEnd.x, y: hEnd.y + endHalf * yDir), // 9: h-arm tip inner
+        ]
+
+        // Per-vertex corner radii
+        let radii: [CGFloat] = [
+            tipR, // 0: h-tip outer
+            taperLen > 1 ? cornerR * 0.3 : 0, // 1: start of taper
+            cornerR, // 2: outer corner
+            taperLen > 1 ? cornerR * 0.3 : 0, // 3: start of taper
+            tipR, // 4: v-tip outer
+            tipR, // 5: v-tip inner
+            taperLen > 1 ? cornerR * 0.3 : 0, // 6: start of taper
+            cornerR, // 7: inner corner
+            taperLen > 1 ? cornerR * 0.3 : 0, // 8: start of taper
+            tipR, // 9: h-tip inner
+        ]
+
+        roundedPolygon(&path, points: vertices, radii: radii)
     }
 
-    /// Midpoint bar drawn as a filled shape, thick at center tapering to thin at ends.
+    /// Midpoint bar drawn as a rounded polygon, thick at center tapering to thin at ends.
     private func edgeBar(
         _ path: inout Path,
         center: CGPoint,
         horizontal: Bool,
         barLen: CGFloat,
-        thick: CGFloat, thin: CGFloat
+        thick: CGFloat, thin _: CGFloat
     ) {
         let half = barLen / 2
+        let endHalf = armEndHalf
+        let tipR = endHalf * 0.8
+        let transR = thick * 0.3
+
         if horizontal {
-            // Horizontal bar (top/bottom edge)
-            path.move(to: CGPoint(x: center.x - half, y: center.y - thin))
-            path.addLine(to: CGPoint(x: center.x - half * 0.4, y: center.y - thick))
-            path.addLine(to: CGPoint(x: center.x + half * 0.4, y: center.y - thick))
-            path.addLine(to: CGPoint(x: center.x + half, y: center.y - thin))
-            path.addLine(to: CGPoint(x: center.x + half, y: center.y + thin))
-            path.addLine(to: CGPoint(x: center.x + half * 0.4, y: center.y + thick))
-            path.addLine(to: CGPoint(x: center.x - half * 0.4, y: center.y + thick))
-            path.addLine(to: CGPoint(x: center.x - half, y: center.y + thin))
-            path.closeSubpath()
+            let vertices: [CGPoint] = [
+                CGPoint(x: center.x - half, y: center.y - endHalf),
+                CGPoint(x: center.x - half * 0.4, y: center.y - thick),
+                CGPoint(x: center.x + half * 0.4, y: center.y - thick),
+                CGPoint(x: center.x + half, y: center.y - endHalf),
+                CGPoint(x: center.x + half, y: center.y + endHalf),
+                CGPoint(x: center.x + half * 0.4, y: center.y + thick),
+                CGPoint(x: center.x - half * 0.4, y: center.y + thick),
+                CGPoint(x: center.x - half, y: center.y + endHalf),
+            ]
+            let radii: [CGFloat] = [tipR, transR, transR, tipR, tipR, transR, transR, tipR]
+            roundedPolygon(&path, points: vertices, radii: radii)
         } else {
-            // Vertical bar (left/right edge)
-            path.move(to: CGPoint(x: center.x - thin, y: center.y - half))
-            path.addLine(to: CGPoint(x: center.x - thick, y: center.y - half * 0.4))
-            path.addLine(to: CGPoint(x: center.x - thick, y: center.y + half * 0.4))
-            path.addLine(to: CGPoint(x: center.x - thin, y: center.y + half))
-            path.addLine(to: CGPoint(x: center.x + thin, y: center.y + half))
-            path.addLine(to: CGPoint(x: center.x + thick, y: center.y + half * 0.4))
-            path.addLine(to: CGPoint(x: center.x + thick, y: center.y - half * 0.4))
-            path.addLine(to: CGPoint(x: center.x + thin, y: center.y - half))
-            path.closeSubpath()
+            let vertices: [CGPoint] = [
+                CGPoint(x: center.x - endHalf, y: center.y - half),
+                CGPoint(x: center.x - thick, y: center.y - half * 0.4),
+                CGPoint(x: center.x - thick, y: center.y + half * 0.4),
+                CGPoint(x: center.x - endHalf, y: center.y + half),
+                CGPoint(x: center.x + endHalf, y: center.y + half),
+                CGPoint(x: center.x + thick, y: center.y + half * 0.4),
+                CGPoint(x: center.x + thick, y: center.y - half * 0.4),
+                CGPoint(x: center.x + endHalf, y: center.y - half),
+            ]
+            let radii: [CGFloat] = [tipR, transR, transR, tipR, tipR, transR, transR, tipR]
+            roundedPolygon(&path, points: vertices, radii: radii)
         }
+    }
+
+    /// Draw a closed polygon with per-vertex corner rounding using tangent arcs.
+    private func roundedPolygon(_ path: inout Path, points: [CGPoint], radii: [CGFloat]) {
+        guard points.count >= 3 else { return }
+        let n = points.count
+
+        // Start at the midpoint of the edge approaching vertex 0
+        let startX = (points[n - 1].x + points[0].x) / 2
+        let startY = (points[n - 1].y + points[0].y) / 2
+        path.move(to: CGPoint(x: startX, y: startY))
+
+        for i in 0 ..< n {
+            let curr = points[i]
+            let next = points[(i + 1) % n]
+            let r = radii[i]
+
+            if r > 0.1 {
+                path.addArc(tangent1End: curr, tangent2End: next, radius: r)
+            } else {
+                path.addLine(to: curr)
+            }
+        }
+        path.closeSubpath()
     }
 
     // MARK: - Move indicator (3-line grab bar with background pill)
 
     private var moveIndicatorPill: some View {
         let cx = screenCropRect.midX
-        let cy = screenCropRect.minY + 14
+        let cy = screenCropRect.minY - 14
         let pillWidth: CGFloat = 28
         let pillHeight: CGFloat = 18
 
@@ -177,12 +265,12 @@ struct CropHandlesView: View, @preconcurrency Animatable {
                 cornerSize: CGSize(width: pillHeight / 2, height: pillHeight / 2)
             )
         }
-        .fill(Color.accentColor.opacity(0.2))
+        .fill(Color.white.opacity(0.2))
     }
 
     private var moveIndicatorLines: some View {
         let cx = screenCropRect.midX
-        let cy = screenCropRect.minY + 14
+        let cy = screenCropRect.minY - 14
         let lineWidth: CGFloat = 16
         let spacing: CGFloat = 3.5
 
@@ -193,6 +281,6 @@ struct CropHandlesView: View, @preconcurrency Animatable {
                 path.addLine(to: CGPoint(x: cx + lineWidth / 2, y: y))
             }
         }
-        .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+        .stroke(Color.white, style: StrokeStyle(lineWidth: 2, lineCap: .round))
     }
 }
