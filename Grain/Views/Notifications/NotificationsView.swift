@@ -76,7 +76,7 @@ struct NotificationsView: View {
                 .environment(auth)
             }
             .task {
-                if viewModel.notifications.isEmpty {
+                if viewModel.notifications.isEmpty || viewModel.unseenCount > 0 {
                     await viewModel.loadInitial(auth: auth.authContext())
                 }
                 if viewModel.unseenCount > 0 {
