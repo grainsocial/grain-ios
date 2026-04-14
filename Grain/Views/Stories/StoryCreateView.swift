@@ -1,6 +1,9 @@
 import AVFoundation
+import os
 import PhotosUI
 import SwiftUI
+
+private let storyCreateSignposter = OSSignposter(subsystem: "social.grain.grain", category: "StoryCreate")
 
 struct StoryCreateView: View {
     @Environment(AuthManager.self) private var auth
@@ -154,9 +157,14 @@ struct StoryCreateView: View {
         isUploading = true
         errorMessage = nil
 
+        let createID = storyCreateSignposter.makeSignpostID()
+        let totalState = storyCreateSignposter.beginInterval("Total", id: createID)
+
         do {
-            let (resized, size) = ImageProcessing.resizeImage(previewImage, maxDimension: 2000, maxBytes: 900_000)
+            let (resized, size) = await ImageProcessing.resizeImage(previewImage, maxDimension: 2000, maxBytes: 900_000)
+            let uploadState = storyCreateSignposter.beginInterval("UploadBlob", id: createID, "bytes=\(resized.count)")
             let response = try await client.uploadBlob(data: resized, mimeType: "image/jpeg", auth: authContext)
+            storyCreateSignposter.endInterval("UploadBlob", uploadState)
 
             let blobDict: [String: AnyCodable] = [
                 "$type": AnyCodable(response.blob.type ?? "blob"),
@@ -191,15 +199,18 @@ struct StoryCreateView: View {
                 ] as [String: AnyCodable])
             }
 
+            let recordState = storyCreateSignposter.beginInterval("StoryRecord", id: createID)
             let storyResult = try await client.createRecord(
                 collection: "social.grain.story",
                 repo: repo,
                 record: AnyCodable(record),
                 auth: authContext
             )
+            storyCreateSignposter.endInterval("StoryRecord", recordState)
 
             // Cross-post to Bluesky if toggled
             if postToBluesky, let storyUri = storyResult.uri {
+                let bskyState = storyCreateSignposter.beginInterval("BlueskyCrossPost", id: createID)
                 let rkey = storyUri.split(separator: "/").last.map(String.init) ?? ""
                 let postURL = "https://grain.social/profile/\(repo)/story/\(rkey)"
                 do {
@@ -216,18 +227,22 @@ struct StoryCreateView: View {
                         repo: repo,
                         auth: authContext
                     )
+                    storyCreateSignposter.endInterval("BlueskyCrossPost", bskyState)
                 } catch {
-                    // Don't fail the story creation if cross-post fails
+                    storyCreateSignposter.endInterval("BlueskyCrossPost", bskyState, "error=\(error.localizedDescription)")
                 }
             }
 
+            storyCreateSignposter.endInterval("Total", totalState, "result=success")
             onCreated?()
             dismiss()
         } catch let XRPCError.httpError(statusCode, body) {
             let bodyStr = body.flatMap { String(data: $0, encoding: .utf8) } ?? "no body"
             errorMessage = "HTTP \(statusCode): \(bodyStr)"
+            storyCreateSignposter.endInterval("Total", totalState, "result=httpError(\(statusCode))")
         } catch {
             errorMessage = error.localizedDescription
+            storyCreateSignposter.endInterval("Total", totalState, "result=error")
         }
         isUploading = false
     }
