@@ -43,14 +43,14 @@ struct CropView: View {
             Color(.systemBackground).ignoresSafeArea()
 
             GeometryReader { geo in
-                imageArea(in: geo)
+                Color(.systemBackground)
+                imageArea(in: geo, available: geo.size)
                     .position(x: geo.size.width / 2, y: geo.size.height / 2)
             }
             .onGeometryChange(for: CGSize.self, of: { $0.size }) { lastGeoSize = $0 }
-
-            // Controls — separate ZStack layer so glass buttons are
-            // always rendered above the image / handles / overlay.
-            VStack(spacing: 0) {
+            // Controls attach as safe-area insets so the GeometryReader's geo
+            // shrinks to the image zone — tall images can't extend behind them.
+            .safeAreaInset(edge: .top, spacing: 0) {
                 VStack(spacing: 8) {
                     toolbar
                         .padding(.horizontal, 16)
@@ -58,17 +58,17 @@ struct CropView: View {
                     toolButtons
                 }
                 .padding(.top, 8)
-
-                Spacer()
-
+                .tint(.primary)
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
                 VStack(spacing: 8) {
                     bottomControls
 
                     AspectRatioBar(state: state)
                 }
                 .padding(.bottom, 16)
+                .tint(.primary)
             }
-            .tint(.primary)
         }
         .statusBarHidden()
         .persistentSystemOverlays(.hidden)
@@ -237,11 +237,11 @@ struct CropView: View {
     // MARK: - Image area
 
     /// Compute the fitted image dimensions for a given rotation state.
-    /// geoSize is already the image-zone size (GeometryReader sits between
-    /// the controls in a VStack, so no controlsHeight subtraction needed).
-    private func fitSize(geoSize: CGSize, swapped: Bool) -> (width: CGFloat, height: CGFloat) {
-        let availableWidth = geoSize.width - 32
-        let availableHeight = geoSize.height
+    /// availableSize is the image-zone after subtracting the top/bottom
+    /// control bands so tall images can't extend behind them.
+    private func fitSize(available: CGSize, swapped: Bool) -> (width: CGFloat, height: CGFloat) {
+        let availableWidth = available.width - 32
+        let availableHeight = available.height
         let baseW = displayImage.size.width
         let baseH = displayImage.size.height
         let postW = swapped ? baseH : baseW
@@ -256,8 +256,8 @@ struct CropView: View {
     }
 
     @ViewBuilder
-    private func imageArea(in geo: GeometryProxy) -> some View {
-        let fit = fitSize(geoSize: geo.size, swapped: isSwapped)
+    private func imageArea(in _: GeometryProxy, available: CGSize) -> some View {
+        let fit = fitSize(available: available, swapped: isSwapped)
         let fitWidth = fit.width
         let fitHeight = fit.height
 
@@ -331,7 +331,7 @@ struct CropView: View {
         // Precompute the baseline frame in case rotation changes isSwapped.
         let baseRotDeg = Int(state.baselineRotation.truncatingRemainder(dividingBy: 360))
         let baseSwapped = (baseRotDeg + 360) % 360 == 90 || (baseRotDeg + 360) % 360 == 270
-        let baseFit = fitSize(geoSize: lastGeoSize, swapped: baseSwapped)
+        let baseFit = fitSize(available: lastGeoSize, swapped: baseSwapped)
         let baseFrame = CGRect(x: 0, y: 0, width: baseFit.width, height: baseFit.height)
         let base = state.baselineNormalizedCrop
         let baseCrop = CGRect(
@@ -421,7 +421,7 @@ struct CropView: View {
         // (onGeometryChange callbacks don't inherit the animation transaction).
         let newRotDeg = ((state.rotationDegrees + normDeg) % 360)
         let newSwapped = newRotDeg == 90 || newRotDeg == 270
-        let newFit = fitSize(geoSize: lastGeoSize, swapped: newSwapped)
+        let newFit = fitSize(available: lastGeoSize, swapped: newSwapped)
         let newFrame = CGRect(x: 0, y: 0, width: newFit.width, height: newFit.height)
 
         // Compute the final crop rect directly in the new frame so the
