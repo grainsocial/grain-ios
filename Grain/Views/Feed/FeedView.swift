@@ -229,6 +229,7 @@ struct FeedView: View {
                 .glassEffect(.regular.interactive(), in: .circle)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("Create gallery")
     }
 
     private func consumeDeepLink() {

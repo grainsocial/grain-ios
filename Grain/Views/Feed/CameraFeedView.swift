@@ -70,6 +70,7 @@ struct CameraFeedView: View {
                         .font(.system(size: 16, weight: .medium))
                 }
                 .tint(.primary)
+                .accessibilityLabel("More options")
             }
         }
         .task {

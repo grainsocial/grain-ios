@@ -111,6 +111,7 @@ struct FeedsManagementView: View {
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Unpin feed")
             } else {
                 Button {
                     Task { await prefsViewModel.pinFeed(feed, auth: auth.authContext()) }
@@ -120,6 +121,7 @@ struct FeedsManagementView: View {
                         .foregroundStyle(Color.accentColor)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Pin feed")
             }
         }
         .moveDisabled(!showPin)

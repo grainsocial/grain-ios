@@ -81,6 +81,7 @@ struct ProfileView: View {
                     .font(.system(size: 22))
                     .foregroundStyle(.white, Color("AccentColor"))
                     .offset(x: 4, y: 4)
+                    .accessibilityHidden(true)
             }
         }
         .padding(4)
@@ -581,6 +582,7 @@ struct ProfileView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("\(mode.rawValue.capitalized)")
     }
 
     private func setViewMode(_ mode: ProfileViewMode) {
@@ -750,6 +752,7 @@ struct ProfileView: View {
                                         .foregroundStyle(.white)
                                         .shadow(color: .black.opacity(0.5), radius: 2, x: 0, y: 1)
                                         .padding(6)
+                                        .accessibilityHidden(true)
                                 }
                             }
                     }
@@ -881,6 +884,7 @@ struct ProfileView: View {
                                         .foregroundStyle(.white)
                                         .shadow(color: .black.opacity(0.5), radius: 2, x: 0, y: 1)
                                         .padding(6)
+                                        .accessibilityHidden(true)
                                 }
                             }
                     }

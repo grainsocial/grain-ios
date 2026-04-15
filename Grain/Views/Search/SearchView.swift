@@ -229,6 +229,7 @@ struct SearchView: View {
                                                     .font(.system(size: 18))
                                                     .foregroundStyle(.white, Color("AccentColor"))
                                             }
+                                            .accessibilityLabel("Remove \(profile.displayName ?? profile.handle ?? "") from recent")
                                         }
 
                                     Text(profile.displayName ?? profile.handle ?? "")
@@ -251,6 +252,7 @@ struct SearchView: View {
                             Image(systemName: "magnifyingglass")
                                 .foregroundStyle(.secondary)
                                 .font(.subheadline)
+                                .accessibilityHidden(true)
                             Text(recent.query)
                                 .font(.subheadline)
                             Spacer()
@@ -261,6 +263,7 @@ struct SearchView: View {
                                     .font(.caption2.weight(.bold))
                                     .foregroundStyle(.primary)
                             }
+                            .accessibilityLabel("Remove search")
                         }
                         .padding(.horizontal)
                         .contentShape(Rectangle())

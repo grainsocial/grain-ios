@@ -47,6 +47,8 @@ struct LocationFeedView: View {
                         if !mapInteractive {
                             Color.clear
                                 .contentShape(Rectangle())
+                                .accessibilityLabel("Expand map")
+                                .accessibilityAddTraits(.isButton)
                                 .onTapGesture {
                                     withAnimation(.easeInOut(duration: 0.25)) { mapInteractive = true }
                                 }
@@ -126,6 +128,7 @@ struct LocationFeedView: View {
                         .font(.system(size: 16, weight: .medium))
                 }
                 .tint(.primary)
+                .accessibilityLabel("More options")
             }
         }
         .task {

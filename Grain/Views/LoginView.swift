@@ -56,6 +56,7 @@ struct LoginView: View {
                                 Image(systemName: "exclamationmark.circle.fill")
                                     .font(.body.weight(.medium))
                                     .foregroundStyle(.white)
+                                    .accessibilityHidden(true)
                                 Text(reason)
                                     .font(.subheadline)
                                     .foregroundStyle(.white)
@@ -91,6 +92,7 @@ struct LoginView: View {
                                 Image(systemName: "at")
                                     .font(.body.weight(.medium))
                                     .foregroundStyle(.white.opacity(0.5))
+                                    .accessibilityHidden(true)
 
                                 TextField("e.g. user.bsky.social", text: $handle, prompt: Text("e.g. user.bsky.social").foregroundStyle(.white.opacity(0.5)))
                                     .foregroundStyle(.white)

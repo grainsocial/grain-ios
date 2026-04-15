@@ -90,6 +90,7 @@ struct PhotoThumbnailCell: View {
                 .contentShape(Circle().scale(0.7))
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("Remove photo")
     }
 }
 

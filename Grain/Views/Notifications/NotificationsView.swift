@@ -205,11 +205,23 @@ private struct ReasonIcon: View {
         }
     }
 
+    private var label: String {
+        switch reason {
+        case .galleryFavorite, .storyFavorite: "Liked"
+        case .follow: "Followed"
+        case .galleryComment, .storyComment: "Commented"
+        case .reply: "Replied"
+        case .galleryCommentMention, .galleryMention: "Mentioned"
+        case .unknown: "Notification"
+        }
+    }
+
     var body: some View {
         Image(systemName: iconName)
             .foregroundStyle(Color("AccentColor"))
             .font(.system(size: 18))
             .frame(width: 20)
+            .accessibilityLabel(label)
     }
 }
 

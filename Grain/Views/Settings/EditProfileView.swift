@@ -57,6 +57,7 @@ struct EditProfileView: View {
                                     .frame(width: 32, height: 32)
                                     .background(Color("AccentColor"), in: Circle())
                             }
+                            .accessibilityLabel("Change profile photo")
                         }
 
                         if newAvatarImage != nil || (!removeAvatar && existingAvatarURL != nil) {

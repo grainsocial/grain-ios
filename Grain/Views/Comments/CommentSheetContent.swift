@@ -63,6 +63,7 @@ struct CommentSheetContent: View {
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(.primary)
                         }
+                        .accessibilityLabel("Close comments")
                     }
                 case .done:
                     ToolbarItem(placement: .cancellationAction) {
@@ -138,6 +139,7 @@ struct CommentSheetContent: View {
                     Image(systemName: "arrowshape.turn.up.left.fill")
                         .font(.caption2)
                         .foregroundStyle(.primary)
+                        .accessibilityHidden(true)
                     Text("Replying to")
                         .foregroundStyle(.secondary)
                     Text("@\(replyTarget.author.handle)")
@@ -153,6 +155,7 @@ struct CommentSheetContent: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("Cancel reply")
                 }
                 .font(.subheadline.weight(.medium))
                 .padding(.leading, 16)
@@ -182,6 +185,7 @@ struct CommentSheetContent: View {
                                 .foregroundStyle(Color("AccentColor"))
                                 .frame(width: 44, height: 44)
                         }
+                        .accessibilityLabel("Send comment")
                         .glassEffect(.regular.interactive(), in: .circle)
                         .disabled(isPostingComment)
                         .transition(

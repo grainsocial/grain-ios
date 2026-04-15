@@ -61,6 +61,7 @@ struct AvatarView: View {
             Image(systemName: "person.fill")
                 .font(.system(size: size * 0.45))
                 .foregroundStyle(Color(.systemGray2))
+                .accessibilityHidden(true)
         }
     }
 }

@@ -35,16 +35,21 @@ struct StoryStripView: View {
                         StoryRingView(hasStory: ownAuthor != nil, viewed: false, size: avatarSize) {
                             AvatarView(url: userAvatar, size: avatarSize)
                         }
+                        .padding(4)
                         Image(systemName: "plus.circle.fill")
                             .font(.system(size: 18))
                             .foregroundStyle(.white, Color("AccentColor"))
-                            .offset(x: 2, y: 2)
+                            .offset(x: -1, y: -1)
+                            .accessibilityHidden(true)
                     }
                     Text("Your story")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(ownAuthor != nil ? "View your story" : "Create a story")
+                .accessibilityAddTraits(.isButton)
                 .onTapGesture {
                     if let own = ownAuthor {
                         onAuthorTap(own, 0)
@@ -85,6 +90,9 @@ struct StoryStripView: View {
                     .scaleEffect(isLifted ? 1.03 : 1.0)
                     .offset(y: isLifted ? -3 : 0)
                     .zIndex(isViewed ? 0 : 1)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("\(author.profile.displayName ?? author.profile.handle)'s story")
+                    .accessibilityAddTraits(.isButton)
                     .onTapGesture { onAuthorTap(author, 0) }
                 }
             }

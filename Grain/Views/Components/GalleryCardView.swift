@@ -88,6 +88,7 @@ struct DoubleTapHeartView: View {
         }
         .position(x: state.position.x, y: state.position.y)
         .allowsHitTesting(false)
+        .accessibilityHidden(true)
         .onAppear { state.start() }
     }
 }
@@ -305,6 +306,7 @@ struct GalleryCardView: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("More options")
                 .highPriorityGesture(TapGesture().onEnded { showCardActions = true })
             }
         }
@@ -431,6 +433,7 @@ struct GalleryCardView: View {
                             .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 4))
                             .foregroundStyle(.white)
                     }
+                    .accessibilityLabel(showingAlt ? "Hide alt text" : "Show alt text")
                 }
                 .padding(8)
             }
@@ -458,6 +461,8 @@ struct GalleryCardView: View {
                 }
             }
             .foregroundStyle(isFavorited ? Color("AccentColor") : .secondary)
+            .accessibilityLabel(isFavorited ? "Unlike" : "Like")
+            .accessibilityValue("\(gallery.favCount ?? 0) likes")
             .overlay(alignment: .leading) {
                 ZStack {
                     ForEach(likeParticleBursts, id: \.self) { _ in
@@ -468,6 +473,7 @@ struct GalleryCardView: View {
                 }
                 .offset(x: 11)
                 .allowsHitTesting(false)
+                .accessibilityHidden(true)
             }
 
             Button {
@@ -480,6 +486,8 @@ struct GalleryCardView: View {
                 }
             }
             .foregroundStyle(.secondary)
+            .accessibilityLabel("Comments")
+            .accessibilityValue("\(gallery.commentCount ?? 0)")
 
             ShareLink(item: galleryShareURL) {
                 Image(systemName: "paperplane")
@@ -493,6 +501,7 @@ struct GalleryCardView: View {
                     )
             }
             .foregroundStyle(.secondary)
+            .accessibilityLabel("Share gallery")
             .disabled(shareAnimating)
             .simultaneousGesture(
                 LongPressGesture(minimumDuration: 0.5)
