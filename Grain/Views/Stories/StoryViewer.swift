@@ -446,6 +446,7 @@ struct StoryViewer: View {
                                         Image(uiImage: cachedThumb)
                                             .resizable()
                                             .aspectRatio(story.aspectRatio.ratio, contentMode: .fit)
+                                            .frame(maxWidth: .infinity)
                                             .clipped()
                                     } else {
                                         LazyImage(url: URL(string: story.thumb)) { thumbState in
@@ -453,6 +454,7 @@ struct StoryViewer: View {
                                                 thumb
                                                     .resizable()
                                                     .aspectRatio(story.aspectRatio.ratio, contentMode: .fit)
+                                                    .frame(maxWidth: .infinity)
                                                     .clipped()
                                             }
                                         }
