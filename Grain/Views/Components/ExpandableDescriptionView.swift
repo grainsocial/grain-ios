@@ -47,19 +47,20 @@ struct ExpandableDescriptionView: View {
                     })
                 })
             )
+            .contentShape(Rectangle())
+            .onTapGesture {
+                if isTruncated, !isExpanded {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isExpanded = true
+                    }
+                }
+            }
 
             HStack(spacing: 12) {
                 if isTruncated, !isExpanded {
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            isExpanded = true
-                        }
-                    } label: {
-                        Text("more")
-                            .font(.subheadline)
-                            .foregroundStyle(.tertiary)
-                    }
-                    .buttonStyle(.plain)
+                    Text("more")
+                        .font(.subheadline)
+                        .foregroundStyle(.tertiary)
                 }
 
                 if isForeignLanguage {
