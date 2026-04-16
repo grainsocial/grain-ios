@@ -69,13 +69,14 @@ struct ExifInfoView: View {
                     .foregroundStyle(style)
                     .opacity(exif?.lens != nil ? 1 : 0)
                 }
-                ExifSettingsRow(
-                    tokens: [exif?.focalLength, exif?.fNumber, exif?.exposureTime, exif?.iso],
-                    style: style
-                )
+                let settingsTokens = [exif?.focalLength, exif?.fNumber, exif?.exposureTime, exif?.iso]
+                if settingsTokens.contains(where: { $0 != nil }) {
+                    ExifSettingsRow(
+                        tokens: settingsTokens,
+                        style: style
+                    )
+                }
             }
-            // Single opacity for the whole block so all rows appear/disappear together.
-            // nil animation suppresses any inherited transaction so it's always instant.
             .opacity(exif != nil ? 1 : 0)
             .animation(.easeInOut(duration: 0.2), value: exif == nil)
         }
