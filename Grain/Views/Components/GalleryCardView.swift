@@ -350,17 +350,26 @@ struct GalleryCardView: View {
                             if showingAlt, let alt = photo.alt, !alt.isEmpty {
                                 ZStack {
                                     Color.black.opacity(0.6)
-                                    Text(alt)
-                                        .font(.subheadline)
-                                        .foregroundStyle(.white)
-                                        .multilineTextAlignment(.center)
-                                        .padding(20)
+                                        .onTapGesture {
+                                            withAnimation(.easeInOut(duration: 0.2)) { showingAlt = false }
+                                        }
+                                    GeometryReader { geo in
+                                        ScrollView {
+                                            Text(alt)
+                                                .font(.subheadline)
+                                                .foregroundStyle(.white)
+                                                .multilineTextAlignment(.center)
+                                                .padding(20)
+                                                .frame(maxWidth: .infinity)
+                                                .frame(minHeight: geo.size.height)
+                                        }
+                                        .scrollBounceBehavior(.basedOnSize)
+                                    }
                                 }
                                 .transition(.asymmetric(
                                     insertion: .opacity.animation(.easeIn(duration: 0.35)),
                                     removal: .opacity
                                 ))
-                                .allowsHitTesting(false)
                             }
                         }
                         .tag(index)
