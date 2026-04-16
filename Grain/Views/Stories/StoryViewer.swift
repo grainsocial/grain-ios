@@ -15,28 +15,51 @@ private let svSignposter = OSSignposter(subsystem: "social.grain.grain", categor
 @Observable
 @MainActor
 private final class StoryTimer {
-    var progress: CGFloat = 0
+    /// Progress frozen at last pause (0–1). Used as the base when resuming.
+    private(set) var pausedProgress: CGFloat = 0
+    /// When the current run started. nil when paused/stopped.
+    private(set) var resumedAt: Date?
     var isRunning = false
     private var task: Task<Void, Never>?
-    private let duration: TimeInterval = 5.0
+    let duration: TimeInterval = 5.0
+
+    /// Smooth progress at an instant — called by TimelineView every frame.
+    func smoothProgress(at date: Date) -> CGFloat {
+        guard let resumed = resumedAt else { return pausedProgress }
+        let elapsed = date.timeIntervalSince(resumed)
+        return min(pausedProgress + CGFloat(elapsed / duration), 1.0)
+    }
 
     func start() {
         svLogger.info("[timer.start] called")
         svSignposter.emitEvent("timer.start")
-        progress = 0
         quarterFired = false
         run(fromProgress: 0)
     }
 
+    /// Reset progress to zero without starting.
+    func reset() {
+        task?.cancel()
+        task = nil
+        isRunning = false
+        pausedProgress = 0
+        resumedAt = nil
+        quarterFired = false
+    }
+
     func resume() {
         guard !isRunning else { return }
-        guard progress < 1.0 else { start(); return }
-        run(fromProgress: progress)
+        guard pausedProgress < 1.0 else { start(); return }
+        run(fromProgress: pausedProgress)
     }
 
     private func run(fromProgress start: CGFloat) {
         stop()
         isRunning = true
+        pausedProgress = start
+        resumedAt = Date()
+
+        // Ticks drive callbacks only — the bar reads smoothProgress(at:) via TimelineView
         let tickInterval: TimeInterval = 0.05
         let totalTicks = Int(duration / tickInterval)
         let startTick = max(Int(start * CGFloat(totalTicks)), 0)
@@ -46,7 +69,7 @@ private final class StoryTimer {
                     try await Task.sleep(for: .milliseconds(Int(tickInterval * 1000)))
                 } catch { return }
                 guard !Task.isCancelled else { return }
-                progress = CGFloat(tick) / CGFloat(totalTicks)
+                let progress = CGFloat(tick) / CGFloat(totalTicks)
                 if !quarterFired, progress >= 0.01 {
                     quarterFired = true
                     onQuarter?()
@@ -54,6 +77,8 @@ private final class StoryTimer {
             }
             guard !Task.isCancelled else { return }
             isRunning = false
+            resumedAt = nil
+            pausedProgress = 1.0
             svLogger.info("[timer.complete] fired onComplete")
             svSignposter.emitEvent("timer.complete")
             onComplete?()
@@ -64,7 +89,13 @@ private final class StoryTimer {
         if isRunning {
             svLogger.info("[timer.stop] called (was running)")
             svSignposter.emitEvent("timer.stop")
+            // Capture smooth progress before clearing resumedAt
+            if let resumed = resumedAt {
+                let elapsed = Date().timeIntervalSince(resumed)
+                pausedProgress = min(pausedProgress + CGFloat(elapsed / duration), 1.0)
+            }
         }
+        resumedAt = nil
         task?.cancel()
         task = nil
         isRunning = false
@@ -637,13 +668,13 @@ struct StoryViewer: View {
     }
 
     private func startTimerIfSafe() {
-        guard imageLoaded, !isCommentSheetOpen else { return }
+        guard imageLoaded, !isCommentSheetOpen, !showDeleteConfirm else { return }
         let action = storyLabelResult.action
         if action == .none || action == .badge { timer.start() }
     }
 
     private func resumeTimerIfSafe() {
-        guard imageLoaded, !isCommentSheetOpen else { return }
+        guard imageLoaded, !isCommentSheetOpen, !showDeleteConfirm else { return }
         let action = storyLabelResult.action
         if action == .none || action == .badge { timer.resume() }
     }
@@ -697,7 +728,7 @@ struct StoryViewer: View {
     private func advanceStory(by delta: Int) {
         svLogger.info("[advanceStory] delta=\(delta) currentIdx=\(currentStoryIndex)")
         svSignposter.emitEvent("advanceStory", "delta=\(delta)")
-        timer.progress = 0
+        timer.reset()
         let newIndex = currentStoryIndex + delta
         let nextStory = stories.indices.contains(newIndex) ? stories[newIndex] : nil
         currentStoryIndex = newIndex
@@ -849,7 +880,7 @@ struct StoryViewer: View {
             withTransaction(Transaction(animation: nil)) {
                 let storiesToPresent = pendingTransition.stories
                 currentAuthorIndex = index
-                timer.progress = 0
+                timer.reset()
                 if !storiesToPresent.isEmpty {
                     presentStories(storiesToPresent, resumeIndex: resumeIndex)
                 } else {
@@ -1235,7 +1266,8 @@ struct StoryViewer: View {
     }
 }
 
-/// Extracted so progress ticks only redraw this view, not the entire StoryViewer
+/// Extracted so progress redraws only this view, not the entire StoryViewer.
+/// Uses TimelineView at display refresh rate for pixel-smooth progress.
 private struct StoryProgressBars: View {
     let timer: StoryTimer
     let stories: [GrainStory]
@@ -1247,27 +1279,28 @@ private struct StoryProgressBars: View {
     }
 
     var body: some View {
-        HStack(spacing: 4) {
-            ForEach(0 ..< barCount, id: \.self) { index in
-                GeometryReader { geo in
-                    Capsule()
-                        .fill(Color.white.opacity(0.3))
-                    Capsule()
-                        .fill(Color.white)
-                        .frame(width: max(0, barWidth(for: index, totalWidth: geo.size.width)))
+        TimelineView(.animation(paused: !timer.isRunning)) { context in
+            HStack(spacing: 4) {
+                ForEach(0 ..< barCount, id: \.self) { index in
+                    GeometryReader { geo in
+                        Capsule()
+                            .fill(Color.white.opacity(0.3))
+                        Capsule()
+                            .fill(Color.white)
+                            .frame(width: max(0, barWidth(for: index, totalWidth: geo.size.width, at: context.date)))
+                    }
+                    .frame(height: 2)
                 }
-                .frame(height: 2)
-                .transaction { $0.animation = nil }
             }
         }
     }
 
-    private func barWidth(for index: Int, totalWidth: CGFloat) -> CGFloat {
+    private func barWidth(for index: Int, totalWidth: CGFloat, at date: Date) -> CGFloat {
         guard !stories.isEmpty else { return 0 }
         if index < currentStoryIndex {
             return totalWidth
         } else if index == currentStoryIndex {
-            return totalWidth * timer.progress
+            return totalWidth * timer.smoothProgress(at: date)
         } else {
             return 0
         }

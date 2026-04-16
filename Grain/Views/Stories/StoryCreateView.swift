@@ -12,6 +12,9 @@ struct StoryCreateView: View {
     @State private var photoData: Data?
     @State private var previewImage: UIImage?
     @State private var showCamera = false
+    @State private var cropRequest: CropRequest?
+    @State private var originalImage: UIImage?
+    @State private var cropState: CropResult?
     @State private var resolvedLocation: (h3: String, name: String, address: [String: AnyCodable]?)?
     @State private var photoLocationResult: NominatimResult?
     @State private var includeLocation = true
@@ -30,6 +33,14 @@ struct StoryCreateView: View {
                             .scaledToFit()
                             .frame(maxHeight: 300)
                             .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                        Button {
+                            if let originalImage {
+                                cropRequest = CropRequest(image: originalImage, existingCrop: cropState)
+                            }
+                        } label: {
+                            Label("Crop Photo", systemImage: "crop.rotate")
+                        }
                     }
 
                     PhotosPicker(selection: $selectedPhoto, matching: .images) {
@@ -76,6 +87,11 @@ struct StoryCreateView: View {
             .onChange(of: selectedPhoto) {
                 Task { await loadPhoto() }
             }
+            .cropSheet(request: $cropRequest) { result in
+                previewImage = result.croppedImage
+                photoData = result.croppedImage.jpegData(compressionQuality: 1.0)
+                cropState = result
+            }
             .fullScreenCover(isPresented: $showCamera) {
                 CameraPicker { image, _ in
                     handleCameraImage(image)
@@ -107,7 +123,9 @@ struct StoryCreateView: View {
     // MARK: - Camera
 
     private func handleCameraImage(_ image: UIImage) {
+        originalImage = image
         previewImage = image
+        cropState = nil
         if let data = image.jpegData(compressionQuality: 1.0) {
             photoData = data
         }
@@ -128,7 +146,9 @@ struct StoryCreateView: View {
             return
         }
         photoData = data
+        originalImage = image
         previewImage = image
+        cropState = nil
 
         resolvedLocation = nil
         photoLocationResult = nil

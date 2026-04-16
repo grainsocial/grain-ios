@@ -1,25 +1,28 @@
 #!/bin/sh
 
-# Only format/lint staged Swift files
 FILES=$(git diff --cached --name-only --diff-filter=ACM -- '*.swift')
 [ -z "$FILES" ] && exit 0
 
-# Stash unstaged changes so formatters only touch the index snapshot.
-# Without this, re-staging formatted files below would clobber any
-# partial staging from `git add -p`.
-STASHED=0
-if ! git diff --quiet; then
-    git stash push --keep-index --quiet -m "pre-commit-$$"
-    STASHED=1
-fi
+REPO_ROOT=$(git rev-parse --show-toplevel)
+TMPDIR_PATH=$(mktemp -d)
+trap "rm -rf '$TMPDIR_PATH'" EXIT
 
-restore_unstaged() {
-    [ "$STASHED" = "1" ] || return 0
-    git stash pop --quiet 2>/dev/null || \
-        echo "pre-commit: could not auto-restore unstaged changes; run 'git stash pop' manually" >&2
-}
-trap restore_unstaged EXIT
+# For each staged Swift file: extract the index snapshot to a temp file,
+# format/lint it there, then write the result back to the index only.
+# The working tree is never touched — no stash, no conflicts.
+echo "$FILES" | while IFS= read -r FILE; do
+    [ -z "$FILE" ] && continue
+    TMPFILE="$TMPDIR_PATH/$(basename "$FILE")"
 
-echo "$FILES" | xargs swiftformat 2>/dev/null
-echo "$FILES" | xargs swiftlint lint --fix 2>/dev/null | grep -v "^Linting\|^Done linting"
-echo "$FILES" | xargs git add
+    git show ":$FILE" > "$TMPFILE"
+
+    swiftformat --config "$REPO_ROOT/.swiftformat" "$TMPFILE" 2>/dev/null
+    swiftlint lint --fix --config "$REPO_ROOT/.swiftlint.yml" "$TMPFILE" 2>/dev/null
+
+    ORIG_BLOB=$(git ls-files -s -- "$FILE" | awk '{print $2}')
+    NEW_BLOB=$(git hash-object -w "$TMPFILE")
+    if [ "$ORIG_BLOB" != "$NEW_BLOB" ]; then
+        MODE=$(git ls-files -s -- "$FILE" | awk '{print $1}')
+        git update-index --cacheinfo "$MODE,$NEW_BLOB,$FILE"
+    fi
+done

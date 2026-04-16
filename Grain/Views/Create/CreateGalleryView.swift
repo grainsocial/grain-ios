@@ -56,7 +56,7 @@ struct CreateGalleryView: View {
     @State private var errorMessage: String?
     @State private var resolvedLocation: (h3: String, name: String, address: [String: AnyCodable]?)?
     @State private var showCamera = false
-    @State private var photoItems: [PhotoItem] = []
+    @State private var photoItems: [PhotoItem]
     @State private var mentionState = MentionAutocompleteState()
     @State private var postToBluesky = false
     @State private var selectedLabels: Set<String> = []
@@ -83,9 +83,17 @@ struct CreateGalleryView: View {
     @State private var isAnimatingMode = false
     @State private var editorMode: EditorMode = .preview
     @State private var showDiscardAlert = false
+    @State private var cropRequest: CropRequest?
 
     let client: XRPCClient
     var onCreated: (() -> Void)?
+
+    init(client: XRPCClient, initialItems: [PhotoItem] = [], onCreated: (() -> Void)? = nil) {
+        self.client = client
+        self.onCreated = onCreated
+        _photoItems = State(initialValue: initialItems)
+        _selectedPhotoID = State(initialValue: initialItems.first?.id)
+    }
 
     private let maxTitle = 100
     private let maxDescription = 1000
@@ -159,12 +167,19 @@ struct CreateGalleryView: View {
             createSignposter.emitEvent("TaskSpawned", "source=firstPhotoChange,itemCount=\(photoItems.count)")
             Task { await detectLocation() }
         }
+        .cropSheet(request: $cropRequest) { result in
+            guard let id = selectedPhotoID,
+                  let idx = photoItems.firstIndex(where: { $0.id == id }) else { return }
+            photoItems[idx].thumbnail = PhotoItem.makeThumbnail(from: result.croppedImage)
+            photoItems[idx].carouselPreview = PhotoItem.makeCarouselPreview(from: result.croppedImage, width: UIScreen.main.bounds.width)
+            photoItems[idx].cropResult = result
+        }
         .fullScreenCover(isPresented: $showCamera) {
             CameraPicker { image, metadata in
                 let thumb = PhotoItem.makeThumbnail(from: image)
                 let carousel = PhotoItem.makeCarouselPreview(from: image, width: UIScreen.main.bounds.width)
                 let exif = metadata.flatMap { makeExifSummary(from: $0) }
-                let item = PhotoItem(thumbnail: thumb, carouselPreview: carousel, source: .camera(image, metadata: metadata), exifSummary: exif)
+                let item = PhotoItem(thumbnail: thumb, carouselPreview: carousel, source: .camera(image, metadata: metadata), exifSummary: exif, originalImage: image)
                 photoItems.append(item)
                 if selectedPhotoID == nil { selectedPhotoID = item.id }
             }
@@ -253,7 +268,8 @@ struct CreateGalleryView: View {
                           let id = pickerItem.itemIdentifier else { return }
                     editorRemovedIDs.insert(id)
                     selectedPhotos.removeAll { $0.itemIdentifier == id }
-                }
+                },
+                cropRequest: $cropRequest
             )
         }
     }
@@ -394,7 +410,7 @@ struct CreateGalleryView: View {
                     let carousel = PhotoItem.makeCarouselPreview(from: image, width: carouselWidth)
                     let exif = makeExifSummary(from: data)
                     createSignposter.endInterval("LoadPhoto", state, "result=ok")
-                    return (index, PhotoItem(thumbnail: thumb, carouselPreview: carousel, source: .picker(pickerItem), exifSummary: exif))
+                    return (index, PhotoItem(thumbnail: thumb, carouselPreview: carousel, source: .picker(pickerItem), exifSummary: exif, originalImage: image))
                 }
             }
             for await (index, item) in group {
@@ -571,16 +587,23 @@ struct ExifSummary {
 
 struct PhotoItem: Identifiable {
     let id = UUID()
-    let thumbnail: UIImage
+    var thumbnail: UIImage
     /// Screen-width image for the carousel. Built at creation time via
     /// `UIGraphicsImageRenderer`, which forces a full decode during the draw
     /// call — so the resulting UIImage is backed by a decoded bitmap and
     /// displays with zero decode work. Kept in memory for the editor session
     /// so the carousel never stalls on first draw regardless of scroll speed.
-    let carouselPreview: UIImage
+    var carouselPreview: UIImage
     let source: PhotoSource
     var alt: String = ""
     var exifSummary: ExifSummary?
+    var originalImage: UIImage?
+    var cropResult: CropResult?
+
+    var cameraImage: UIImage? {
+        if case let .camera(image, _) = source { return image }
+        return nil
+    }
 
     /// Thumbnail's natural width-to-height ratio. Computed once from `thumbnail.size`
     /// and used everywhere a cell needs aspect geometry — single source of truth.
@@ -863,51 +886,11 @@ private func extractGalleryExif(from data: Data) -> [String: AnyCodable]? {
 }
 
 #Preview {
-    @Previewable @State var photos = PreviewData.photoItems
-    @Previewable @State var selectedID: UUID?
     NavigationStack {
-        CreateGalleryViewPreview(photoItems: $photos, selectedPhotoID: $selectedID)
+        CreateGalleryView(client: .preview, initialItems: PreviewData.photoItems)
     }
     .previewEnvironments()
-    .onAppear { selectedID = photos.first?.id }
-}
-
-/// Thin wrapper that exposes photoItems for preview injection
-private struct CreateGalleryViewPreview: View {
-    @Binding var photoItems: [PhotoItem]
-    @Binding var selectedPhotoID: UUID?
-
-    var body: some View {
-        Form {
-            Section("Photos") {
-                Label("5 photos selected", systemImage: "photo.on.rectangle.angled")
-                    .foregroundStyle(.secondary)
-            }
-            Section {
-                TextField("Add a title (required)...", text: .constant("Golden Hour, Kyoto"))
-                TextField("Add a description...", text: .constant("Shot on Leica M6 with Kodak Portra 400. #analog #japan #35mm"), axis: .vertical)
-                    .lineLimit(3 ... 6)
-            } header: {
-                Text("Gallery")
-            }
-            Section {
-                GalleryEditor(
-                    items: $photoItems,
-                    selectedPhotoID: $selectedPhotoID,
-                    isReordering: .constant(false),
-                    isAnimatingMode: .constant(false),
-                    mode: .constant(.preview),
-                    sendExif: true
-                )
-            }
-        }
-        .navigationTitle("New Gallery")
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) { Button("Cancel") {} }
-            ToolbarItem(placement: .topBarTrailing) { Button("Post") {}.bold() }
-        }
-        .grainPreview()
-    }
+    .grainPreview()
 }
 
 // MARK: - Sheet gesture disabler
