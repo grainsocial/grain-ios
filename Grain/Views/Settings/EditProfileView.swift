@@ -119,6 +119,14 @@ struct EditProfileView: View {
         .navigationTitle("Edit Profile")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .tint(.primary)
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     Task { await save() }
@@ -130,6 +138,7 @@ struct EditProfileView: View {
                             .fontWeight(.semibold)
                     }
                 }
+                .buttonStyle(.glassProminent)
                 .disabled(isSaving || displayName.count > maxDisplayName || bio.count > maxBio)
             }
         }

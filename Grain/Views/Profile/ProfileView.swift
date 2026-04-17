@@ -32,6 +32,7 @@ struct ProfileView: View {
     let actor: String
     var isRoot = false
     @State private var showCopiedToast = false
+    @State private var showEditProfile = false
 
     /// Resolved DID from the loaded profile, or the original actor identifier
     private var did: String {
@@ -247,10 +248,8 @@ struct ProfileView: View {
                                 .padding(.horizontal)
                             } else {
                                 HStack(spacing: 8) {
-                                    NavigationLink {
-                                        EditProfileView(client: client, onSaved: {
-                                            Task { await viewModel.load(did: did) }
-                                        })
+                                    Button {
+                                        showEditProfile = true
                                     } label: {
                                         Text("Edit Profile")
                                             .font(.subheadline.weight(.semibold))
@@ -456,6 +455,15 @@ struct ProfileView: View {
                 StoryCreateView(client: client, onCreated: {
                     Task { await viewModel.load(did: did) }
                 })
+                .environment(auth)
+            }
+            .sheet(isPresented: $showEditProfile) {
+                NavigationStack {
+                    EditProfileView(client: client, onSaved: {
+                        showEditProfile = false
+                        Task { await viewModel.load(did: did) }
+                    })
+                }
                 .environment(auth)
             }
             .background(Color(.systemBackground))
