@@ -283,7 +283,7 @@ struct CommentRow: View {
                     .disabled(isMutating)
 
                     if displayFavCount > 0 {
-                        Text("\(displayFavCount)")
+                        Text(displayFavCount.compactCount)
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                     }

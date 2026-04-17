@@ -463,9 +463,9 @@ struct GalleryCardView: View {
                         .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isFavorited)
                     ZStack {
                         let count = gallery.favCount ?? 0
-                        Text("\(count)".digitWidthProxy)
+                        Text(count.compactCount.digitWidthProxy)
                             .hidden()
-                        Text("\(count)")
+                        Text(count.compactCount)
                     }
                 }
             }
@@ -491,7 +491,7 @@ struct GalleryCardView: View {
                 HStack(spacing: 5) {
                     Image(systemName: "bubble")
                         .font(.system(size: 20))
-                    Text("\(gallery.commentCount ?? 0)")
+                    Text((gallery.commentCount ?? 0).compactCount)
                 }
             }
             .foregroundStyle(.secondary)
