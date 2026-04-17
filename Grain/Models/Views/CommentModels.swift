@@ -12,9 +12,16 @@ struct GrainComment: Codable, Sendable, Identifiable {
     var focus: AnyCodable?
     var replyTo: String?
     let createdAt: String
+    var favCount: Int?
+    var viewer: CommentViewerState?
     var muted: Bool?
 
     var id: String {
         uri
     }
+}
+
+/// social.grain.comment.defs#viewerState
+struct CommentViewerState: Codable, Sendable {
+    var fav: String?
 }

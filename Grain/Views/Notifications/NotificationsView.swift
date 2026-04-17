@@ -174,6 +174,17 @@ private struct NotificationRowContainer: View {
     private func handleTap(_ notification: GrainNotification) {
         if notification.reasonType == .follow {
             onProfileTap(notification.author.did)
+        } else if notification.reasonType == .commentFavorite {
+            // Navigate to the parent gallery or story
+            if let galleryUri = notification.galleryUri {
+                onGalleryTap(galleryUri)
+            } else if let storyUri = notification.storyUri {
+                Task {
+                    if let story = try? await client.getStory(uri: storyUri, auth: authContext()).story {
+                        onStoryTap(story)
+                    }
+                }
+            }
         } else if notification.reasonType == .storyFavorite || notification.reasonType == .storyComment {
             if let storyUri = notification.storyUri {
                 Task {
@@ -197,7 +208,7 @@ private struct ReasonIcon: View {
 
     private var iconName: String {
         switch reason {
-        case .galleryFavorite, .storyFavorite: "heart.fill"
+        case .galleryFavorite, .storyFavorite, .commentFavorite: "heart.fill"
         case .follow: "person.fill.badge.plus"
         case .galleryComment, .storyComment: "text.bubble.fill"
         case .reply: "arrowshape.turn.up.backward.fill"
@@ -208,7 +219,7 @@ private struct ReasonIcon: View {
 
     private var label: String {
         switch reason {
-        case .galleryFavorite, .storyFavorite: "Liked"
+        case .galleryFavorite, .storyFavorite, .commentFavorite: "Liked"
         case .follow: "Followed"
         case .galleryComment, .storyComment: "Commented"
         case .reply: "Replied"
@@ -219,7 +230,7 @@ private struct ReasonIcon: View {
 
     private var iconColor: Color {
         switch reason {
-        case .galleryFavorite, .storyFavorite: .heart
+        case .galleryFavorite, .storyFavorite, .commentFavorite: .heart
         default: .accentColor
         }
     }
@@ -318,6 +329,7 @@ private struct GroupedNotificationRow: View {
     private var reasonText: String {
         switch group.notification.reasonType {
         case .galleryFavorite: "favorited your gallery"
+        case .commentFavorite: "favorited your comment"
         case .storyFavorite: "favorited your story"
         case .follow: "followed you"
         default: ""
@@ -390,6 +402,7 @@ private struct SingleNotificationRow: View {
         case .galleryComment: "commented on your gallery"
         case .galleryCommentMention: "mentioned you in a comment"
         case .galleryMention: "mentioned you in a gallery"
+        case .commentFavorite: "favorited your comment"
         case .storyFavorite: "favorited your story"
         case .storyComment: "commented on your story"
         case .reply: "replied to your comment"
@@ -472,6 +485,7 @@ private struct GroupedAuthorsView: View {
         let count = group.authorCount
         switch group.notification.reasonType {
         case .galleryFavorite: return "\(count) Favorites"
+        case .commentFavorite: return "\(count) Favorites"
         case .storyFavorite: return "\(count) Favorites"
         case .follow: return "\(count) Followers"
         default: return "\(count) People"

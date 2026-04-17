@@ -9,6 +9,7 @@ struct CommentSheetContent: View {
     let comments: [GrainComment]
     let isLoading: Bool
     let isPostingComment: Bool
+    var client: XRPCClient?
 
     var onPost: (String, GrainComment?) async -> Void
     var onDelete: (GrainComment) async -> Void
@@ -101,6 +102,7 @@ struct CommentSheetContent: View {
                     ForEach(threadedComments, id: \.root.id) { thread in
                         CommentRow(
                             comment: thread.root,
+                            client: client ?? XRPCClient(baseURL: AuthManager.serverURL),
                             userDID: auth.userDID,
                             isOwn: thread.root.author.did == auth.userDID,
                             isReply: false,
@@ -114,6 +116,7 @@ struct CommentSheetContent: View {
                         ForEach(thread.replies) { reply in
                             CommentRow(
                                 comment: reply,
+                                client: client ?? XRPCClient(baseURL: AuthManager.serverURL),
                                 userDID: auth.userDID,
                                 isOwn: reply.author.did == auth.userDID,
                                 isReply: true,

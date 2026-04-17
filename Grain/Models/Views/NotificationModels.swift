@@ -28,6 +28,7 @@ enum NotificationReason: String, Sendable {
     case galleryComment = "gallery-comment"
     case galleryCommentMention = "gallery-comment-mention"
     case galleryMention = "gallery-mention"
+    case commentFavorite = "comment-favorite"
     case storyFavorite = "story-favorite"
     case storyComment = "story-comment"
     case reply
@@ -36,7 +37,7 @@ enum NotificationReason: String, Sendable {
 
     var isGroupable: Bool {
         switch self {
-        case .galleryFavorite, .storyFavorite, .follow: true
+        case .galleryFavorite, .storyFavorite, .commentFavorite, .follow: true
         default: false
         }
     }

@@ -20,6 +20,7 @@ struct StoryCommentSheet: View {
             comments: viewModel.comments,
             isLoading: viewModel.isLoading,
             isPostingComment: viewModel.isPostingComment,
+            client: client,
             onPost: { text, replyTo in
                 guard let authContext = await auth.authContext() else { return }
                 await viewModel.postComment(text: text, storyUri: storyUri, replyTo: replyTo, auth: authContext)

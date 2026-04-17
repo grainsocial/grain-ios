@@ -37,6 +37,7 @@ struct CommentSheetView: View {
             comments: viewModel.comments,
             isLoading: viewModel.isLoading,
             isPostingComment: isPostingComment,
+            client: client,
             onPost: { text, replyTo in
                 guard let authContext = await auth.authContext() else { return }
                 isPostingComment = true

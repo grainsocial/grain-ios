@@ -169,7 +169,9 @@ struct GalleryDetailView: View {
 struct CommentRow: View {
     @Environment(StoryStatusCache.self) private var storyStatusCache
     @Environment(ViewedStoryStorage.self) private var viewedStories
+    @Environment(AuthManager.self) private var auth
     let comment: GrainComment
+    let client: XRPCClient
     let userDID: String?
     var isOwn: Bool = false
     var isReply: Bool = false
@@ -179,6 +181,17 @@ struct CommentRow: View {
     var onReply: (() -> Void)?
     var onDelete: (() -> Void)?
     @State private var expanded = false
+    @State private var favUri: String?
+    @State private var favCountOffset: Int = 0
+    @State private var isMutating = false
+
+    private var isFaved: Bool {
+        favUri != nil
+    }
+
+    private var displayFavCount: Int {
+        (comment.favCount ?? 0) + favCountOffset
+    }
 
     var body: some View {
         if comment.muted == true, !expanded {
@@ -256,11 +269,65 @@ struct CommentRow: View {
                     .padding(.top, 2)
                 }
 
-                Spacer()
+                Spacer(minLength: 0)
+
+                VStack(spacing: 2) {
+                    Button {
+                        Task { await toggleFav() }
+                    } label: {
+                        Image(systemName: isFaved ? "heart.fill" : "heart")
+                            .font(.system(size: 16))
+                            .foregroundStyle(isFaved ? Color.heart : .secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isMutating)
+
+                    if displayFavCount > 0 {
+                        Text("\(displayFavCount)")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .frame(maxHeight: .infinity)
             }
             .padding(.leading, isReply ? 50 : 12)
             .padding(.trailing, 12)
             .padding(.vertical, 8)
+            .task {
+                favUri = comment.viewer?.fav
+            }
+        }
+    }
+
+    private func toggleFav() async {
+        guard !isMutating else { return }
+        guard let authCtx = await auth.authContext() else { return }
+        isMutating = true
+        defer { isMutating = false }
+
+        if let uri = favUri {
+            // Optimistic unfavorite
+            favUri = nil
+            favCountOffset -= 1
+            do {
+                try await FavoriteService.delete(favoriteUri: uri, client: client, auth: authCtx)
+            } catch {
+                // Revert
+                favUri = uri
+                favCountOffset += 1
+            }
+        } else {
+            // Optimistic favorite
+            favUri = "pending"
+            favCountOffset += 1
+            do {
+                let result = try await FavoriteService.create(subject: comment.uri, client: client, auth: authCtx)
+                favUri = result.uri
+            } catch {
+                // Revert
+                favUri = nil
+                favCountOffset -= 1
+            }
         }
     }
 }
