@@ -45,7 +45,7 @@ final class HeartAnimationState: Identifiable {
 
         Task {
             try? await Task.sleep(for: .milliseconds(500))
-            withAnimation(.easeInOut(duration: 0.4)) { heartScale = 1.6 }
+            withAnimation(.easeInOut(duration: 0.2)) { heartScale = 1.6 }
             try? await Task.sleep(for: .milliseconds(400))
             isComplete = true
         }
@@ -342,12 +342,10 @@ struct GalleryCardView: View {
                                 onDoubleTap: { point in doubleTapLike(at: point) }
                             )
 
-                            // Per-page alt text overlay — lives INSIDE the TabView page so
-                            // it translates with the photo during a swipe instead of
-                            // staying fixed while the photo moves underneath. Wrapping
-                            // grey + text in a single ZStack guarantees they share one
-                            // transition (no out-of-sync fade between them).
-                            if showingAlt, let alt = photo.alt, !alt.isEmpty {
+                            // Alt text overlay — always in the tree so opacity
+                            // animates smoothly (conditional `if` inside TabView
+                            // swallows transitions).
+                            if let alt = photo.alt, !alt.isEmpty {
                                 ZStack {
                                     Color.black.opacity(0.6)
                                         .onTapGesture {
@@ -366,10 +364,9 @@ struct GalleryCardView: View {
                                         .scrollBounceBehavior(.basedOnSize)
                                     }
                                 }
-                                .transition(.asymmetric(
-                                    insertion: .opacity.animation(.easeIn(duration: 0.35)),
-                                    removal: .opacity
-                                ))
+                                .opacity(showingAlt && currentPage == index ? 1 : 0)
+                                .allowsHitTesting(showingAlt && currentPage == index)
+                                .animation(.easeInOut(duration: 0.2), value: showingAlt && currentPage == index)
                             }
                         }
                         .tag(index)
@@ -415,7 +412,7 @@ struct GalleryCardView: View {
             prefetchCarousel(photos: photos, page: 0)
         }
         .onChange(of: currentPage) {
-            showingAlt = false
+            withAnimation(.easeInOut(duration: 0.2)) { showingAlt = false }
             prefetchCarousel(photos: photos, page: currentPage)
         }
         .onDisappear {
