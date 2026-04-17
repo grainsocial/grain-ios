@@ -17,6 +17,7 @@ struct LoginView: View {
     @State private var highlightedSuggestionIndex: Int?
     @Namespace private var suggestionHighlightNS
     @State private var safariURL: URL?
+    @FocusState private var isInputFocused: Bool
 
     var body: some View {
         GeometryReader { geo in
@@ -100,6 +101,7 @@ struct LoginView: View {
                                     .autocorrectionDisabled()
                                     .textInputAutocapitalization(.never)
                                     .submitLabel(.go)
+                                    .focused($isInputFocused)
                                     .onSubmit(submitFromKeyboard)
                                     .onChange(of: handle) {
                                         searchTask?.cancel()
@@ -135,6 +137,7 @@ struct LoginView: View {
                                 RoundedRectangle(cornerRadius: 12)
                                     .stroke(.white.opacity(0.25), lineWidth: 1)
                             )
+                            .id("handle-input")
 
                             // Suggestions
                             if !suggestions.isEmpty {
@@ -274,6 +277,13 @@ struct LoginView: View {
                         if !newValue.isEmpty {
                             withAnimation {
                                 proxy.scrollTo("suggestions", anchor: .bottom)
+                            }
+                        }
+                    }
+                    .onChange(of: isInputFocused) { _, focused in
+                        if focused {
+                            withAnimation {
+                                proxy.scrollTo("handle-input", anchor: .center)
                             }
                         }
                     }
