@@ -83,7 +83,7 @@ struct MainTabView: View {
                         }
                     }
                 }
-                .tint(Color("AccentColor"))
+                .tint(Color.accentColor)
                 .environment(commentPresenter)
             } else {
                 Color.clear

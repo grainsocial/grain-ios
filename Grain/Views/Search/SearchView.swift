@@ -227,7 +227,7 @@ struct SearchView: View {
                                             } label: {
                                                 Image(systemName: "xmark.circle.fill")
                                                     .font(.system(size: 18))
-                                                    .foregroundStyle(.white, Color("AccentColor"))
+                                                    .foregroundStyle(.white, Color.accentColor)
                                             }
                                             .accessibilityLabel("Remove \(profile.displayName ?? profile.handle ?? "") from recent")
                                         }

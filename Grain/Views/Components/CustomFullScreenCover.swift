@@ -94,5 +94,5 @@ private struct CustomFullScreenCoverModifier<PresentedView: View>: ViewModifier 
         }
     }
     .preferredColorScheme(.dark)
-    .tint(Color("AccentColor"))
+    .tint(Color.accentColor)
 }

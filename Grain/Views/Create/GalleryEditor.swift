@@ -204,6 +204,7 @@ struct PhotoCarouselView: View {
                     .padding(.top, 8)
                     .padding(.bottom, 12)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(.secondarySystemGroupedBackground))
                 }
             }
             .background(Color(.secondarySystemBackground))

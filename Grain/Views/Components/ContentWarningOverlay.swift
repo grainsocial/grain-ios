@@ -93,5 +93,5 @@ struct LabelBadge: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(Color.black)
     .preferredColorScheme(.dark)
-    .tint(Color("AccentColor"))
+    .tint(Color.accentColor)
 }

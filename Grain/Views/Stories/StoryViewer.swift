@@ -1117,7 +1117,7 @@ struct StoryViewer: View {
     private func heartIcon(isFavorited: Bool) -> some View {
         Image(systemName: isFavorited ? "heart.fill" : "heart")
             .font(.title)
-            .foregroundStyle(isFavorited ? Color("AccentColor") : .white)
+            .foregroundStyle(isFavorited ? AnyShapeStyle(Color.heart) : AnyShapeStyle(.white))
             .keyframeAnimator(initialValue: 1.0, trigger: heartBeatTrigger) { content, scale in
                 content.scaleEffect(scale)
             } keyframes: { _ in

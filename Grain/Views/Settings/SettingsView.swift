@@ -50,7 +50,7 @@ struct SettingsView: View {
                 } label: {
                     HStack {
                         Text("Clear cache")
-                            .foregroundStyle(Color("AccentColor"))
+                            .foregroundStyle(Color.accentColor)
                         Spacer()
                         Text(cacheSizeText)
                             .foregroundStyle(.secondary)
@@ -175,7 +175,6 @@ private struct AppearanceSettingsView: View {
             }
         }
         .navigationTitle("Feeds")
-        .tint(Color("AccentColor"))
     }
 }
 
@@ -222,7 +221,6 @@ private struct UploadDefaultsView: View {
             }
         }
         .navigationTitle("Privacy")
-        .tint(Color("AccentColor"))
         .task {
             if let authContext = await auth.authContext(),
                let prefs = try? await client.getPreferences(auth: authContext).preferences

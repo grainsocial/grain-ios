@@ -372,5 +372,5 @@ struct ZoomableImage: View {
         .frame(maxWidth: .infinity)
         .background(Color.black)
         .preferredColorScheme(.dark)
-        .tint(Color("AccentColor"))
+        .tint(Color.accentColor)
 }

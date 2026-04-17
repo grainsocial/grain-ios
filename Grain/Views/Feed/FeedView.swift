@@ -126,7 +126,7 @@ struct FeedView: View {
                         feedRefreshID = UUID()
                     }
                 }
-                .tint(Color("AccentColor"))
+                .tint(Color.accentColor)
             }
             .fullScreenCover(item: $deepLinkStoryAuthor) { author in
                 StoryViewer(

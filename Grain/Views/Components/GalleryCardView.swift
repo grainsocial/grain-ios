@@ -59,29 +59,29 @@ struct DoubleTapHeartView: View {
         ZStack {
             Image(systemName: "heart")
                 .font(.system(size: 80, weight: .light))
-                .foregroundStyle(Color("AccentColor"))
+                .foregroundStyle(Color.heart)
                 .scaleEffect(state.ripple3Scale)
                 .opacity(state.ripple3Opacity)
                 .rotationEffect(.degrees(state.rotation * 0.6))
 
             Image(systemName: "heart")
                 .font(.system(size: 80, weight: .ultraLight))
-                .foregroundStyle(Color("AccentColor"))
+                .foregroundStyle(Color.heart)
                 .scaleEffect(state.ripple2Scale)
                 .opacity(state.ripple2Opacity)
                 .rotationEffect(.degrees(state.rotation * 0.8))
 
             Image(systemName: "heart")
                 .font(.system(size: 80, weight: .thin))
-                .foregroundStyle(Color("AccentColor"))
+                .foregroundStyle(Color.heart)
                 .scaleEffect(state.ripple1Scale)
                 .opacity(state.ripple1Opacity)
                 .rotationEffect(.degrees(state.rotation * 0.9))
 
             Image(systemName: "heart.fill")
                 .font(.system(size: 80))
-                .foregroundStyle(Color("AccentColor"))
-                .shadow(color: Color("AccentColor").opacity(0.4), radius: 12)
+                .foregroundStyle(Color.heart)
+                .shadow(color: .pink.opacity(0.4), radius: 12)
                 .scaleEffect(state.heartScale)
                 .opacity(state.heartScale > 1.2 ? 0 : 1)
                 .rotationEffect(.degrees(state.rotation))
@@ -115,7 +115,7 @@ struct LikeParticleView: View {
         let cfg = Self.configs[index]
         Image(systemName: "heart.fill")
             .font(.system(size: 10))
-            .foregroundStyle(Color("AccentColor").opacity(0.9))
+            .foregroundStyle(Color.heart.opacity(0.9))
             .scaleEffect(scale)
             .offset(offset)
             .opacity(opacity)
@@ -469,7 +469,7 @@ struct GalleryCardView: View {
                     }
                 }
             }
-            .foregroundStyle(isFavorited ? Color("AccentColor") : .secondary)
+            .foregroundStyle(isFavorited ? AnyShapeStyle(Color.heart) : AnyShapeStyle(.secondary))
             .accessibilityLabel(isFavorited ? "Unlike" : "Like")
             .accessibilityValue("\(gallery.favCount ?? 0) likes")
             .overlay(alignment: .leading) {
@@ -657,7 +657,7 @@ struct GalleryCardView: View {
     }
     .previewEnvironments()
     .preferredColorScheme(.dark)
-    .tint(Color("AccentColor"))
+    .tint(Color.accentColor)
     .frame(maxHeight: .infinity, alignment: .top)
 }
 

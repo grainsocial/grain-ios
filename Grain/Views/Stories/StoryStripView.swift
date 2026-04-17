@@ -38,7 +38,8 @@ struct StoryStripView: View {
                         .padding(4)
                         Image(systemName: "plus.circle.fill")
                             .font(.system(size: 18))
-                            .foregroundStyle(.white, Color("AccentColor"))
+                            .foregroundStyle(.white, Color.accentColor)
+                            .background(Circle().fill(Color(.systemBackground)).padding(-1))
                             .offset(x: -1, y: -1)
                             .accessibilityHidden(true)
                     }
@@ -57,9 +58,17 @@ struct StoryStripView: View {
                         onCreateTap()
                     }
                 }
-                .onLongPressGesture {
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                    onCreateTap()
+                .profileContextMenu(
+                    handle: nil,
+                    hasStory: ownAuthor != nil,
+                    onViewStory: ownAuthor.map { own in { onAuthorTap(own, 0) } },
+                    onAddStory: { onCreateTap() },
+                    showSharingActions: false
+                ) {
+                    StoryRingView(hasStory: ownAuthor != nil, viewed: false, size: 96) {
+                        AvatarView(url: userAvatar, size: 96)
+                    }
+                    .padding(6)
                 }
 
                 ForEach(sorted, id: \.id) { author in

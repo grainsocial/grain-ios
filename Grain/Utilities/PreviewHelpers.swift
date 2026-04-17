@@ -11,16 +11,17 @@ var isPreview: Bool {
 
 extension XRPCClient {
     /// Shared preview client — avoids repeating `XRPCClient(baseURL: AuthManager.serverURL)`.
-    static var preview: XRPCClient { XRPCClient(baseURL: AuthManager.serverURL) }
+    static var preview: XRPCClient {
+        XRPCClient(baseURL: AuthManager.serverURL)
+    }
 }
 
 extension View {
     /// Applies the standard Grain preview styling: dark mode + accent color.
     /// Use on every #Preview so the canvas matches the real app.
     func grainPreview() -> some View {
-        self
-            .preferredColorScheme(.dark)
-            .tint(Color("AccentColor"))
+        preferredColorScheme(.dark)
+            .tint(Color.accentColor)
     }
 
     /// Injects the standard Grain environment objects required by most previews.

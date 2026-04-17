@@ -55,7 +55,7 @@ struct EditProfileView: View {
                                     .font(.system(size: 14))
                                     .foregroundStyle(.white)
                                     .frame(width: 32, height: 32)
-                                    .background(Color("AccentColor"), in: Circle())
+                                    .background(Color.accentColor, in: Circle())
                             }
                             .accessibilityLabel("Change profile photo")
                         }

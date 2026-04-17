@@ -1,4 +1,3 @@
-import Nuke
 import NukeUI
 import SwiftUI
 
@@ -9,50 +8,23 @@ struct AvatarView: View {
     /// an animated parent (e.g. story parallax pane) so it snaps atomically.
     var animated: Bool = true
 
-    /// Only set for async cache misses — cache hits are read synchronously in body.
-    @State private var asyncImage: UIImage?
-
     private var imageURL: URL? {
         guard let url else { return nil }
         return URL(string: url)
     }
 
-    private static let placeholder = UIImage()
-
     var body: some View {
-        Image(uiImage: resolvedImage ?? Self.placeholder)
-            .resizable()
-            .frame(width: size, height: size)
-            .background {
+        LazyImage(url: imageURL) { state in
+            if let image = state.image {
+                image
+                    .resizable()
+            } else {
                 fallback
             }
-            .clipShape(Circle())
-            .overlay(Circle().strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
-            .onAppear { loadIfNeeded() }
-    }
-
-    /// Synchronous image resolution — checks memory cache first, then falls back to async-loaded image.
-    private var resolvedImage: UIImage? {
-        if let imageURL {
-            if let cached = ImagePipeline.shared.cache.cachedImage(for: ImageRequest(url: imageURL))?.image {
-                return cached
-            }
         }
-        return asyncImage
-    }
-
-    private func loadIfNeeded() {
-        guard let imageURL else { return }
-        let request = ImageRequest(url: imageURL)
-        // If in memory cache, no state change needed — resolvedImage picks it up
-        if ImagePipeline.shared.cache.cachedImage(for: request) != nil { return }
-        // Only go async for true cache misses
-        guard asyncImage == nil else { return }
-        Task {
-            if let image = try? await ImagePipeline.shared.image(for: request) {
-                asyncImage = image
-            }
-        }
+        .animation(animated ? .default : nil, value: imageURL)
+        .frame(width: size, height: size)
+        .clipShape(Circle())
     }
 
     private var fallback: some View {

@@ -54,5 +54,5 @@ extension View {
     .padding()
     .background(Color(.systemBackground))
     .preferredColorScheme(.dark)
-    .tint(Color("AccentColor"))
+    .tint(Color.accentColor)
 }

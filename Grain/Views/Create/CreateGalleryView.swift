@@ -204,6 +204,7 @@ struct CreateGalleryView: View {
                             .bold()
                     }
                 }
+                .buttonStyle(.glassProminent)
                 .disabled(title.isEmpty || photoItems.isEmpty || isUploading || title.count > maxTitle || description.count > maxDescription)
             }
         }

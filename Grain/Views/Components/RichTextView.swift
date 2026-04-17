@@ -29,17 +29,17 @@ struct RichTextView: View {
                 if let linkURL = URL(string: url) {
                     part.link = linkURL
                 }
-                part.foregroundColor = Color("AccentColor")
+                part.foregroundColor = Color.accentColor
             case let .mention(str, did):
                 part = AttributedString(str)
                 let encoded = did.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? did
                 part.link = URL(string: "grain-mention://\(encoded)")
-                part.foregroundColor = Color("AccentColor")
+                part.foregroundColor = Color.accentColor
             case let .hashtag(str, tag):
                 part = AttributedString(str)
                 let encoded = tag.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? tag
                 part.link = URL(string: "grain-hashtag://\(encoded)")
-                part.foregroundColor = Color("AccentColor")
+                part.foregroundColor = Color.accentColor
             }
             part.font = font
             result.append(part)
@@ -49,7 +49,7 @@ struct RichTextView: View {
 
     var body: some View {
         Text(attributedString)
-            .tint(Color("AccentColor"))
+            .tint(Color.accentColor)
             .environment(\.openURL, OpenURLAction { url in
                 if url.scheme == "grain-mention" {
                     let did = url.host()?.removingPercentEncoding ?? ""
@@ -210,5 +210,5 @@ private enum Segment {
     }
     .padding()
     .preferredColorScheme(.dark)
-    .tint(Color("AccentColor"))
+    .tint(Color.accentColor)
 }

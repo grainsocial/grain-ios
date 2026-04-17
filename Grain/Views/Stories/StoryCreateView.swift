@@ -241,5 +241,5 @@ struct StoryCreateView: View {
     StoryCreateView(client: .preview)
         .previewEnvironments()
         .preferredColorScheme(.dark)
-        .tint(Color("AccentColor"))
+        .tint(Color.accentColor)
 }

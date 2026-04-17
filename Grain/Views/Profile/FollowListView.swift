@@ -300,6 +300,6 @@ struct FollowListItem: Identifiable {
     }
     .previewEnvironments()
     .preferredColorScheme(.dark)
-    .tint(Color("AccentColor"))
+    .tint(Color.accentColor)
     .frame(maxHeight: .infinity, alignment: .top)
 }

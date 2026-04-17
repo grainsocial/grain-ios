@@ -29,8 +29,10 @@ struct NominatimResult {
         let addr = json["address"] as? [String: Any]
         let city = addr?["city"] as? String ?? addr?["town"] as? String ?? addr?["village"] as? String
 
+        let county = addr?["county"] as? String
         var locationParts: [String] = []
         if let city { locationParts.append(city) }
+        if let county { locationParts.append(county) }
         if let state = addr?["state"] as? String { locationParts.append(state) }
         if let country = addr?["country"] as? String { locationParts.append(country) }
 
@@ -42,7 +44,15 @@ struct NominatimResult {
                 : locationParts.joined(separator: ", ")
         }
 
-        context = locationParts.isEmpty ? nil : locationParts.joined(separator: ", ")
+        // Use display_name for context, stripping the place name prefix for more detail
+        if let displayName = json["display_name"] as? String {
+            let stripped = displayName.drop(while: { $0 != "," })
+                .dropFirst() // drop the comma
+                .trimmingCharacters(in: .whitespaces)
+            context = stripped.isEmpty ? (locationParts.isEmpty ? nil : locationParts.joined(separator: ", ")) : stripped
+        } else {
+            context = locationParts.isEmpty ? nil : locationParts.joined(separator: ", ")
+        }
 
         if let countryCode = (addr?["country_code"] as? String)?.uppercased() {
             var addressFields: [String: AnyCodable] = ["country": AnyCodable(countryCode)]

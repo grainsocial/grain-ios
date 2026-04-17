@@ -1,4 +1,5 @@
 import Nuke
+import NukeUI
 import os
 import SwiftUI
 
@@ -216,9 +217,16 @@ private struct ReasonIcon: View {
         }
     }
 
+    private var iconColor: Color {
+        switch reason {
+        case .galleryFavorite, .storyFavorite: .heart
+        default: .accentColor
+        }
+    }
+
     var body: some View {
         Image(systemName: iconName)
-            .foregroundStyle(Color("AccentColor"))
+            .foregroundStyle(iconColor)
             .font(.system(size: 18))
             .frame(width: 20)
             .accessibilityLabel(label)
@@ -335,10 +343,10 @@ private struct SingleNotificationRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             ReasonIcon(reason: notification.reasonType)
-                .frame(height: 34)
+                .frame(height: 38)
 
             VStack(alignment: .leading, spacing: 6) {
-                AvatarView(url: notification.author.avatar, size: 34, animated: false)
+                AvatarView(url: notification.author.avatar, size: 38, animated: false)
                     .onTapGesture {
                         onProfileTap?(notification.author.did)
                     }
@@ -410,7 +418,6 @@ private struct OverlappingAvatarsView: View {
                     onProfileTap?(author.did)
                 } label: {
                     AvatarView(url: author.avatar, size: size, animated: false)
-                        .overlay(Circle().strokeBorder(Color(.systemBackground), lineWidth: 2))
                 }
                 .buttonStyle(.plain)
                 .zIndex(Double(authors.count - i))
@@ -435,52 +442,23 @@ private struct CachedThumbnailView: View {
         portrait ? size * 4 / 3 : size
     }
 
-    @State private var asyncImage: UIImage?
-
     private var imageURL: URL? {
         URL(string: url)
     }
 
-    private var thumbRequest: ImageRequest? {
-        guard let imageURL else { return nil }
-        let scale = UIScreen.main.scale
-        let targetSize = CGSize(width: width * scale, height: height * scale)
-        return ImageRequest(url: imageURL, processors: [.resize(size: targetSize, contentMode: .aspectFill)])
-    }
-
-    private var resolvedImage: UIImage? {
-        if let request = thumbRequest,
-           let cached = ImagePipeline.shared.cache.cachedImage(for: request)?.image
-        {
-            return cached
-        }
-        return asyncImage
-    }
-
     var body: some View {
-        Group {
-            if let image = resolvedImage {
-                Image(uiImage: image)
+        LazyImage(url: imageURL) { state in
+            if let image = state.image {
+                image
                     .resizable()
                     .aspectRatio(contentMode: .fill)
             } else {
                 Rectangle().fill(.quaternary)
             }
         }
+        .processors([ImageProcessors.Resize(size: CGSize(width: width * UIScreen.main.scale, height: height * UIScreen.main.scale), contentMode: .aspectFill)])
         .frame(width: width, height: height)
         .clipShape(.rect(cornerRadius: 6))
-        .onAppear { loadIfNeeded() }
-    }
-
-    private func loadIfNeeded() {
-        guard let request = thumbRequest else { return }
-        if ImagePipeline.shared.cache.cachedImage(for: request) != nil { return }
-        guard asyncImage == nil else { return }
-        Task {
-            if let image = try? await ImagePipeline.shared.image(for: request) {
-                asyncImage = image
-            }
-        }
     }
 }
 

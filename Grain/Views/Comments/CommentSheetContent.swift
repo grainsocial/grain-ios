@@ -150,7 +150,7 @@ struct CommentSheetContent: View {
                     } label: {
                         Image(systemName: "xmark")
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(Color("AccentColor"))
+                            .foregroundStyle(Color.accentColor)
                             .frame(width: 32, height: 32)
                             .contentShape(Rectangle())
                     }
@@ -164,40 +164,44 @@ struct CommentSheetContent: View {
             }
 
             GlassEffectContainer(spacing: 8) {
-                HStack(alignment: .bottom, spacing: 10) {
+                let isEmpty = commentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                HStack(alignment: .bottom, spacing: 0) {
                     TextField(replyingTo != nil ? "Reply..." : "Add a comment...", text: $commentText, axis: .vertical)
                         .textFieldStyle(.plain)
                         .font(.body)
                         .focused($commentFocused)
                         .lineLimit(1 ... 5)
                         .onChange(of: commentText) { mentionState.update(text: commentText) }
-                        .padding(.horizontal, 18)
+                        .padding(.leading, 18)
+                        .padding(.trailing, 8)
                         .padding(.vertical, 12)
-                        .glassEffect(.regular.tint(.primary.opacity(0.1)), in: .capsule)
 
-                    let isEmpty = commentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                     if !isEmpty {
                         Button {
                             Task { await postComment() }
                         } label: {
-                            Image(systemName: "arrow.up.circle.fill")
-                                .font(.system(size: 28))
-                                .foregroundStyle(Color("AccentColor"))
-                                .frame(width: 44, height: 44)
+                            Image(systemName: "arrow.up")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(.white)
+                                .frame(width: 32, height: 32)
+                                .background(Color.accentColor, in: .circle)
                         }
                         .accessibilityLabel("Send comment")
-                        .glassEffect(.regular.interactive(), in: .circle)
+                        .buttonStyle(.plain)
                         .disabled(isPostingComment)
+                        .padding(.trailing, 8)
+                        .padding(.bottom, 7)
                         .transition(
                             .asymmetric(
-                                insertion: .offset(x: 60).combined(with: .opacity),
-                                removal: .offset(x: 60).combined(with: .opacity)
+                                insertion: .scale.combined(with: .opacity),
+                                removal: .scale.combined(with: .opacity)
                             )
                         )
                     }
                 }
+                .glassEffect(.regular.tint(.primary.opacity(0.1)), in: .capsule)
                 .clipped()
-                .animation(.spring(response: 0.3, dampingFraction: 0.8), value: commentText.isEmpty)
+                .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isEmpty)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
             }

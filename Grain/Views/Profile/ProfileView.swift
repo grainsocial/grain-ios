@@ -79,7 +79,8 @@ struct ProfileView: View {
             if did == auth.userDID {
                 Image(systemName: "plus.circle.fill")
                     .font(.system(size: 22))
-                    .foregroundStyle(.white, Color("AccentColor"))
+                    .foregroundStyle(.white, Color.accentColor)
+                    .background(Circle().fill(Color(.systemBackground)).padding(-1))
                     .offset(x: 4, y: 4)
                     .accessibilityHidden(true)
             }
@@ -239,10 +240,10 @@ struct ProfileView: View {
                                             }
                                             .frame(maxWidth: .infinity)
                                         }
-                                        .buttonStyle(.bordered)
-                                        .tint(.primary)
+                                        .buttonStyle(.glass)
                                     }
                                 }
+                                .buttonBorderShape(.roundedRectangle(radius: 10))
                                 .padding(.horizontal)
                             } else {
                                 HStack(spacing: 8) {
@@ -255,8 +256,7 @@ struct ProfileView: View {
                                             .font(.subheadline.weight(.semibold))
                                             .frame(maxWidth: .infinity)
                                     }
-                                    .buttonStyle(.bordered)
-                                    .tint(.primary)
+                                    .buttonStyle(.glass)
 
                                     if let germUrl = germDMUrl(profile: profile) {
                                         Link(destination: germUrl) {
@@ -269,10 +269,10 @@ struct ProfileView: View {
                                             }
                                             .frame(maxWidth: .infinity)
                                         }
-                                        .buttonStyle(.bordered)
-                                        .tint(.primary)
+                                        .buttonStyle(.glass)
                                     }
                                 }
+                                .buttonBorderShape(.roundedRectangle(radius: 10))
                                 .padding(.horizontal)
                             }
                         }
@@ -631,7 +631,7 @@ struct ProfileView: View {
                     let clamped = max(0, min(fraction, CGFloat(modes.count - 1)))
                     let xOffset = clamped * tabWidth + (tabWidth - indicatorWidth) / 2
                     Rectangle()
-                        .fill(Color("AccentColor"))
+                        .fill(Color.accentColor)
                         .frame(width: indicatorWidth, height: 2.5)
                         .offset(x: xOffset, y: -6)
                 }
@@ -984,8 +984,7 @@ struct ProfileView: View {
                     .font(.subheadline.weight(.semibold))
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
-            .tint(.primary)
+            .buttonStyle(.glass)
         } else {
             Button {
                 Task { await viewModel.toggleFollow(auth: auth.authContext()) }
@@ -994,8 +993,7 @@ struct ProfileView: View {
                     .font(.subheadline.weight(.semibold))
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(Color("AccentColor"))
+            .buttonStyle(.glassProminent)
         }
     }
 

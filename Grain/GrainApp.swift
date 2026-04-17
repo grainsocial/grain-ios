@@ -58,7 +58,7 @@ struct GrainApp: App {
                         .environment(storyStatusCache)
                         .environment(viewedStoryStorage)
                         .environment(labelDefsCache)
-                        .tint(Color("AccentColor"))
+                        .tint(Color.accentColor)
                         .onAppear {
                             appSignposter.emitEvent("WindowOnAppear")
                             Task {
@@ -78,7 +78,7 @@ struct GrainApp: App {
                 } else {
                     LoginView()
                         .environment(authManager)
-                        .tint(Color("AccentColor"))
+                        .tint(Color.accentColor)
                 }
             }
             .onOpenURL { url in

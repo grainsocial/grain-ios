@@ -71,6 +71,6 @@ struct CaptionsListPrototype: View {
     }
     return CaptionsListPrototype(items: items)
         .preferredColorScheme(.dark)
-        .tint(Color("AccentColor"))
+        .tint(Color.accentColor)
         .frame(maxHeight: .infinity, alignment: .top)
 }
