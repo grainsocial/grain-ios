@@ -5,6 +5,7 @@ private let logger = Logger(subsystem: "social.grain.grain", category: "BlueskyP
 
 struct BlueskyPostOptions {
     let url: String
+    let title: String?
     let location: (name: String, address: [String: AnyCodable]?)?
     let description: String?
     let images: [(blob: BlobRef, alt: String, width: Int, height: Int)]
@@ -25,6 +26,7 @@ enum BlueskyPost {
         // 1. Build post text (same format as web)
         let postText = buildPostText(
             url: options.url,
+            title: options.title,
             location: options.location,
             description: options.description
         )
@@ -114,64 +116,71 @@ enum BlueskyPost {
 
     // MARK: - Text Building
 
-    /// Build post text matching web format:
-    /// 📍 Location Name
-    /// Locality, Region, Country
+    /// Build post text:
+    /// Title, description…
     ///
-    /// Description (truncated to fit 300 graphemes)
+    /// 📍 Location Name, Region, Country
     ///
-    /// https://grain.social/profile/did/gallery/rkey
-    ///
-    /// #grainsocial
+    /// #GrainSocial see full post here (link)
     static func buildPostText(
         url: String,
+        title: String?,
         location: (name: String, address: [String: AnyCodable]?)?,
         description: String?
     ) -> String {
-        var lines: [String] = []
-
+        // Build location line (shortened: name, region, country)
+        var locationLine: String?
         if let location {
-            lines.append("📍 \(location.name)")
+            var parts = [location.name]
             if let address = location.address {
-                var parts: [String] = []
-                if let locality = address["locality"]?.stringValue { parts.append(locality) }
                 if let region = address["region"]?.stringValue { parts.append(region) }
                 if let country = address["country"]?.stringValue { parts.append(country) }
-                if !parts.isEmpty {
-                    lines.append(parts.joined(separator: ", "))
-                }
             }
+            locationLine = "📍 \(parts.joined(separator: ", "))"
         }
+
+        // Build suffix (location + hashtag + link)
+        var suffixLines: [String] = []
+        if let locationLine {
+            suffixLines.append("")
+            suffixLines.append(locationLine)
+        }
+        suffixLines.append("")
+        suffixLines.append("#GrainSocial \(url)")
+        let suffix = suffixLines.joined(separator: "\n")
 
         // Lexicon constraints: maxGraphemes=300, maxLength=3000 bytes
-        // Swift .count is grapheme count (same as Intl.Segmenter)
-        let suffix = "\n\n\(url)\n\n#grainsocial"
-        let prefixText = lines.isEmpty ? "" : lines.joined(separator: "\n") + "\n"
-        let overheadGraphemes = (prefixText + suffix).count
-        let overheadBytes = (prefixText + suffix).utf8.count
-        let maxDescGraphemes = 300 - overheadGraphemes
-        let maxDescBytes = 3000 - overheadBytes
+        let overheadGraphemes = suffix.count
+        let overheadBytes = suffix.utf8.count
+        let maxContentGraphemes = 300 - overheadGraphemes
+        let maxContentBytes = 3000 - overheadBytes
 
-        if let desc = description?.trimmingCharacters(in: .whitespacesAndNewlines), !desc.isEmpty {
-            var truncated = desc
-            // Truncate to fit grapheme limit
-            if truncated.count > maxDescGraphemes {
-                truncated = String(truncated.prefix(max(0, maxDescGraphemes - 1))) + "…"
+        // Build title + description content
+        var content = ""
+        let titleText = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let descText = description?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        if !titleText.isEmpty, !descText.isEmpty {
+            content = "\(titleText), \(descText)"
+        } else if !titleText.isEmpty {
+            content = titleText
+        } else if !descText.isEmpty {
+            content = descText
+        }
+
+        // Truncate to fit
+        if !content.isEmpty {
+            if content.count > maxContentGraphemes {
+                content = String(content.prefix(max(0, maxContentGraphemes - 1))) + "…"
             }
-            // Truncate further to fit byte limit
-            while truncated.utf8.count > maxDescBytes, !truncated.isEmpty {
-                truncated = String(truncated.dropLast(2)) + "…"
-            }
-            if !truncated.isEmpty {
-                lines.append("")
-                lines.append(truncated)
+            while content.utf8.count > maxContentBytes, !content.isEmpty {
+                content = String(content.dropLast(2)) + "…"
             }
         }
 
-        lines.append("")
-        lines.append(url)
-        lines.append("")
-        lines.append("#grainsocial")
+        var lines: [String] = []
+        if !content.isEmpty { lines.append(content) }
+        lines.append(contentsOf: suffixLines)
 
         return lines.joined(separator: "\n")
     }

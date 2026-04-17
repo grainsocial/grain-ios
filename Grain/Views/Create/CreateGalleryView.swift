@@ -114,7 +114,7 @@ struct CreateGalleryView: View {
                 Section {
                     Toggle("Post to Bluesky", isOn: $postToBluesky)
                 } footer: {
-                    Text("Includes location, description, and the first 4 photos.")
+                    Text("Includes title, description, location, and the first 4 photos.")
                 }
                 errorSection
             }
@@ -532,6 +532,7 @@ struct CreateGalleryView: View {
                     try await BlueskyPost.create(
                         options: BlueskyPostOptions(
                             url: postURL,
+                            title: title.isEmpty ? nil : title,
                             location: resolvedLocation.map { ($0.name, $0.address) },
                             description: description.isEmpty ? nil : description,
                             images: bskyImages

@@ -55,6 +55,8 @@ struct StoryCreateView: View {
 
                 Section {
                     Toggle("Post to Bluesky", isOn: $postToBluesky)
+                } footer: {
+                    Text("Includes location and photo.")
                 }
 
                 if let errorMessage {
@@ -205,8 +207,9 @@ struct StoryCreateView: View {
                     try await BlueskyPost.create(
                         options: BlueskyPostOptions(
                             url: postURL,
+                            title: nil,
                             location: location,
-                            description: nil as String?,
+                            description: nil,
                             images: [(blob: response.blob, alt: "", width: Int(size.width), height: Int(size.height))]
                         ),
                         client: client,
