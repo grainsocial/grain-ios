@@ -44,6 +44,15 @@ struct GrainApp: App {
     @State private var viewedStoryStorage = ViewedStoryStorage()
     @State private var labelDefsCache = LabelDefinitionsCache()
     @State private var pendingDeepLink: DeepLink?
+    @AppStorage("appearance") private var appearance: String = "auto"
+
+    private var colorScheme: ColorScheme? {
+        switch appearance {
+        case "light": .light
+        case "dark": .dark
+        default: nil
+        }
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -86,6 +95,7 @@ struct GrainApp: App {
                     pendingDeepLink = deepLink
                 }
             }
+            .preferredColorScheme(colorScheme)
         }
         .environment(authManager)
     }

@@ -9,9 +9,24 @@ struct SettingsView: View {
     @State private var cacheSizeText = "Calculating..."
     @State private var safariURL: URL?
 
+    @AppStorage("appearance") private var appearance: String = "auto"
+
+    private var appearanceLabel: String {
+        switch appearance {
+        case "light": "Light"
+        case "dark": "Dark"
+        default: "Auto"
+        }
+    }
+
     var body: some View {
         List {
             Section {
+                NavigationLink {
+                    AppearanceSettingsView()
+                } label: {
+                    LabeledContent("Appearance", value: appearanceLabel)
+                }
                 NavigationLink("Account") {
                     AccountDetailView()
                 }
@@ -22,7 +37,7 @@ struct SettingsView: View {
                     ModerationView(client: client)
                 }
                 NavigationLink("Feeds") {
-                    AppearanceSettingsView()
+                    FeedsSettingsView()
                 }
                 NavigationLink("Privacy") {
                     UploadDefaultsView(client: client)
@@ -165,7 +180,7 @@ private struct AccountDetailView: View {
     }
 }
 
-private struct AppearanceSettingsView: View {
+private struct FeedsSettingsView: View {
     @AppStorage("privacy.showSuggestedUsers") private var showSuggestedUsers = true
 
     var body: some View {
@@ -175,6 +190,34 @@ private struct AppearanceSettingsView: View {
             }
         }
         .navigationTitle("Feeds")
+    }
+}
+
+private struct AppearanceSettingsView: View {
+    @AppStorage("appearance") private var appearance: String = "auto"
+
+    var body: some View {
+        List {
+            Section {
+                ForEach(["auto", "light", "dark"], id: \.self) { option in
+                    HStack {
+                        Text(option == "auto" ? "Automatic" : option == "light" ? "Light" : "Dark")
+                        Spacer()
+                        if appearance == option {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(Color.accentColor)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        appearance = option
+                    }
+                }
+            } footer: {
+                Text("Automatic follows your device's system setting.")
+            }
+        }
+        .navigationTitle("Appearance")
     }
 }
 
