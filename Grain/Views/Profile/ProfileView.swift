@@ -241,7 +241,7 @@ struct ProfileView: View {
                                             }
                                             .frame(maxWidth: .infinity)
                                         }
-                                        .buttonStyle(.glass)
+                                        .buttonStyle(.bordered)
                                     }
                                 }
                                 .buttonBorderShape(.roundedRectangle(radius: 10))
@@ -255,7 +255,7 @@ struct ProfileView: View {
                                             .font(.subheadline.weight(.semibold))
                                             .frame(maxWidth: .infinity)
                                     }
-                                    .buttonStyle(.glass)
+                                    .buttonStyle(.bordered)
 
                                     if let germUrl = germDMUrl(profile: profile) {
                                         Link(destination: germUrl) {
@@ -268,7 +268,7 @@ struct ProfileView: View {
                                             }
                                             .frame(maxWidth: .infinity)
                                         }
-                                        .buttonStyle(.glass)
+                                        .buttonStyle(.bordered)
                                     }
                                 }
                                 .buttonBorderShape(.roundedRectangle(radius: 10))
@@ -992,7 +992,7 @@ struct ProfileView: View {
                     .font(.subheadline.weight(.semibold))
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.glass)
+            .buttonStyle(.bordered)
         } else {
             Button {
                 Task { await viewModel.toggleFollow(auth: auth.authContext()) }
@@ -1001,7 +1001,7 @@ struct ProfileView: View {
                     .font(.subheadline.weight(.semibold))
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.glassProminent)
+            .buttonStyle(.borderedProminent)
         }
     }
 
