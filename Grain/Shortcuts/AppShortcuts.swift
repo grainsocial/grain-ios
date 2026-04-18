@@ -8,7 +8,7 @@ extension Notification.Name {
 }
 
 enum GrainShortcutAction: String {
-    case feed, search, notifications, profile, createGallery
+    case feed, search, notifications, profile, createGallery, createStory
 }
 
 // MARK: - Intents
@@ -61,6 +61,18 @@ struct OpenProfileIntent: AppIntent {
     }
 }
 
+struct CreateStoryIntent: AppIntent {
+    static let title: LocalizedStringResource = "Create Story"
+    static let description = IntentDescription("Start posting a new story in Grain.")
+    static let openAppWhenRun = true
+
+    @MainActor
+    func perform() async throws -> some IntentResult {
+        NotificationCenter.default.post(name: .grainShortcutAction, object: GrainShortcutAction.createStory.rawValue)
+        return .result()
+    }
+}
+
 struct CreateGalleryIntent: AppIntent {
     static let title: LocalizedStringResource = "Create Gallery"
     static let description = IntentDescription("Start posting a new photo gallery in Grain.")
@@ -77,6 +89,26 @@ struct CreateGalleryIntent: AppIntent {
 
 struct GrainShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
+        AppShortcut(
+            intent: CreateStoryIntent(),
+            phrases: [
+                "Create a story in \(.applicationName)",
+                "New \(.applicationName) story",
+                "Post a \(.applicationName) story",
+            ],
+            shortTitle: "Create Story",
+            systemImageName: "plus.circle"
+        )
+        AppShortcut(
+            intent: CreateGalleryIntent(),
+            phrases: [
+                "Create a gallery in \(.applicationName)",
+                "New \(.applicationName) gallery",
+                "Post to \(.applicationName)",
+            ],
+            shortTitle: "Create Gallery",
+            systemImageName: "plus.square.on.square"
+        )
         AppShortcut(
             intent: OpenFeedIntent(),
             phrases: [
@@ -112,16 +144,6 @@ struct GrainShortcuts: AppShortcutsProvider {
             ],
             shortTitle: "My Profile",
             systemImageName: "person"
-        )
-        AppShortcut(
-            intent: CreateGalleryIntent(),
-            phrases: [
-                "Create a gallery in \(.applicationName)",
-                "New \(.applicationName) gallery",
-                "Post to \(.applicationName)",
-            ],
-            shortTitle: "Create Gallery",
-            systemImageName: "plus.square.on.square"
         )
     }
 }

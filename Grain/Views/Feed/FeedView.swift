@@ -11,7 +11,7 @@ struct FeedView: View {
     @State private var prefsViewModel: FeedPreferencesViewModel
     @State private var storyViewModel: StoryStripViewModel
     @State private var storyViewerDid: String?
-    @State private var showStoryCreate = false
+    @Binding var showStoryCreate: Bool
     @State private var deepLinkProfileDid: String?
     @State private var deepLinkGalleryUri: String?
     @State private var deepLinkStoryAuthor: GrainStoryAuthor?
@@ -23,10 +23,16 @@ struct FeedView: View {
     @Binding var pendingDeepLink: DeepLink?
     @Binding var showCreate: Bool
 
-    init(client: XRPCClient, pendingDeepLink: Binding<DeepLink?> = .constant(nil), showCreate: Binding<Bool> = .constant(false)) {
+    init(
+        client: XRPCClient,
+        pendingDeepLink: Binding<DeepLink?> = .constant(nil),
+        showCreate: Binding<Bool> = .constant(false),
+        showStoryCreate: Binding<Bool> = .constant(false)
+    ) {
         self.client = client
         _pendingDeepLink = pendingDeepLink
         _showCreate = showCreate
+        _showStoryCreate = showStoryCreate
         _prefsViewModel = State(initialValue: FeedPreferencesViewModel(client: client))
         _storyViewModel = State(initialValue: StoryStripViewModel(client: client))
     }

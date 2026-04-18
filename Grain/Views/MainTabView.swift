@@ -18,6 +18,7 @@ struct MainTabView: View {
     @State private var commentPresenter = StoryCommentPresenter()
     @State private var client: XRPCClient?
     @State private var showCreate = false
+    @State private var showStoryCreate = false
     @State private var avatarTabImage: UIImage?
     @State private var feedRefreshID = UUID()
     @State private var notificationsVM = NotificationsViewModel(client: XRPCClient(baseURL: AuthManager.serverURL))
@@ -53,7 +54,7 @@ struct MainTabView: View {
                 let _ = launchSignposter.emitEvent("TabViewBodyBegin")
                 TabView(selection: $selectedTab) {
                     Tab("Feed", systemImage: "photo.on.rectangle", value: AppTab.feed) {
-                        FeedView(client: client, pendingDeepLink: $pendingDeepLink, showCreate: $showCreate)
+                        FeedView(client: client, pendingDeepLink: $pendingDeepLink, showCreate: $showCreate, showStoryCreate: $showStoryCreate)
                             .id(feedRefreshID)
                     }
 
@@ -175,6 +176,9 @@ struct MainTabView: View {
             case .createGallery:
                 selectedTab = .feed
                 showCreate = true
+            case .createStory:
+                selectedTab = .feed
+                showStoryCreate = true
             }
         }
     }
