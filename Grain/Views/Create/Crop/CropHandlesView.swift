@@ -10,31 +10,38 @@ import SwiftUI
 struct CropHandlesView: View, @preconcurrency Animatable {
     var screenCropRect: CGRect
     var showGrid: Bool
-    /// `min(frameWidth, frameHeight) * imageScale` — drives stroke/thickness
-    /// sizing so handles scale with zoom but not with crop rect size.
+    /// `min(frameWidth, frameHeight) * imageScale` — drives stroke/thickness.
+    /// Animatable so it morphs in lockstep with `screenCropRect` instead of
+    /// snapping to its final value in one frame.
     var zoomReference: CGFloat
+    /// Caller-supplied short side. Kept as input (not derived from
+    /// `screenCropRect`) so rotation can override the value being interpolated.
+    var cropShortSide: CGFloat
 
-    var animatableData: AnimatablePair<AnimatablePair<CGFloat, CGFloat>, AnimatablePair<CGFloat, CGFloat>> {
+    var animatableData: AnimatablePair<
+        AnimatablePair<AnimatablePair<CGFloat, CGFloat>, AnimatablePair<CGFloat, CGFloat>>,
+        AnimatablePair<CGFloat, CGFloat>
+    > {
         get {
-            .init(.init(screenCropRect.origin.x, screenCropRect.origin.y),
-                  .init(screenCropRect.size.width, screenCropRect.size.height))
+            .init(
+                .init(.init(screenCropRect.origin.x, screenCropRect.origin.y),
+                      .init(screenCropRect.size.width, screenCropRect.size.height)),
+                .init(zoomReference, cropShortSide)
+            )
         }
         set {
             screenCropRect = CGRect(
-                x: newValue.first.first,
-                y: newValue.first.second,
-                width: newValue.second.first,
-                height: newValue.second.second
+                x: newValue.first.first.first,
+                y: newValue.first.first.second,
+                width: newValue.first.second.first,
+                height: newValue.first.second.second
             )
+            zoomReference = newValue.second.first
+            cropShortSide = newValue.second.second
         }
     }
 
     // MARK: - Proportional dimensions
-
-    /// Short side of the screen-space crop rect.
-    private var cropShortSide: CGFloat {
-        min(screenCropRect.width, screenCropRect.height)
-    }
 
     /// Full arm length — zoom-driven. Used for edge bar sizing and thresholds.
     private var fullHandleLength: CGFloat {
@@ -90,6 +97,15 @@ struct CropHandlesView: View, @preconcurrency Animatable {
             moveIndicatorLines
         }
         .allowsHitTesting(false)
+        // Per-frame handle-sizing telemetry. screenCropRect is the animatable
+        // property — fires on every animation tick so Instruments captures
+        // the full size morph (including any non-monotonic "up/down").
+        .onChange(of: screenCropRect) { _, _ in
+            cropViewSignposter.emitEvent(
+                "HandleFrame",
+                "zoomRef=\(zoomReference, format: .fixed(precision: 1)) cropShort=\(cropShortSide, format: .fixed(precision: 1)) fullLen=\(fullHandleLength, format: .fixed(precision: 1)) handleLen=\(handleLength, format: .fixed(precision: 1)) thick=\(handleThickness, format: .fixed(precision: 1)) showH=\(showHBars) showV=\(showVBars)"
+            )
+        }
     }
 
     // MARK: - Border (screen-space, scales with handles)
@@ -123,8 +139,13 @@ struct CropHandlesView: View, @preconcurrency Animatable {
 
     // MARK: - Edge bars (separate views for insert/remove transitions)
 
-    private var showHBars: Bool { screenCropRect.width >= fullHandleLength * 4 }
-    private var showVBars: Bool { screenCropRect.height >= fullHandleLength * 4 }
+    private var showHBars: Bool {
+        screenCropRect.width >= fullHandleLength * 4
+    }
+
+    private var showVBars: Bool {
+        screenCropRect.height >= fullHandleLength * 4
+    }
 
     private var edgeBarViews: some View {
         let r = screenCropRect
@@ -325,13 +346,19 @@ struct CropHandlesView: View, @preconcurrency Animatable {
     // MARK: - Move indicator (3-line grab bar with background pill)
 
     /// Pill height (capsule short-axis) — a touch larger than the old fixed 18pt.
-    private var pillHeight: CGFloat { 22 }
+    private var pillHeight: CGFloat {
+        22
+    }
 
     /// Pill width: straight section = handleLength (matches edge bar length) + 2 × radius.
-    private var pillWidth: CGFloat { handleLength + pillHeight }
+    private var pillWidth: CGFloat {
+        handleLength + pillHeight
+    }
 
     /// Line width for the 3-line grab indicator: spans 80 % of the straight section.
-    private var indicatorLineWidth: CGFloat { handleLength * 0.8 }
+    private var indicatorLineWidth: CGFloat {
+        handleLength * 0.8
+    }
 
     /// Vertical center of the pill — locked inside the crop rect, just
     /// below the top edge. No toolbar-overlap concerns since it never

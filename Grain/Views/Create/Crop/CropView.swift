@@ -1,7 +1,7 @@
 import os
 import SwiftUI
 
-private let cropViewSignposter = OSSignposter(subsystem: "social.grain.grain", category: "CropView")
+let cropViewSignposter = OSSignposter(subsystem: "social.grain.grain", category: "CropView")
 
 /// Full-screen crop tool. Presented as `.fullScreenCover` from both story
 /// and gallery create flows.
@@ -20,6 +20,12 @@ struct CropView: View {
     @State private var postRotationNormalizedCrop: CGRect?
     @State private var isProcessing = false
     @State private var lastGeoSize: CGSize = .zero
+    /// Rotation-only handle-sizing overrides. Set OUTSIDE `withAnimation` to
+    /// pre-rotation values, then INSIDE `withAnimation` to post values, so
+    /// SwiftUI interpolates them via `CropHandlesView.animatableData`. nil
+    /// outside rotation; the natural derivations are passed instead.
+    @State private var rotationOverrideZoomRef: CGFloat?
+    @State private var rotationOverrideCropShortSide: CGFloat?
 
     init(
         image: UIImage,
@@ -155,14 +161,10 @@ struct CropView: View {
                 pillButton("minus.magnifyingglass",
                            active: state.isViewModified)
                 {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 1.0)) {
-                        state.resetView()
-                    }
+                    animateSnapZoom(kind: "resetView") { state.resetView() }
                 }
                 pillButton("plus.magnifyingglass") {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 1.0)) {
-                        state.zoomToCrop()
-                    }
+                    animateSnapZoom(kind: "zoomToCrop") { state.zoomToCrop() }
                 }
             }
             .glassEffect(.regular.interactive(), in: .capsule)
@@ -308,7 +310,10 @@ struct CropView: View {
             CropHandlesView(
                 screenCropRect: state.screenCropRect,
                 showGrid: state.showGrid,
-                zoomReference: min(fitWidth, fitHeight) * state.imageScale
+                zoomReference: rotationOverrideZoomRef
+                    ?? min(fitWidth, fitHeight) * state.imageScale,
+                cropShortSide: rotationOverrideCropShortSide
+                    ?? min(state.screenCropRect.width, state.screenCropRect.height)
             )
             .frame(width: fitWidth, height: fitHeight)
         }
@@ -326,6 +331,30 @@ struct CropView: View {
     }
 
     // MARK: - Actions
+
+    /// Wraps a snap-zoom mutation in a spring animation and brackets it
+    /// with a signpost interval capturing pre/post handle-sizing inputs
+    /// (zoomReference + cropShortSide) for Instruments.
+    private func animateSnapZoom(kind: String, _ mutate: () -> Void) {
+        let fit = fitSize(available: lastGeoSize, swapped: isSwapped)
+        let preZoomRef = min(fit.width, fit.height) * state.imageScale
+        let preCropShort = min(state.screenCropRect.width, state.screenCropRect.height)
+        let spID = cropViewSignposter.makeSignpostID()
+        let spState = cropViewSignposter.beginInterval(
+            "ZoomSnap", id: spID,
+            "kind=\(kind, privacy: .public) preZoomRef=\(preZoomRef, format: .fixed(precision: 1)) preCropShort=\(preCropShort, format: .fixed(precision: 1))"
+        )
+        withAnimation(.spring(response: 0.35, dampingFraction: 1.0)) {
+            mutate()
+        } completion: {
+            let postZoomRef = min(fit.width, fit.height) * state.imageScale
+            let postCropShort = min(state.screenCropRect.width, state.screenCropRect.height)
+            cropViewSignposter.endInterval(
+                "ZoomSnap", spState,
+                "postZoomRef=\(postZoomRef, format: .fixed(precision: 1)) postCropShort=\(postCropShort, format: .fixed(precision: 1))"
+            )
+        }
+    }
 
     private func resetToBaseline() {
         // Precompute the baseline frame in case rotation changes isSwapped.
@@ -450,13 +479,39 @@ struct CropView: View {
 
         isRotating = true
         postRotationNormalizedCrop = nil
+
+        // Drive handle sizing from explicit pre→post values across the
+        // animation. The natural derivations would jump at the moment
+        // isSwapped flips (mid-animation) and after imageScale resets;
+        // overriding with values that animatableData interpolates gives
+        // a clean morph. Cleared in completion — at that moment the
+        // natural values equal post so the handoff is a no-op.
+        let preFit = fitSize(available: lastGeoSize, swapped: isSwapped)
+        let postFit = fitSize(available: lastGeoSize, swapped: newSwapped)
+        let preZoomRef = min(preFit.width, preFit.height) * state.imageScale
+        let preCropShort = min(state.screenCropRect.width, state.screenCropRect.height)
+        let postZoomRef = min(postFit.width, postFit.height)
+        let postCropShort = min(finalCrop.width, finalCrop.height)
+        rotationOverrideZoomRef = preZoomRef
+        rotationOverrideCropShortSide = preCropShort
+
+        let rotID = cropViewSignposter.makeSignpostID()
+        let rotState = cropViewSignposter.beginInterval(
+            "Rotate", id: rotID,
+            "deg=\(degrees) preZoomRef=\(preZoomRef, format: .fixed(precision: 1)) postZoomRef=\(postZoomRef, format: .fixed(precision: 1)) preCropShort=\(preCropShort, format: .fixed(precision: 1)) postCropShort=\(postCropShort, format: .fixed(precision: 1))"
+        )
         withAnimation(.smooth(duration: 0.4)) {
             state.rotationAngle += Double(degrees)
             state.imageOffset = .zero
             state.imageScale = 1.0
             state.cropRect = finalCrop
+            rotationOverrideZoomRef = postZoomRef
+            rotationOverrideCropShortSide = postCropShort
         } completion: {
             isRotating = false
+            rotationOverrideZoomRef = nil
+            rotationOverrideCropShortSide = nil
+            cropViewSignposter.endInterval("Rotate", rotState)
         }
     }
 
