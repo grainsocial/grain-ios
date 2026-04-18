@@ -4,7 +4,7 @@ import Foundation
 import os
 
 private let logger = Logger(subsystem: "social.grain.grain", category: "Auth")
-private let authSignposter = OSSignposter(subsystem: "social.grain.grain", category: "Auth")
+private let authSignposter = OSSignposter(subsystem: "social.grain.grain", category: "AppLaunch")
 
 /// Manages OAuth + DPoP authentication flow against the hatk server.
 @Observable
@@ -204,7 +204,9 @@ final class AuthManager {
         }
 
         try await exchangeCode(code: code, dpop: dpop)
-        await fetchAndStoreAvatar()
+        if let did = userDID {
+            await fetchAndStoreAvatar(did: did)
+        }
     }
 
     /// Refresh the access token only if it expires within 60 seconds.
@@ -368,40 +370,66 @@ final class AuthManager {
         if reauthReason != nil { reauthReason = nil }
     }
 
-    func fetchAvatarIfNeeded() async {
-        if userAvatar != nil, avatarImage == nil {
-            await downloadAvatarImage()
+    nonisolated func fetchAvatarIfNeeded() async {
+        let spid = authSignposter.makeSignpostID()
+        let state = authSignposter.beginInterval("Avatar.total", id: spid)
+        defer { authSignposter.endInterval("Avatar.total", state) }
+
+        let snapshot = await MainActor.run {
+            (url: self.userAvatar, hasImage: self.avatarImage != nil, did: self.userDID)
         }
-        if userAvatar == nil, userDID != nil {
-            await fetchAndStoreAvatar()
+
+        if let url = snapshot.url, !snapshot.hasImage {
+            await downloadAvatarImage(from: url)
+        }
+        if snapshot.url == nil, let did = snapshot.did {
+            await fetchAndStoreAvatar(did: did)
         }
     }
 
     func refreshAvatar() async {
-        await fetchAndStoreAvatar()
+        guard let did = userDID else { return }
+        await fetchAndStoreAvatar(did: did)
     }
 
-    private func fetchAndStoreAvatar() async {
-        guard let did = userDID else { return }
+    private nonisolated func fetchAndStoreAvatar(did: String) async {
         let client = XRPCClient(baseURL: Self.serverURL)
         do {
+            let profileSpid = authSignposter.makeSignpostID()
+            let profileState = authSignposter.beginInterval("Avatar.profile", id: profileSpid)
             let profile = try await client.getActorProfile(actor: did)
-            if userAvatar != profile.avatar {
-                userAvatar = profile.avatar
-                TokenStorage.userAvatar = profile.avatar
+            authSignposter.endInterval("Avatar.profile", profileState)
+
+            let newURL = profile.avatar
+            await MainActor.run {
+                if self.userAvatar != newURL {
+                    self.userAvatar = newURL
+                    TokenStorage.userAvatar = newURL
+                }
+            }
+            if let newURL {
+                await downloadAvatarImage(from: newURL)
             }
         } catch {
             logger.error("Avatar fetch failed: \(error)")
         }
-        await downloadAvatarImage()
     }
 
-    private func downloadAvatarImage() async {
-        guard let urlString = userAvatar, let url = URL(string: urlString) else { return }
+    private nonisolated func downloadAvatarImage(from urlString: String) async {
+        guard let url = URL(string: urlString) else { return }
         do {
+            let dlSpid = authSignposter.makeSignpostID()
+            let dlState = authSignposter.beginInterval("Avatar.download", id: dlSpid)
             let (data, _) = try await URLSession.shared.data(from: url)
-            if let image = UIImage(data: data) {
-                avatarImage = image
+            authSignposter.endInterval("Avatar.download", dlState)
+
+            let decodeSpid = authSignposter.makeSignpostID()
+            let decodeState = authSignposter.beginInterval("Avatar.decode", id: decodeSpid)
+            let image = UIImage(data: data)
+            authSignposter.endInterval("Avatar.decode", decodeState)
+
+            if let image {
+                await MainActor.run { self.avatarImage = image }
             }
         } catch {
             logger.error("Avatar download failed: \(error)")

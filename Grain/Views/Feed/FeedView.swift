@@ -473,6 +473,7 @@ private struct FeedTabContent: View {
                 #endif
                 return
             }
+            viewModel.primeFromCacheIfNeeded()
             if !viewModel.hasFetchedInitial {
                 let initialSpid = launchSignposter.makeSignpostID()
                 let initialState = launchSignposter.beginInterval("FeedInitialLoad", id: initialSpid)

@@ -2,7 +2,6 @@ import os
 import SwiftUI
 
 private let launchSignposter = OSSignposter(subsystem: "social.grain.grain", category: "AppLaunch")
-private let launchLogger = Logger(subsystem: "social.grain.grain", category: "AppLaunch")
 
 private enum AppTab: Hashable {
     case feed, notifications, profile, search
@@ -92,7 +91,6 @@ struct MainTabView: View {
         .task {
             let taskSpid = launchSignposter.makeSignpostID()
             let taskState = launchSignposter.beginInterval("MainTabLaunch", id: taskSpid)
-            launchLogger.debug("[MainTabLaunch] begin")
 
             commentPresenter.configure(
                 auth: auth,
@@ -103,39 +101,43 @@ struct MainTabView: View {
             client = c
             notificationsVM.updateClient(c)
 
-            // Start avatar fetch immediately — it doesn't need an auth context
-            let avatarSpid = launchSignposter.makeSignpostID()
-            let avatarState = launchSignposter.beginInterval("AvatarFetch", id: avatarSpid)
-            launchLogger.debug("[AvatarFetch] begin")
-            async let avatarFetch: Void = auth.fetchAvatarIfNeeded()
+            // Begin/end live inside each child task so intervals reflect real
+            // wall-clock duration, not when the parent joins.
+            async let avatarFetch: Void = {
+                let id = launchSignposter.makeSignpostID()
+                let state = launchSignposter.beginInterval("AvatarFetch", id: id)
+                await auth.fetchAvatarIfNeeded()
+                launchSignposter.endInterval("AvatarFetch", state)
+            }()
 
-            // Resolve auth context once (may refresh token) while avatar is in flight
+            // Gates notif + labels; if a token refresh fires, it lands here.
+            let ctxSpid = launchSignposter.makeSignpostID()
+            let ctxState = launchSignposter.beginInterval("AuthContextBootstrap", id: ctxSpid)
             let ctx = await auth.authContext()
+            launchSignposter.endInterval("AuthContextBootstrap", ctxState)
 
-            // Kick off notifications + label defs in parallel now that we have ctx
-            let notifSpid = launchSignposter.makeSignpostID()
-            let labelsSpid = launchSignposter.makeSignpostID()
-            let notifState = launchSignposter.beginInterval("NotificationsFetch", id: notifSpid)
-            launchLogger.debug("[NotificationsFetch] begin")
-            let labelsState = launchSignposter.beginInterval("LabelDefsFetch", id: labelsSpid)
-            launchLogger.debug("[LabelDefsFetch] begin")
-            async let notifFetch: Void = notificationsVM.fetchUnseenCount(auth: ctx)
-            async let labelsFetch: Void = labelDefsCache.loadIfNeeded(client: c, auth: ctx)
+            // LaunchTrio wall-clock vs. sum of branches reveals true overlap.
+            let trioSpid = launchSignposter.makeSignpostID()
+            let trioState = launchSignposter.beginInterval("LaunchTrio", id: trioSpid)
 
-            await avatarFetch
-            launchSignposter.endInterval("AvatarFetch", avatarState)
-            launchLogger.debug("[AvatarFetch] end")
+            async let notifFetch: Void = {
+                let id = launchSignposter.makeSignpostID()
+                let state = launchSignposter.beginInterval("NotificationsFetch", id: id)
+                await notificationsVM.fetchUnseenCount(auth: ctx)
+                launchSignposter.endInterval("NotificationsFetch", state)
+            }()
 
-            await notifFetch
-            launchSignposter.endInterval("NotificationsFetch", notifState)
-            launchLogger.debug("[NotificationsFetch] end")
+            async let labelsFetch: Void = {
+                let id = launchSignposter.makeSignpostID()
+                let state = launchSignposter.beginInterval("LabelDefsFetch", id: id)
+                await labelDefsCache.loadIfNeeded(client: c, auth: ctx)
+                launchSignposter.endInterval("LabelDefsFetch", state)
+            }()
 
-            await labelsFetch
-            launchSignposter.endInterval("LabelDefsFetch", labelsState)
-            launchLogger.debug("[LabelDefsFetch] end")
+            _ = await (avatarFetch, notifFetch, labelsFetch)
 
+            launchSignposter.endInterval("LaunchTrio", trioState)
             launchSignposter.endInterval("MainTabLaunch", taskState)
-            launchLogger.debug("[MainTabLaunch] end")
         }
         .onChange(of: auth.avatarImage) {
             if let uiImage = auth.avatarImage {

@@ -1,7 +1,10 @@
 import Foundation
 import Nuke
+import os
 import SwiftUI
 import UserNotifications
+
+private let notifSignposter = OSSignposter(subsystem: "social.grain.grain", category: "AppLaunch")
 
 @Observable
 @MainActor
@@ -110,10 +113,19 @@ final class NotificationsViewModel {
         prefetcher.startPrefetching(with: requests)
     }
 
-    func fetchUnseenCount(auth: AuthContext? = nil) async {
+    nonisolated func fetchUnseenCount(auth: AuthContext? = nil) async {
+        let spid = notifSignposter.makeSignpostID()
+        let state = notifSignposter.beginInterval("Notif.fetchUnseenCount", id: spid)
+        defer { notifSignposter.endInterval("Notif.fetchUnseenCount", state) }
+
+        let client = await MainActor.run { self.client }
         do {
+            let netSpid = notifSignposter.makeSignpostID()
+            let netState = notifSignposter.beginInterval("Notif.network", id: netSpid)
             let response = try await client.getNotifications(countOnly: true, auth: auth)
-            unseenCount = response.unseenCount ?? 0
+            notifSignposter.endInterval("Notif.network", netState)
+
+            await MainActor.run { self.unseenCount = response.unseenCount ?? 0 }
         } catch {}
     }
 }

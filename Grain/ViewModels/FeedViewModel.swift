@@ -1,4 +1,7 @@
 import Foundation
+import os
+
+private let feedSignposter = OSSignposter(subsystem: "social.grain.grain", category: "Feed")
 
 @Observable
 @MainActor
@@ -38,9 +41,17 @@ final class FeedViewModel {
         self.location = location
         self.tag = tag
         self.cacheKey = cacheKey
-        if let cacheKey {
-            galleries = FeedCache.shared.load(key: cacheKey)
-        }
+    }
+
+    /// Loads persisted galleries from disk once. Called from `.task` so it runs
+    /// for the one VM instance that SwiftUI actually retains, not every struct
+    /// init that `State(initialValue:)` speculatively evaluates.
+    func primeFromCacheIfNeeded() {
+        guard galleries.isEmpty, let cacheKey else { return }
+        let cacheSpid = feedSignposter.makeSignpostID()
+        let cacheState = feedSignposter.beginInterval("Feed.cache.load", id: cacheSpid)
+        galleries = FeedCache.shared.load(key: cacheKey)
+        feedSignposter.endInterval("Feed.cache.load", cacheState)
     }
 
     convenience init(client: XRPCClient, pinnedFeed: PinnedFeed, userDID: String? = nil) {
@@ -56,6 +67,10 @@ final class FeedViewModel {
     }
 
     func loadInitial(auth: AuthContext? = nil) async {
+        let totalSpid = feedSignposter.makeSignpostID()
+        let totalState = feedSignposter.beginInterval("Feed.loadInitial", id: totalSpid)
+        defer { feedSignposter.endInterval("Feed.loadInitial", totalState) }
+
         loadTask?.cancel()
         isLoading = true
         error = nil
@@ -64,6 +79,8 @@ final class FeedViewModel {
 
         let task = Task {
             do {
+                let netSpid = feedSignposter.makeSignpostID()
+                let netState = feedSignposter.beginInterval("Feed.network", id: netSpid)
                 let response = try await client.getFeed(
                     feed: feedName,
                     actor: actor,
@@ -72,10 +89,17 @@ final class FeedViewModel {
                     tag: tag,
                     auth: auth
                 )
+                feedSignposter.endInterval("Feed.network", netState)
+
                 guard !Task.isCancelled else { return }
+
+                let publishSpid = feedSignposter.makeSignpostID()
+                let publishState = feedSignposter.beginInterval("Feed.publish", id: publishSpid)
                 galleries = response.items ?? []
                 cursor = response.cursor
                 hasMore = response.cursor != nil
+                feedSignposter.endInterval("Feed.publish", publishState)
+
                 if let key = cacheKey {
                     let toCache = galleries
                     Task.detached(priority: .utility) {
