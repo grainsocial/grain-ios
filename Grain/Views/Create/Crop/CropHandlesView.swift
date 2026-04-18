@@ -139,13 +139,8 @@ struct CropHandlesView: View, @preconcurrency Animatable {
 
     // MARK: - Edge bars (separate views for insert/remove transitions)
 
-    private var showHBars: Bool {
-        screenCropRect.width >= fullHandleLength * 4
-    }
-
-    private var showVBars: Bool {
-        screenCropRect.height >= fullHandleLength * 4
-    }
+    private var showHBars: Bool { screenCropRect.width >= fullHandleLength * 4 }
+    private var showVBars: Bool { screenCropRect.height >= fullHandleLength * 4 }
 
     private var edgeBarViews: some View {
         let r = screenCropRect
@@ -346,19 +341,13 @@ struct CropHandlesView: View, @preconcurrency Animatable {
     // MARK: - Move indicator (3-line grab bar with background pill)
 
     /// Pill height (capsule short-axis) — a touch larger than the old fixed 18pt.
-    private var pillHeight: CGFloat {
-        22
-    }
+    private var pillHeight: CGFloat { 22 }
 
     /// Pill width: straight section = handleLength (matches edge bar length) + 2 × radius.
-    private var pillWidth: CGFloat {
-        handleLength + pillHeight
-    }
+    private var pillWidth: CGFloat { handleLength + pillHeight }
 
     /// Line width for the 3-line grab indicator: spans 80 % of the straight section.
-    private var indicatorLineWidth: CGFloat {
-        handleLength * 0.8
-    }
+    private var indicatorLineWidth: CGFloat { handleLength * 0.8 }
 
     /// Vertical center of the pill — locked inside the crop rect, just
     /// below the top edge. No toolbar-overlap concerns since it never
