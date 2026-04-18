@@ -1,3 +1,4 @@
+import AppIntents
 import Nuke
 import os
 import SwiftUI
@@ -94,6 +95,9 @@ struct GrainApp: App {
                 if let deepLink = DeepLink.from(url: url) {
                     pendingDeepLink = deepLink
                 }
+            }
+            .task(priority: .background) {
+                GrainShortcuts.updateAppShortcutParameters()
             }
             .preferredColorScheme(colorScheme)
         }
