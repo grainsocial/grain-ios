@@ -26,6 +26,16 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
 
     func application(
         _: UIApplication,
+        configurationForConnecting connectingSceneSession: UISceneSession,
+        options _: UIScene.ConnectionOptions
+    ) -> UISceneConfiguration {
+        let config = UISceneConfiguration(name: nil, sessionRole: connectingSceneSession.role)
+        config.delegateClass = GrainSceneDelegate.self
+        return config
+    }
+
+    func application(
+        _: UIApplication,
         didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
     ) {
         pushManager?.didRegisterForRemoteNotifications(deviceToken: deviceToken)

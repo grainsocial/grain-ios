@@ -87,6 +87,13 @@ targets:
               Level:
                 Enable: "$(GRAIN_OS_LOG_LEVEL)"
                 Persist: "$(GRAIN_OS_LOG_LEVEL)"
+        UIApplicationShortcutItems:
+          - UIApplicationShortcutItemType: social.grain.shortcut.createStory
+            UIApplicationShortcutItemTitle: Create Story
+            UIApplicationShortcutItemIconSymbolName: plus.circle
+          - UIApplicationShortcutItemType: social.grain.shortcut.createGallery
+            UIApplicationShortcutItemTitle: Create Post
+            UIApplicationShortcutItemIconSymbolName: plus.square.on.square
 
   GrainTests:
     type: bundle.unit-test
