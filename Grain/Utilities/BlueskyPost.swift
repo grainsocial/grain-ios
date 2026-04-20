@@ -128,13 +128,31 @@ enum BlueskyPost {
         location: (name: String, address: [String: AnyCodable]?)?,
         description: String?
     ) -> String {
-        // Build location line (shortened: name, region, country)
+        // Build location line. `location.name` may be either a POI name
+        // ("Blue Bottle Coffee") or a Nominatim-formatted fallback that already
+        // contains locality/state/country ("New York, New York, United States").
+        // We take the first comma-separated chunk as the primary label, then
+        // append locality/region/country while dropping adjacent duplicates —
+        // this keeps useful context for POIs ("Blue Bottle Coffee, Oakland, California, US")
+        // while collapsing duplicates for city fallbacks ("New York, US").
         var locationLine: String?
         if let location {
-            var parts = [location.name]
+            let trimmedName = location.name.trimmingCharacters(in: .whitespaces)
+            let primaryLabel = trimmedName.components(separatedBy: ",").first?
+                .trimmingCharacters(in: .whitespaces) ?? trimmedName
+
+            var parts: [String] = []
+            func appendIfDistinct(_ value: String?) {
+                guard let value = value?.trimmingCharacters(in: .whitespaces), !value.isEmpty else { return }
+                if parts.last?.caseInsensitiveCompare(value) == .orderedSame { return }
+                parts.append(value)
+            }
+
+            appendIfDistinct(primaryLabel)
             if let address = location.address {
-                if let region = address["region"]?.stringValue { parts.append(region) }
-                if let country = address["country"]?.stringValue { parts.append(country) }
+                appendIfDistinct(address["locality"]?.stringValue)
+                appendIfDistinct(address["region"]?.stringValue)
+                appendIfDistinct(address["country"]?.stringValue)
             }
             locationLine = "📍 \(parts.joined(separator: ", "))"
         }
