@@ -284,7 +284,9 @@ struct GalleryCardView: View {
                         .foregroundStyle(.secondary)
                         .fixedSize()
                 }
-                if let location = gallery.location, let locationName = location.name ?? gallery.address?.locality {
+                if let location = gallery.location,
+                   let locationName = gallery.locationDisplay ?? location.name ?? gallery.address?.locality
+                {
                     Text(locationName)
                         .font(.caption)
                         .foregroundStyle(.secondary)

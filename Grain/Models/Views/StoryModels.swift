@@ -10,6 +10,7 @@ struct GrainStory: Codable, Sendable, Identifiable {
     let aspectRatio: AspectRatio
     var location: H3Location?
     var address: Address?
+    var locationDisplay: String?
     let createdAt: String
     var labels: [ATLabel]?
     var expired: Bool?

@@ -1014,20 +1014,9 @@ struct StoryViewer: View {
     }
 
     private func storyLocationText(_ story: GrainStory) -> String? {
-        if let name = story.location?.name, !name.isEmpty {
-            return name
-        }
-        if let address = story.address {
-            var parts: [String] = []
-            if let name = address.name { parts.append(name) }
-            else if let street = address.street { parts.append(street) }
-            else if let locality = address.locality { parts.append(locality) }
-            if let region = address.region, region != parts.first { parts.append(region) }
-            if let locality = address.locality, !parts.contains(locality) { parts.append(locality) }
-            if parts.isEmpty { parts.append(address.country) }
-            return parts.joined(separator: ", ")
-        }
-        return nil
+        if let display = story.locationDisplay, !display.isEmpty { return display }
+        if let name = story.location?.name, !name.isEmpty { return name }
+        return story.address?.locality ?? story.address?.country
     }
 
     // MARK: - Comments & Likes

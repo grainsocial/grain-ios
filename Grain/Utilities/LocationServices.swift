@@ -29,10 +29,8 @@ struct NominatimResult {
         let addr = json["address"] as? [String: Any]
         let city = addr?["city"] as? String ?? addr?["town"] as? String ?? addr?["village"] as? String
 
-        let county = addr?["county"] as? String
         var locationParts: [String] = []
         if let city { locationParts.append(city) }
-        if let county { locationParts.append(county) }
         if let state = addr?["state"] as? String { locationParts.append(state) }
         if let country = addr?["country"] as? String { locationParts.append(country) }
 

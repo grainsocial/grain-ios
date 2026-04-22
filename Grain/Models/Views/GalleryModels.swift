@@ -9,6 +9,7 @@ struct GrainGallery: Codable, Sendable, Identifiable {
     var cameras: [String]?
     var location: H3Location?
     var address: Address?
+    var locationDisplay: String?
     var facets: [Facet]?
     let creator: GrainProfile
     var record: AnyCodable?
@@ -27,7 +28,7 @@ struct GrainGallery: Codable, Sendable, Identifiable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case uri, cid, title, description, cameras, location, address, facets, creator, record, items, favCount, commentCount, labels, createdAt, indexedAt, viewer, crossPost
+        case uri, cid, title, description, cameras, location, address, locationDisplay, facets, creator, record, items, favCount, commentCount, labels, createdAt, indexedAt, viewer, crossPost
     }
 }
 

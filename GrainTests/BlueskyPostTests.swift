@@ -96,6 +96,27 @@ final class BlueskyPostTests: XCTestCase {
         XCTAssertFalse(text.contains("WA, WA"))
     }
 
+    /// Real story from moll.blue: `name` contains county baked in by older client.
+    /// Must render as "Kansas City, Missouri, US" — no county, no duplication.
+    func testBuildPostText_NameWithEmbeddedCounty_SkipsCounty() {
+        let text = BlueskyPost.buildPostText(
+            url: url,
+            title: nil,
+            location: (
+                name: "Kansas City, Jackson County, Missouri, United States",
+                address: [
+                    "locality": AnyCodable("Kansas City"),
+                    "region": AnyCodable("Missouri"),
+                    "country": AnyCodable("US"),
+                ]
+            ),
+            description: nil
+        )
+
+        XCTAssertTrue(text.contains("📍 Kansas City, Missouri, US"), "Got: \(text)")
+        XCTAssertFalse(text.contains("County"), "Got: \(text)")
+    }
+
     /// POI where region differs from the primary label.
     func testBuildPostText_CityWithDistinctRegion_IncludesRegion() {
         let text = BlueskyPost.buildPostText(
@@ -125,6 +146,20 @@ final class BlueskyPostTests: XCTestCase {
         )
 
         XCTAssertTrue(text.hasPrefix("Sunset at the Beach, A lovely evening"))
+    }
+
+    /// Legacy community.lexicon.location.hthree records have no address.
+    /// Name should be preserved as-is — don't strip context after first comma.
+    func testBuildPostText_LegacyHthreeRecord_PreservesFullName() {
+        let text = BlueskyPost.buildPostText(
+            url: url,
+            title: nil,
+            location: (name: "Eindhoven, North Brabant, Netherlands", address: nil),
+            description: nil
+        )
+
+        XCTAssertTrue(text.contains("📍 Eindhoven, North Brabant, Netherlands"),
+                      "Got: \(text)")
     }
 
     func testBuildPostText_NoLocationNoContent_ProducesCleanSuffix() {

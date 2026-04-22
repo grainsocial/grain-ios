@@ -138,23 +138,32 @@ enum BlueskyPost {
         var locationLine: String?
         if let location {
             let trimmedName = location.name.trimmingCharacters(in: .whitespaces)
-            let primaryLabel = trimmedName.components(separatedBy: ",").first?
-                .trimmingCharacters(in: .whitespaces) ?? trimmedName
+            let locality = location.address?["locality"]?.stringValue
+            let region = location.address?["region"]?.stringValue
+            let country = location.address?["country"]?.stringValue
+            let hasAddressContext = [locality, region, country].contains { !($0 ?? "").isEmpty }
 
-            var parts: [String] = []
-            func appendIfDistinct(_ value: String?) {
-                guard let value = value?.trimmingCharacters(in: .whitespaces), !value.isEmpty else { return }
-                if parts.last?.caseInsensitiveCompare(value) == .orderedSame { return }
-                parts.append(value)
-            }
+            if !hasAddressContext {
+                // Legacy records (community.lexicon.location.hthree) have no
+                // structured address — use the stored name as-is.
+                locationLine = "📍 \(trimmedName)"
+            } else {
+                let primaryLabel = trimmedName.components(separatedBy: ",").first?
+                    .trimmingCharacters(in: .whitespaces) ?? trimmedName
 
-            appendIfDistinct(primaryLabel)
-            if let address = location.address {
-                appendIfDistinct(address["locality"]?.stringValue)
-                appendIfDistinct(address["region"]?.stringValue)
-                appendIfDistinct(address["country"]?.stringValue)
+                var parts: [String] = []
+                func appendIfDistinct(_ value: String?) {
+                    guard let value = value?.trimmingCharacters(in: .whitespaces), !value.isEmpty else { return }
+                    if parts.last?.caseInsensitiveCompare(value) == .orderedSame { return }
+                    parts.append(value)
+                }
+
+                appendIfDistinct(primaryLabel)
+                appendIfDistinct(locality)
+                appendIfDistinct(region)
+                appendIfDistinct(country)
+                locationLine = "📍 \(parts.joined(separator: ", "))"
             }
-            locationLine = "📍 \(parts.joined(separator: ", "))"
         }
 
         // Build suffix (location + hashtag + link)
