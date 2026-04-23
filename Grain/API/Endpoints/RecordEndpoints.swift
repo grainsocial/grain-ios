@@ -53,4 +53,10 @@ extension XRPCClient {
     func deleteGallery(rkey: String, auth: AuthContext? = nil) async throws {
         try await procedure("social.grain.unspecced.deleteGallery", input: DeleteGalleryInput(rkey: rkey), auth: auth)
     }
+
+    func deleteAccount(auth: AuthContext? = nil) async throws {
+        try await procedure("social.grain.unspecced.deleteAccount", input: EmptyInput(), auth: auth)
+    }
 }
+
+private struct EmptyInput: Codable, Sendable {}

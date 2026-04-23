@@ -28,7 +28,7 @@ struct SettingsView: View {
                     LabeledContent("Appearance", value: appearanceLabel)
                 }
                 NavigationLink("Account") {
-                    AccountDetailView()
+                    AccountDetailView(client: client)
                 }
                 NavigationLink("Notifications") {
                     NotificationSettingsView(client: client)
@@ -126,7 +126,12 @@ extension URL: @retroactive Identifiable {
 
 private struct AccountDetailView: View {
     @Environment(AuthManager.self) private var auth
+    @Environment(\.dismiss) private var dismiss
+    let client: XRPCClient
     @State private var safariURL: URL?
+    @State private var showDeleteConfirm = false
+    @State private var isDeleting = false
+    @State private var deleteError: String?
 
     var body: some View {
         List {
@@ -170,6 +175,26 @@ private struct AccountDetailView: View {
                     }
                 }
             }
+
+            Section {
+                Button(role: .destructive) {
+                    showDeleteConfirm = true
+                } label: {
+                    if isDeleting {
+                        HStack {
+                            ProgressView()
+                            Text("Deleting…")
+                        }
+                    } else {
+                        Text("Delete Account")
+                    }
+                }
+                .disabled(isDeleting)
+            } footer: {
+                if let deleteError {
+                    Text(deleteError).foregroundStyle(.red)
+                }
+            }
         }
         .sheet(item: $safariURL) { url in
             SafariView(url: url)
@@ -177,6 +202,26 @@ private struct AccountDetailView: View {
         }
         .navigationTitle("Account")
         .tint(.primary)
+        .alert("Delete your Grain account?", isPresented: $showDeleteConfirm) {
+            Button("Delete Account", role: .destructive) { Task { await performDelete() } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes all your Grain galleries, stories, photos, favorites, comments, follows, and blocks. Your atproto identity is separate and is not affected. This cannot be undone.")
+        }
+    }
+
+    private func performDelete() async {
+        guard let authContext = await auth.authContext() else { return }
+        isDeleting = true
+        deleteError = nil
+        do {
+            try await client.deleteAccount(auth: authContext)
+            auth.logout()
+            dismiss()
+        } catch {
+            deleteError = error.localizedDescription
+            isDeleting = false
+        }
     }
 }
 
