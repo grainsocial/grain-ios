@@ -13,7 +13,7 @@ struct FeedView: View {
     @State private var storyViewerDid: String?
     @Binding var showStoryCreate: Bool
     @State private var deepLinkProfileDid: String?
-    @State private var deepLinkGalleryUri: String?
+    @State private var deepLinkGallery: GalleryDeepLinkTarget?
     @State private var deepLinkStoryAuthor: GrainStoryAuthor?
     @State private var deepLinkStory: GrainStory?
     @State private var showFeedsManagement = false
@@ -122,8 +122,12 @@ struct FeedView: View {
             .navigationDestination(item: $deepLinkProfileDid) { did in
                 ProfileView(client: client, did: did)
             }
-            .navigationDestination(item: $deepLinkGalleryUri) { uri in
-                GalleryDetailView(client: client, galleryUri: uri)
+            .navigationDestination(item: $deepLinkGallery) { target in
+                GalleryDetailView(
+                    client: client,
+                    galleryUri: target.uri,
+                    initialCommentUri: target.commentUri
+                )
             }
             .sheet(isPresented: $showCreate) {
                 NavigationStack {
@@ -244,8 +248,10 @@ struct FeedView: View {
         switch link {
         case let .profile(did):
             deepLinkProfileDid = did
-        case .gallery:
-            deepLinkGalleryUri = link.galleryUri
+        case let .gallery(_, _, commentUri):
+            if let uri = link.galleryUri {
+                deepLinkGallery = GalleryDeepLinkTarget(uri: uri, commentUri: commentUri)
+            }
         case let .story(did, rkey):
             Task { await openStoryDeepLink(did: did, rkey: rkey) }
         }
