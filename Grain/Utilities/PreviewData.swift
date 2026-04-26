@@ -222,6 +222,113 @@ enum PreviewData {
             text: "Worth every penny shooting on film. Love this series.",
             createdAt: "2025-01-10T20:00:00Z"
         ),
+        GrainComment(
+            uri: "at://did:plc:prevuser4/social.grain.comment/c4",
+            cid: "cid",
+            author: profile4,
+            text: "Adding this to my inspiration board immediately",
+            createdAt: "2025-01-10T20:30:00Z"
+        ),
+        GrainComment(
+            uri: "at://did:plc:prevuser5/social.grain.comment/c5",
+            cid: "cid",
+            author: profile5,
+            text: "What time of day was this? The shadows are beautiful",
+            createdAt: "2025-01-10T21:00:00Z"
+        ),
+        GrainComment(
+            uri: "at://did:plc:prevuser2/social.grain.comment/c6",
+            cid: "cid",
+            author: profile2,
+            text: "Late afternoon, maybe 4pm — sun was raking across the maples",
+            replyTo: "at://did:plc:prevuser5/social.grain.comment/c5",
+            createdAt: "2025-01-10T21:10:00Z"
+        ),
+        GrainComment(
+            uri: "at://did:plc:prevuser6/social.grain.comment/c7",
+            cid: "cid",
+            author: profile6,
+            text: "The composition on #2 is everything",
+            createdAt: "2025-01-11T08:00:00Z"
+        ),
+        GrainComment(
+            uri: "at://did:plc:prevuser7/social.grain.comment/c8",
+            cid: "cid",
+            author: profile7,
+            text: "Can we talk about how clean those highlights are?",
+            createdAt: "2025-01-11T08:45:00Z"
+        ),
+        GrainComment(
+            uri: "at://did:plc:prevuser8/social.grain.comment/c9",
+            cid: "cid",
+            author: profile8,
+            text: "Saved. This is the kind of work that makes me want to pick up a film camera again.",
+            createdAt: "2025-01-11T09:30:00Z"
+        ),
+        GrainComment(
+            uri: "at://did:plc:prevuser3/social.grain.comment/c10",
+            cid: "cid",
+            author: profile3,
+            text: "What lens? Looks like 50mm but the compression feels longer",
+            createdAt: "2025-01-11T10:00:00Z"
+        ),
+        GrainComment(
+            uri: "at://did:plc:prevuser2/social.grain.comment/c11",
+            cid: "cid",
+            author: profile2,
+            text: "85mm — you've got a good eye",
+            replyTo: "at://did:plc:prevuser3/social.grain.comment/c10",
+            createdAt: "2025-01-11T10:05:00Z"
+        ),
+        GrainComment(
+            uri: "at://did:plc:prevuser4/social.grain.comment/c12",
+            cid: "cid",
+            author: profile4,
+            text: "I keep coming back to this one",
+            createdAt: "2025-01-11T11:00:00Z"
+        ),
+        GrainComment(
+            uri: "at://did:plc:prevuser5/social.grain.comment/c13",
+            cid: "cid",
+            author: profile5,
+            text: "@yuki.grain.social this is the gallery I was telling you about — the autumn series",
+            createdAt: "2025-01-11T12:00:00Z"
+        ),
+        GrainComment(
+            uri: "at://did:plc:prevuser6/social.grain.comment/c14",
+            cid: "cid",
+            author: profile6,
+            text: "Stunning. The fourth frame especially.",
+            createdAt: "2025-01-11T13:00:00Z"
+        ),
+        GrainComment(
+            uri: "at://did:plc:prevuser7/social.grain.comment/c15",
+            cid: "cid",
+            author: profile7,
+            text: "Adding Portland to the trip list now",
+            createdAt: "2025-01-11T14:00:00Z"
+        ),
+        GrainComment(
+            uri: "at://did:plc:prevuser8/social.grain.comment/c16",
+            cid: "cid",
+            author: profile8,
+            text: "The way you frame negative space is something else",
+            createdAt: "2025-01-11T15:00:00Z"
+        ),
+        GrainComment(
+            uri: "at://did:plc:prevuser3/social.grain.comment/c17",
+            cid: "cid",
+            author: profile3,
+            text: "Bookmarking for the color palette alone",
+            createdAt: "2025-01-11T16:00:00Z"
+        ),
+        GrainComment(
+            uri: "at://did:plc:prevuser4/social.grain.comment/c18",
+            cid: "cid",
+            author: profile4,
+            text: "This whole set deserves a print run",
+            createdAt: "2025-01-11T17:00:00Z"
+        ),
     ]
 
     // MARK: - Stories
@@ -489,7 +596,9 @@ enum PreviewData {
             galleryTitle: gallery2.title,
             galleryThumb: bundleImageURL("Mount_Hood_reflected_in_Mirror_Lake,_Oregon_thumb")
         ),
-        // — Single comment mention
+        // — Single comment mention. `commentUri` targets a comment well down
+        // the preview list so tapping the row scrolls the comment sheet to
+        // demonstrate the deep-link behavior.
         GrainNotification(
             uri: "at://did:plc:prevuser5/social.grain.notification/n5",
             reason: "gallery-comment-mention",
@@ -498,7 +607,8 @@ enum PreviewData {
             galleryUri: gallery1.uri,
             galleryTitle: gallery1.title,
             galleryThumb: bundleImageURL("Portland_Japanese_Garden_maple_thumb"),
-            commentText: "Tagged you in a comment: @yuki.grain.social beautiful work!"
+            commentText: "@yuki.grain.social this is the gallery I was telling you about — the autumn series",
+            commentUri: "at://did:plc:prevuser5/social.grain.comment/c13"
         ),
         // — Single gallery mention
         GrainNotification(
