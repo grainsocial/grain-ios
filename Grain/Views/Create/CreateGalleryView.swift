@@ -479,7 +479,13 @@ struct CreateGalleryView: View {
                 "title": AnyCodable(title),
                 "createdAt": AnyCodable(now),
             ]
-            if !description.isEmpty { galleryRecord["description"] = AnyCodable(description) }
+            if !description.isEmpty {
+                galleryRecord["description"] = AnyCodable(description)
+                let facets = await BlueskyPost.parseTextToFacets(description)
+                if !facets.isEmpty {
+                    galleryRecord["facets"] = AnyCodable(facets.map { $0.toAnyCodableDict() } as [[String: AnyCodable]])
+                }
+            }
             if !selectedLabels.isEmpty {
                 let labelValues = selectedLabels.map { ["val": AnyCodable($0)] as [String: AnyCodable] }
                 galleryRecord["labels"] = AnyCodable([
