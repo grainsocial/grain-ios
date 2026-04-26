@@ -152,14 +152,14 @@ struct GalleryDetailView: View {
             )
         }
         .task {
-            guard !isPreview else {
+            if isPreview {
                 #if DEBUG
                     viewModel.gallery = PreviewData.gallery1
                     viewModel.comments = PreviewData.comments
                 #endif
-                return
+            } else {
+                await viewModel.load(uri: galleryUri, auth: auth.authContext())
             }
-            await viewModel.load(uri: galleryUri, auth: auth.authContext())
             if initialCommentUri != nil, !didAutoOpenComments {
                 didAutoOpenComments = true
                 showCommentSheet = true
