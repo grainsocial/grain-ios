@@ -351,6 +351,9 @@ struct LoginView: View {
         errorMessage = nil
         do {
             try await auth.login(createAccount: true)
+        } catch let XRPCError.httpError(statusCode, body) {
+            let bodyStr = body.flatMap { String(data: $0, encoding: .utf8) } ?? "no body"
+            errorMessage = "HTTP \(statusCode): \(bodyStr)"
         } catch {
             errorMessage = String(describing: error)
         }
