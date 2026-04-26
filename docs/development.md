@@ -61,6 +61,8 @@ This bumps the build number, archives, and uploads to App Store Connect. Builds 
 | `just generate` | Regenerate Xcode project from `project.yml` |
 | `just sim` | Build + run on booted simulator (production API) |
 | `just sim-local` | Build + run on booted simulator (local API) |
+| `just sim-fresh` | Same as `just sim`, but uninstalls first to wipe app sandbox (URLCache, UserDefaults, on-disk caches) |
+| `just sim-local-fresh` | Same as `just sim-local`, but uninstalls first |
 | `just device <udid>` | Build + install to plugged-in iPhone |
 | `just test` | Run tests |
 | `just format-fix` | Auto-fix formatting |

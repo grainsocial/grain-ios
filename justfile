@@ -57,6 +57,27 @@ sim:
     xcrun simctl spawn "$SIM" log config --subsystem {{bundle_id}} --mode level:debug
     echo "Installed and launched on simulator (grain.social)"
 
+# Build + install + launch on simulator (production API, fresh — uninstalls app first
+# to wipe URLCache, UserDefaults, FeedCache, LabelDefinitionsCache, Documents/Caches, etc.)
+sim-fresh:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    SIM=${SIM_UDID:-booted}
+    xcrun simctl boot "$SIM" 2>/dev/null || true
+    xcrun simctl bootstatus "$SIM" -b >/dev/null
+    xcrun simctl uninstall "$SIM" {{bundle_id}} 2>/dev/null || true
+    SIM_UDID="$SIM" just sim
+
+# Build + install + launch on simulator (local/dev API, fresh — uninstalls app first)
+sim-local-fresh:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    SIM=${SIM_UDID:-booted}
+    xcrun simctl boot "$SIM" 2>/dev/null || true
+    xcrun simctl bootstatus "$SIM" -b >/dev/null
+    xcrun simctl uninstall "$SIM" {{bundle_id}} 2>/dev/null || true
+    SIM_UDID="$SIM" just sim-local
+
 # Run tests
 test:
     set -o pipefail && xcodebuild test -scheme Grain -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max' PRODUCT_BUNDLE_IDENTIFIER={{bundle_id}} 2>&1 | xcbeautify

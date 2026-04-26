@@ -56,6 +56,8 @@ Find your device UDID with `xcrun devicectl list devices`.
 ```bash
 just sim               # Build + install + launch on simulator (production API)
 just sim-local         # Build + install + launch on simulator (local/dev API)
+just sim-fresh         # Same as `just sim`, but uninstalls first (wipes app sandbox)
+just sim-local-fresh   # Same as `just sim-local`, but uninstalls first
 just device DEVICE_ID  # Build + install to a plugged-in iOS device
 just test              # Run tests (iPhone 17 Pro Max simulator)
 just generate          # Regenerate Xcode project from project.yml
@@ -63,5 +65,7 @@ just format-fix        # Fix formatting in-place
 just lint-fix          # Fix lint violations
 just release           # Bump build, archive, upload to App Store Connect
 ```
+
+The `*-fresh` variants `xcrun simctl uninstall` your app's bundle id before installing, which clears URLCache, UserDefaults, on-disk caches (FeedCache, LabelDefinitionsCache), and Documents/Caches. Pass `SIM_UDID=<udid>` to target a specific simulator (otherwise uses the booted one).
 
 > **Note:** The Xcode project is generated from `project.yml` — run `just generate` after adding or removing Swift files, or after pulling changes that touch `project.yml`.
