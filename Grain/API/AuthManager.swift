@@ -136,10 +136,10 @@ final class AuthManager {
         ]
         if createAccount {
             parBody["prompt"] = "create"
-            #if DEBUG
-                parBody["login_hint"] = "localhost:2583"
-            #else
+            #if PRODUCTION_API || !targetEnvironment(simulator)
                 parBody["login_hint"] = "selfhosted.social"
+            #else
+                parBody["login_hint"] = "localhost:2583"
             #endif
         } else if !handle.isEmpty {
             parBody["login_hint"] = handle
