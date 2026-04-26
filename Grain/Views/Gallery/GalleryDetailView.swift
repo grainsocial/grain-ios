@@ -10,6 +10,7 @@ struct GalleryDetailView: View {
     @State private var showDeleteConfirmation = false
     @State private var showReportSheet = false
     @State private var showCommentSheet = false
+    @State private var didAutoOpenComments = false
     @State private var zoomState = ImageZoomState()
     @State private var cardStoryAuthor: GrainStoryAuthor?
     @Environment(\.dismiss) private var dismiss
@@ -159,7 +160,8 @@ struct GalleryDetailView: View {
                 return
             }
             await viewModel.load(uri: galleryUri, auth: auth.authContext())
-            if initialCommentUri != nil {
+            if initialCommentUri != nil, !didAutoOpenComments {
+                didAutoOpenComments = true
                 showCommentSheet = true
             }
         }
@@ -343,19 +345,10 @@ struct CommentRow: View {
     }
 }
 
-#Preview("Default") {
+#Preview {
     GalleryDetailView(
         client: .preview,
         galleryUri: "at://did:plc:preview/social.grain.gallery/r1"
-    )
-    .previewEnvironments()
-}
-
-#Preview("Mention deep-link → opens comments scrolled to target") {
-    GalleryDetailView(
-        client: .preview,
-        galleryUri: "at://did:plc:preview/social.grain.gallery/r1",
-        initialCommentUri: "at://did:plc:prevuser2/social.grain.comment/c3"
     )
     .previewEnvironments()
 }
