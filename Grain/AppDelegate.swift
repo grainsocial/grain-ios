@@ -64,12 +64,16 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         let userInfo = response.notification.request.content.userInfo
         guard let type = userInfo["type"] as? String else { return }
 
-        let commentUri = userInfo["commentUri"] as? String
         let deepLink: DeepLink? = switch type {
-        case "gallery-favorite", "gallery-comment", "comment-reply",
-             "gallery-mention", "gallery-comment-mention":
+        case "gallery-favorite", "gallery-comment", "comment-reply":
             if let uri = userInfo["uri"] as? String {
-                parseGalleryUri(uri, commentUri: commentUri)
+                parseGalleryUri(uri)
+            } else {
+                nil
+            }
+        case "gallery-mention", "gallery-comment-mention":
+            if let uri = userInfo["uri"] as? String {
+                parseGalleryUri(uri, commentUri: userInfo["commentUri"] as? String)
             } else {
                 nil
             }
