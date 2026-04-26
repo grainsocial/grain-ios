@@ -142,16 +142,20 @@ struct CommentSheetContent: View {
     }
 
     /// Scrolls to `scrollToCommentUri` once after comments have loaded. The
-    /// `LazyVStack` only renders rows lazily, so we wait for the comment to
-    /// exist in the array before asking the proxy to scroll.
+    /// `LazyVStack` only renders rows lazily, so the target row may not be
+    /// materialized yet when this fires. We yield a tick before scrolling so
+    /// `ScrollViewReader` can locate the row.
     private func scrollToInitialCommentIfNeeded(proxy: ScrollViewProxy) {
         guard !didScrollToInitialComment,
               let target = scrollToCommentUri,
               comments.contains(where: { $0.uri == target })
         else { return }
         didScrollToInitialComment = true
-        withAnimation(.easeInOut(duration: 0.25)) {
-            proxy.scrollTo(target, anchor: .center)
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(50))
+            withAnimation(.easeInOut(duration: 0.25)) {
+                proxy.scrollTo(target, anchor: .center)
+            }
         }
     }
 
