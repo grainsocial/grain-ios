@@ -16,12 +16,19 @@ struct GalleryDetailView: View {
 
     let client: XRPCClient
     let galleryUri: String
+    let initialCommentUri: String?
     @Binding var deletedGalleryUri: String?
 
-    init(client: XRPCClient, galleryUri: String, deletedGalleryUri: Binding<String?> = .constant(nil)) {
+    init(
+        client: XRPCClient,
+        galleryUri: String,
+        initialCommentUri: String? = nil,
+        deletedGalleryUri: Binding<String?> = .constant(nil)
+    ) {
         self.client = client
         _viewModel = State(initialValue: GalleryDetailViewModel(client: client))
         self.galleryUri = galleryUri
+        self.initialCommentUri = initialCommentUri
         _deletedGalleryUri = deletedGalleryUri
     }
 
@@ -151,6 +158,9 @@ struct GalleryDetailView: View {
                 return
             }
             await viewModel.load(uri: galleryUri, auth: auth.authContext())
+            if initialCommentUri != nil {
+                showCommentSheet = true
+            }
         }
     }
 
