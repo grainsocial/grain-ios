@@ -7,6 +7,7 @@ struct CommentSheetView: View {
 
     let client: XRPCClient
     let galleryUri: String
+    let scrollToCommentUri: String?
     var onDismiss: () -> Void = {}
     var onProfileTap: ((String) -> Void)?
     var onHashtagTap: ((String) -> Void)?
@@ -16,6 +17,7 @@ struct CommentSheetView: View {
     init(
         client: XRPCClient,
         galleryUri: String,
+        scrollToCommentUri: String? = nil,
         onDismiss: @escaping () -> Void = {},
         onProfileTap: ((String) -> Void)? = nil,
         onHashtagTap: ((String) -> Void)? = nil,
@@ -24,6 +26,7 @@ struct CommentSheetView: View {
     ) {
         self.client = client
         self.galleryUri = galleryUri
+        self.scrollToCommentUri = scrollToCommentUri
         self.onDismiss = onDismiss
         self.onProfileTap = onProfileTap
         self.onHashtagTap = onHashtagTap
@@ -66,7 +69,8 @@ struct CommentSheetView: View {
             onProfileTap: onProfileTap.map { cb in { did in onDismiss(); cb(did) } },
             onHashtagTap: onHashtagTap.map { cb in { tag in onDismiss(); cb(tag) } },
             onStoryTap: onStoryTap.map { cb in { author in onDismiss(); cb(author) } },
-            dismissStyle: .xmark
+            dismissStyle: .xmark,
+            scrollToCommentUri: scrollToCommentUri
         )
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
