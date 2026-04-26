@@ -13,6 +13,10 @@ struct GrainNotification: Codable, Sendable, Identifiable {
     var storyThumb: String?
     var commentText: String?
     var replyToText: String?
+    /// AT-URI of the specific comment a `gallery-comment-mention` (or future
+    /// comment-targeted reason) refers to. Lets the in-app row scroll the
+    /// gallery's comment sheet to the exact comment, mirroring the push payload.
+    var commentUri: String?
 
     var id: String {
         uri
