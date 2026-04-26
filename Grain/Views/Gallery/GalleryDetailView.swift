@@ -131,6 +131,7 @@ struct GalleryDetailView: View {
             CommentSheetView(
                 client: client,
                 galleryUri: galleryUri,
+                scrollToCommentUri: initialCommentUri,
                 onDismiss: { showCommentSheet = false },
                 onProfileTap: { did in
                     showCommentSheet = false
@@ -342,10 +343,19 @@ struct CommentRow: View {
     }
 }
 
-#Preview {
+#Preview("Default") {
     GalleryDetailView(
         client: .preview,
         galleryUri: "at://did:plc:preview/social.grain.gallery/r1"
+    )
+    .previewEnvironments()
+}
+
+#Preview("Mention deep-link → opens comments scrolled to target") {
+    GalleryDetailView(
+        client: .preview,
+        galleryUri: "at://did:plc:preview/social.grain.gallery/r1",
+        initialCommentUri: "at://did:plc:prevuser2/social.grain.comment/c3"
     )
     .previewEnvironments()
 }
