@@ -2,7 +2,7 @@ import Foundation
 
 enum DeepLink: Equatable {
     case profile(did: String)
-    case gallery(did: String, rkey: String)
+    case gallery(did: String, rkey: String, commentUri: String? = nil)
     case story(did: String, rkey: String)
 
     static func from(url: URL) -> DeepLink? {
@@ -29,9 +29,20 @@ enum DeepLink: Equatable {
     }
 
     var galleryUri: String? {
-        if case let .gallery(did, rkey) = self {
+        if case let .gallery(did, rkey, _) = self {
             return "at://\(did)/social.grain.gallery/\(rkey)"
         }
         return nil
+    }
+}
+
+/// Carries gallery navigation context through `.navigationDestination(item:)`,
+/// which only accepts a single `Identifiable & Hashable` value.
+struct GalleryDeepLinkTarget: Identifiable, Hashable {
+    let uri: String
+    let commentUri: String?
+
+    var id: String {
+        uri + "|" + (commentUri ?? "")
     }
 }
