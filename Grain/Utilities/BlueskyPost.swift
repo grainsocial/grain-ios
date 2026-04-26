@@ -66,26 +66,7 @@ enum BlueskyPost {
         ]
 
         if !facets.isEmpty {
-            let facetDicts: [[String: AnyCodable]] = facets.map { facet in
-                let featureDicts: [[String: AnyCodable]] = facet.features.map { feature in
-                    switch feature {
-                    case let .link(uri):
-                        ["$type": AnyCodable("app.bsky.richtext.facet#link"), "uri": AnyCodable(uri)]
-                    case let .mention(did):
-                        ["$type": AnyCodable("app.bsky.richtext.facet#mention"), "did": AnyCodable(did)]
-                    case let .tag(tag):
-                        ["$type": AnyCodable("app.bsky.richtext.facet#tag"), "tag": AnyCodable(tag)]
-                    }
-                }
-                return [
-                    "index": AnyCodable([
-                        "byteStart": AnyCodable(facet.index.byteStart),
-                        "byteEnd": AnyCodable(facet.index.byteEnd),
-                    ] as [String: AnyCodable]),
-                    "features": AnyCodable(featureDicts as [[String: AnyCodable]]),
-                ]
-            }
-            record["facets"] = AnyCodable(facetDicts as [[String: AnyCodable]])
+            record["facets"] = AnyCodable(facets.map { $0.toAnyCodableDict() } as [[String: AnyCodable]])
         }
 
         if !imageEmbeds.isEmpty {

@@ -77,4 +77,28 @@ final class DeepLinkTests: XCTestCase {
         let story = DeepLink.story(did: "did:plc:test", rkey: "abc")
         XCTAssertNil(story.galleryUri)
     }
+
+    // MARK: - Gallery commentUri (mention notifications)
+
+    func testGalleryUriIgnoresCommentUri() {
+        // commentUri is carried alongside gallery for deep-linking to a comment;
+        // the at-URI of the gallery itself should not include it.
+        let link = DeepLink.gallery(
+            did: "did:plc:test",
+            rkey: "abc",
+            commentUri: "at://did:plc:other/social.grain.comment/c1"
+        )
+        XCTAssertEqual(link.galleryUri, "at://did:plc:test/social.grain.gallery/abc")
+    }
+
+    func testGalleryDeepLinkTargetIdDistinguishesByCommentUri() {
+        // Same gallery, different comment targets must produce distinct ids so
+        // SwiftUI navigation treats them as separate destinations.
+        let a = GalleryDeepLinkTarget(uri: "at://did:plc:x/social.grain.gallery/a", commentUri: nil)
+        let b = GalleryDeepLinkTarget(
+            uri: "at://did:plc:x/social.grain.gallery/a",
+            commentUri: "at://did:plc:x/social.grain.comment/c1"
+        )
+        XCTAssertNotEqual(a.id, b.id)
+    }
 }

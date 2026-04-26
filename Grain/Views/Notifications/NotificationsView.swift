@@ -8,7 +8,7 @@ private let notificationsLaunchSignposter = OSSignposter(subsystem: "social.grai
 struct NotificationsView: View {
     @Environment(AuthManager.self) private var auth
     var viewModel: NotificationsViewModel
-    @State private var selectedGalleryUri: String?
+    @State private var selectedGallery: GalleryDeepLinkTarget?
     @State private var selectedProfileDid: String?
     @State private var cardStoryAuthor: GrainStoryAuthor?
     @State private var selectedStory: GrainStory?
@@ -29,14 +29,18 @@ struct NotificationsView: View {
                 client: client,
                 authContext: { await auth.authContext() },
                 onProfileTap: { selectedProfileDid = $0 },
-                onGalleryTap: { selectedGalleryUri = $0 },
+                onGalleryTap: { selectedGallery = $0 },
                 onStoryAuthorTap: { cardStoryAuthor = $0 },
                 onStoryTap: { selectedStory = $0 },
                 onGroupTap: { selectedGroup = $0 }
             )
             .navigationTitle("Notifications")
-            .navigationDestination(item: $selectedGalleryUri) { uri in
-                GalleryDetailView(client: client, galleryUri: uri)
+            .navigationDestination(item: $selectedGallery) { target in
+                GalleryDetailView(
+                    client: client,
+                    galleryUri: target.uri,
+                    initialCommentUri: target.commentUri
+                )
             }
             .navigationDestination(item: $selectedProfileDid) { did in
                 ProfileView(client: client, did: did)
@@ -95,7 +99,7 @@ private struct NotificationListContent: View {
     let client: XRPCClient
     let authContext: () async -> AuthContext?
     let onProfileTap: (String) -> Void
-    let onGalleryTap: (String) -> Void
+    let onGalleryTap: (GalleryDeepLinkTarget) -> Void
     let onStoryAuthorTap: (GrainStoryAuthor) -> Void
     let onStoryTap: (GrainStory) -> Void
     let onGroupTap: (GroupedNotification) -> Void
@@ -138,7 +142,7 @@ private struct NotificationRowContainer: View {
     let client: XRPCClient
     let authContext: () async -> AuthContext?
     let onProfileTap: (String) -> Void
-    let onGalleryTap: (String) -> Void
+    let onGalleryTap: (GalleryDeepLinkTarget) -> Void
     let onStoryAuthorTap: (GrainStoryAuthor) -> Void
     let onStoryTap: (GrainStory) -> Void
     let onGroupTap: (GroupedNotification) -> Void
@@ -177,7 +181,7 @@ private struct NotificationRowContainer: View {
         } else if notification.reasonType == .commentFavorite {
             // Navigate to the parent gallery or story
             if let galleryUri = notification.galleryUri {
-                onGalleryTap(galleryUri)
+                onGalleryTap(GalleryDeepLinkTarget(uri: galleryUri, commentUri: nil))
             } else if let storyUri = notification.storyUri {
                 Task {
                     if let story = try? await client.getStory(uri: storyUri, auth: authContext()).story {
@@ -196,7 +200,7 @@ private struct NotificationRowContainer: View {
                 onProfileTap(notification.author.did)
             }
         } else if let galleryUri = notification.galleryUri {
-            onGalleryTap(galleryUri)
+            onGalleryTap(GalleryDeepLinkTarget(uri: galleryUri, commentUri: notification.commentUri))
         }
     }
 }

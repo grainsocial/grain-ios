@@ -13,20 +13,23 @@ enum CommentService {
         client: XRPCClient,
         auth: AuthContext
     ) async throws -> CreateRecordResponse {
-        var recordDict: [String: String] = [
-            "text": text,
-            "subject": subject,
-            "createdAt": DateFormatting.nowISO(),
+        let facets = await BlueskyPost.parseTextToFacets(text)
+        var recordDict: [String: AnyCodable] = [
+            "text": AnyCodable(text),
+            "subject": AnyCodable(subject),
+            "createdAt": AnyCodable(DateFormatting.nowISO()),
         ]
         if let replyTo {
-            recordDict["replyTo"] = replyTo
+            recordDict["replyTo"] = AnyCodable(replyTo)
         }
-        let record = AnyCodable(recordDict)
+        if !facets.isEmpty {
+            recordDict["facets"] = AnyCodable(facets.map { $0.toAnyCodableDict() } as [[String: AnyCodable]])
+        }
         let repo = TokenStorage.userDID ?? ""
         return try await client.createRecord(
             collection: collection,
             repo: repo,
-            record: record,
+            record: AnyCodable(recordDict),
             auth: auth
         )
     }

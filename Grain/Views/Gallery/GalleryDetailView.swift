@@ -10,18 +10,26 @@ struct GalleryDetailView: View {
     @State private var showDeleteConfirmation = false
     @State private var showReportSheet = false
     @State private var showCommentSheet = false
+    @State private var didAutoOpenComments = false
     @State private var zoomState = ImageZoomState()
     @State private var cardStoryAuthor: GrainStoryAuthor?
     @Environment(\.dismiss) private var dismiss
 
     let client: XRPCClient
     let galleryUri: String
+    let initialCommentUri: String?
     @Binding var deletedGalleryUri: String?
 
-    init(client: XRPCClient, galleryUri: String, deletedGalleryUri: Binding<String?> = .constant(nil)) {
+    init(
+        client: XRPCClient,
+        galleryUri: String,
+        initialCommentUri: String? = nil,
+        deletedGalleryUri: Binding<String?> = .constant(nil)
+    ) {
         self.client = client
         _viewModel = State(initialValue: GalleryDetailViewModel(client: client))
         self.galleryUri = galleryUri
+        self.initialCommentUri = initialCommentUri
         _deletedGalleryUri = deletedGalleryUri
     }
 
@@ -124,6 +132,7 @@ struct GalleryDetailView: View {
             CommentSheetView(
                 client: client,
                 galleryUri: galleryUri,
+                scrollToCommentUri: initialCommentUri,
                 onDismiss: { showCommentSheet = false },
                 onProfileTap: { did in
                     showCommentSheet = false
@@ -143,14 +152,18 @@ struct GalleryDetailView: View {
             )
         }
         .task {
-            guard !isPreview else {
+            if isPreview {
                 #if DEBUG
                     viewModel.gallery = PreviewData.gallery1
                     viewModel.comments = PreviewData.comments
                 #endif
-                return
+            } else {
+                await viewModel.load(uri: galleryUri, auth: auth.authContext())
             }
-            await viewModel.load(uri: galleryUri, auth: auth.authContext())
+            if initialCommentUri != nil, !didAutoOpenComments {
+                didAutoOpenComments = true
+                showCommentSheet = true
+            }
         }
     }
 

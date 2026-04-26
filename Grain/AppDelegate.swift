@@ -71,6 +71,12 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
             } else {
                 nil
             }
+        case "gallery-mention", "gallery-comment-mention":
+            if let uri = userInfo["uri"] as? String {
+                parseGalleryUri(uri, commentUri: userInfo["commentUri"] as? String)
+            } else {
+                nil
+            }
         case "follow":
             if let did = userInfo["did"] as? String {
                 .profile(did: did)
@@ -88,12 +94,12 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         }
     }
 
-    private nonisolated func parseGalleryUri(_ uri: String) -> DeepLink? {
+    private nonisolated func parseGalleryUri(_ uri: String, commentUri: String? = nil) -> DeepLink? {
         // at://did:plc:xxx/social.grain.gallery/rkey
         let parts = uri.replacingOccurrences(of: "at://", with: "").split(separator: "/")
         guard parts.count >= 3 else { return nil }
         let did = String(parts[0])
         let rkey = String(parts[2])
-        return .gallery(did: did, rkey: rkey)
+        return .gallery(did: did, rkey: rkey, commentUri: commentUri)
     }
 }
