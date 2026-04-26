@@ -65,7 +65,8 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         guard let type = userInfo["type"] as? String else { return }
 
         let deepLink: DeepLink? = switch type {
-        case "gallery-favorite", "gallery-comment", "comment-reply":
+        case "gallery-favorite", "gallery-comment", "comment-reply",
+             "gallery-mention", "gallery-comment-mention":
             if let uri = userInfo["uri"] as? String {
                 parseGalleryUri(uri)
             } else {
