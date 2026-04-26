@@ -75,7 +75,13 @@ struct CommentSheetView: View {
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
         .task {
-            await viewModel.load(uri: galleryUri, auth: auth.authContext())
+            if isPreview {
+                #if DEBUG
+                    viewModel.comments = PreviewData.comments
+                #endif
+            } else {
+                await viewModel.load(uri: galleryUri, auth: auth.authContext())
+            }
         }
     }
 }
