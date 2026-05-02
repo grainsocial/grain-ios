@@ -266,7 +266,15 @@ final class AuthManager {
         guard (200 ... 299).contains(httpResponse.statusCode) else {
             let bodyStr = String(data: data, encoding: .utf8) ?? "no body"
             logger.error("Token refresh failed (\(httpResponse.statusCode)): \(bodyStr)")
-            if httpResponse.statusCode == 401 {
+
+            // Body keyword check covers legacy hatk (HTTP 500 + plain message) before it returned RFC 6749 invalid_grant.
+            let lower = bodyStr.lowercased()
+            let bodyClaimsTerminal = lower.contains("invalid_grant")
+                || lower.contains("refresh token")
+                || lower.contains("revoked")
+                || lower.contains("expired")
+            let isTerminal = (400 ... 499).contains(httpResponse.statusCode) || bodyClaimsTerminal
+            if isTerminal {
                 logout()
             }
             throw XRPCError.unauthorized

@@ -114,6 +114,8 @@ final class NotificationsViewModel {
         do {
             let response = try await client.getNotifications(countOnly: true, auth: auth)
             unseenCount = response.unseenCount ?? 0
-        } catch {}
+        } catch {
+            self.error = error
+        }
     }
 }
