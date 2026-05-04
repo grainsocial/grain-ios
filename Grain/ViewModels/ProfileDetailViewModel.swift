@@ -46,7 +46,11 @@ final class ProfileDetailViewModel {
     private(set) var hasMoreGalleries = true
     private var archiveCursor: String?
     private var hasMoreArchive = true
-    private var archiveLoaded = false
+    /// True only after the first archive fetch has resolved. Views should
+    /// read this (not `archivedStories.isEmpty`) to distinguish "still
+    /// loading / not yet fetched" from "confirmed empty".
+    var archiveLoaded = false
+    private var isLoadingArchive = false
     private var favoritesCursor: String?
     private(set) var hasMoreFavorites = true
     private let client: XRPCClient
@@ -119,14 +123,16 @@ final class ProfileDetailViewModel {
     }
 
     func loadStoryArchive(did: String, auth: AuthContext? = nil) async {
-        guard !archiveLoaded else { return }
-        archiveLoaded = true
+        guard !archiveLoaded, !isLoadingArchive else { return }
+        isLoadingArchive = true
         do {
             let response = try await client.getStoryArchive(actor: did, auth: auth)
             archivedStories = response.stories
             archiveCursor = response.cursor
             hasMoreArchive = response.cursor != nil
         } catch {}
+        archiveLoaded = true
+        isLoadingArchive = false
     }
 
     func loadMoreArchive(did: String, auth: AuthContext? = nil) async {

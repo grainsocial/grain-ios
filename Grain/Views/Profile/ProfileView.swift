@@ -789,7 +789,7 @@ struct ProfileView: View {
 
     @ViewBuilder
     private var storyArchiveGrid: some View {
-        if viewModel.archivedStories.isEmpty, !viewModel.isLoading {
+        if viewModel.archivedStories.isEmpty, viewModel.archiveLoaded {
             Text("No stories yet")
                 .font(.subheadline)
                 .foregroundStyle(.tertiary)
