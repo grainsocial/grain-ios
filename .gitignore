@@ -52,3 +52,4 @@ Grain/Info.plist
 # Scratch / temp files
 tmp/
 *.tmp.*
+.claude/scheduled_tasks.lock
