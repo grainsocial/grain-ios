@@ -503,26 +503,28 @@ struct GalleryCardView: View {
             }
             .foregroundStyle(.secondary)
             .accessibilityLabel("Share gallery")
-            .tint(Color.accentColor)
             .contextMenu {
-                ShareLink(item: galleryShareURL) {
-                    Label("Share Link", systemImage: "link")
+                Group {
+                    ShareLink(item: galleryShareURL) {
+                        Label("Share Link", systemImage: "link")
+                    }
+                    Button {
+                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                        sharePhotoAsImage(
+                            gallery: gallery,
+                            photoIndex: currentPage,
+                            labelDefinitions: labelDefsCache.definitions
+                        )
+                    } label: {
+                        Label("Share Image", systemImage: "photo.on.rectangle")
+                    }
+                    Button {
+                        UIPasteboard.general.url = galleryShareURL
+                    } label: {
+                        Label("Copy Link", systemImage: "doc.on.doc")
+                    }
                 }
-                Button {
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                    sharePhotoAsImage(
-                        gallery: gallery,
-                        photoIndex: currentPage,
-                        labelDefinitions: labelDefsCache.definitions
-                    )
-                } label: {
-                    Label("Share Image", systemImage: "photo.on.rectangle")
-                }
-                Button {
-                    UIPasteboard.general.url = galleryShareURL
-                } label: {
-                    Label("Copy Link", systemImage: "doc.on.doc")
-                }
+                .tint(Color.accentColor)
             } preview: {
                 PhotoShareCard(
                     gallery: gallery,

@@ -19,38 +19,41 @@ extension View {
             labelAction: lr.action,
             labelName: lr.name
         )
-        return tint(Color.accentColor).contextMenu {
-            Button {
-                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                onOpen()
-            } label: {
-                Label("Open Gallery", systemImage: "arrow.up.right.square")
-            }
-            if let onOpenProfile {
+        return contextMenu {
+            Group {
                 Button {
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    onOpenProfile()
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    onOpen()
                 } label: {
-                    Label("Open Profile", systemImage: "person.circle")
+                    Label("Open Gallery", systemImage: "arrow.up.right.square")
+                }
+                if let onOpenProfile {
+                    Button {
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        onOpenProfile()
+                    } label: {
+                        Label("Open Profile", systemImage: "person.circle")
+                    }
+                }
+                ShareLink(item: shareURL) {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                }
+                Button {
+                    sharePhotoAsImage(
+                        gallery: gallery,
+                        photoIndex: 0,
+                        labelDefinitions: labelDefinitions
+                    )
+                } label: {
+                    Label("Share as Image", systemImage: "photo.on.rectangle")
+                }
+                Button {
+                    UIPasteboard.general.url = shareURL
+                } label: {
+                    Label("Copy Link", systemImage: "link")
                 }
             }
-            ShareLink(item: shareURL) {
-                Label("Share", systemImage: "square.and.arrow.up")
-            }
-            Button {
-                sharePhotoAsImage(
-                    gallery: gallery,
-                    photoIndex: 0,
-                    labelDefinitions: labelDefinitions
-                )
-            } label: {
-                Label("Share as Image", systemImage: "photo.on.rectangle")
-            }
-            Button {
-                UIPasteboard.general.url = shareURL
-            } label: {
-                Label("Copy Link", systemImage: "link")
-            }
+            .tint(Color.accentColor)
         } preview: {
             preview
         }
@@ -197,14 +200,22 @@ private func countChip(systemImage: String, value: Int) -> some View {
 /// Stacked Syne wordmark + URL line. Both lines use primary color so they remain
 /// readable on light or dark backgrounds.
 struct GrainWordmark: View {
+    var dateText: String?
+
     var body: some View {
-        VStack(alignment: .trailing, spacing: 1) {
+        VStack(alignment: .trailing, spacing: -3) {
             Text("grain")
                 .font(.custom("Syne", size: 22).weight(.heavy))
                 .foregroundStyle(Color.primary)
             Text("grain.social")
                 .font(.system(size: 12))
                 .foregroundStyle(Color.primary)
+            if let dateText {
+                Text(dateText)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 4)
+            }
         }
         .multilineTextAlignment(.trailing)
         .fixedSize(horizontal: true, vertical: false)
@@ -231,26 +242,29 @@ extension View {
             labelName: lr.name,
             showsWordmark: true
         )
-        return tint(Color.accentColor).contextMenu {
-            Button {
-                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                onOpen()
-            } label: {
-                Label("Open Story", systemImage: "arrow.up.right.square")
+        return contextMenu {
+            Group {
+                Button {
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    onOpen()
+                } label: {
+                    Label("Open Story", systemImage: "arrow.up.right.square")
+                }
+                ShareLink(item: shareURL) {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                }
+                Button {
+                    presentPreviewImageShare(shareImage)
+                } label: {
+                    Label("Share as Image", systemImage: "photo.on.rectangle")
+                }
+                Button {
+                    UIPasteboard.general.url = shareURL
+                } label: {
+                    Label("Copy Link", systemImage: "link")
+                }
             }
-            ShareLink(item: shareURL) {
-                Label("Share", systemImage: "square.and.arrow.up")
-            }
-            Button {
-                presentPreviewImageShare(shareImage)
-            } label: {
-                Label("Share as Image", systemImage: "photo.on.rectangle")
-            }
-            Button {
-                UIPasteboard.general.url = shareURL
-            } label: {
-                Label("Copy Link", systemImage: "link")
-            }
+            .tint(Color.accentColor)
         } preview: {
             preview
         }
@@ -526,21 +540,10 @@ struct PhotoShareCard: View {
                 HStack(alignment: .center, spacing: 10) {
                     AvatarView(url: gallery.creator.avatar, size: 40)
                     VStack(alignment: .leading, spacing: 1) {
-                        HStack(spacing: 6) {
-                            Text(gallery.creator.displayName ?? gallery.creator.handle)
-                                .font(.subheadline.weight(.medium))
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                            if let dateText = formattedCreatedAt {
-                                Text("·")
-                                    .foregroundStyle(.tertiary)
-                                Text(dateText)
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                                    .layoutPriority(1)
-                            }
-                        }
+                        Text(gallery.creator.displayName ?? gallery.creator.handle)
+                            .font(.subheadline.weight(.medium))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
                         Text("@\(gallery.creator.handle)")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
@@ -552,7 +555,8 @@ struct PhotoShareCard: View {
 
                 if showsWordmark {
                     Spacer(minLength: 0)
-                    GrainWordmark()
+                    GrainWordmark(dateText: formattedCreatedAt)
+                        .offset(y: -9.5)
                         .frame(height: 40, alignment: .top)
                 }
             }
@@ -562,15 +566,6 @@ struct PhotoShareCard: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
-            }
-
-            if photos.count > 1 {
-                HStack(spacing: 3) {
-                    Image(systemName: "photo")
-                    Text("\(photoIndex + 1)/\(photos.count)")
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
             }
         }
         .padding(.horizontal, 16)
