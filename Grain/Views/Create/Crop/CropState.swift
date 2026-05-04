@@ -136,27 +136,6 @@ final class CropState {
         imageScale = 1.0
     }
 
-    /// Restores state to the incoming (baseline) crop, not the uncropped original.
-    func resetAll() {
-        selectedPreset = .free
-        isRatioLocked = false
-        lockedRatio = nil
-        isPortrait = false
-        imageOffset = .zero
-        imageScale = 1.0
-        rotationAngle = baselineRotation
-        // Restore crop rect from baseline normalized coordinates.
-        // imageDisplayFrame may change after rotation — caller must handle
-        // the frame update via onGeometryChange if rotation changed.
-        let frame = imageDisplayFrame
-        cropRect = CGRect(
-            x: frame.origin.x + baselineNormalizedCrop.origin.x * frame.width,
-            y: frame.origin.y + baselineNormalizedCrop.origin.y * frame.height,
-            width: baselineNormalizedCrop.width * frame.width,
-            height: baselineNormalizedCrop.height * frame.height
-        )
-    }
-
     /// Resets only zoom and pan, preserving crop rect and rotation.
     func resetView() {
         imageOffset = .zero
