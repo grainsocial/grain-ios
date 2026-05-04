@@ -21,6 +21,7 @@ struct CommentSheetContent: View {
 
     var dismissStyle: CommentDismissStyle = .xmark
     var focusOnAppear: Bool = false
+    var scrollToCommentUri: String?
 
     @Environment(AuthManager.self) private var auth
     @Environment(\.dismiss) private var dismiss
@@ -28,6 +29,7 @@ struct CommentSheetContent: View {
     @State private var commentText = ""
     @State private var replyingTo: GrainComment?
     @State private var mentionState = MentionAutocompleteState()
+    @State private var didScrollToInitialComment = false
     @FocusState private var commentFocused: Bool
 
     private var threadedComments: [(root: GrainComment, replies: [GrainComment])] {
@@ -97,38 +99,62 @@ struct CommentSheetContent: View {
                 .font(.subheadline)
             Spacer()
         } else {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(threadedComments, id: \.root.id) { thread in
-                        CommentRow(
-                            comment: thread.root,
-                            client: client ?? XRPCClient(baseURL: AuthManager.serverURL),
-                            userDID: auth.userDID,
-                            isOwn: thread.root.author.did == auth.userDID,
-                            isReply: false,
-                            onProfileTap: onProfileTap,
-                            onHashtagTap: onHashtagTap,
-                            onStoryTap: onStoryTap,
-                            onReply: { startReply(to: thread.root) },
-                            onDelete: { Task { await onDelete(thread.root) } }
-                        )
-
-                        ForEach(thread.replies) { reply in
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(threadedComments, id: \.root.id) { thread in
                             CommentRow(
-                                comment: reply,
+                                comment: thread.root,
                                 client: client ?? XRPCClient(baseURL: AuthManager.serverURL),
                                 userDID: auth.userDID,
-                                isOwn: reply.author.did == auth.userDID,
-                                isReply: true,
+                                isOwn: thread.root.author.did == auth.userDID,
+                                isReply: false,
                                 onProfileTap: onProfileTap,
                                 onHashtagTap: onHashtagTap,
                                 onStoryTap: onStoryTap,
-                                onReply: { startReplyToReply(reply, root: thread.root) },
-                                onDelete: { Task { await onDelete(reply) } }
+                                onReply: { startReply(to: thread.root) },
+                                onDelete: { Task { await onDelete(thread.root) } }
                             )
+                            .id(thread.root.uri)
+
+                            ForEach(thread.replies) { reply in
+                                CommentRow(
+                                    comment: reply,
+                                    client: client ?? XRPCClient(baseURL: AuthManager.serverURL),
+                                    userDID: auth.userDID,
+                                    isOwn: reply.author.did == auth.userDID,
+                                    isReply: true,
+                                    onProfileTap: onProfileTap,
+                                    onHashtagTap: onHashtagTap,
+                                    onStoryTap: onStoryTap,
+                                    onReply: { startReplyToReply(reply, root: thread.root) },
+                                    onDelete: { Task { await onDelete(reply) } }
+                                )
+                                .id(reply.uri)
+                            }
                         }
                     }
                 }
+                .onChange(of: comments.count) { _, _ in scrollToInitialCommentIfNeeded(proxy: proxy) }
+                .onAppear { scrollToInitialCommentIfNeeded(proxy: proxy) }
+            }
+        }
+    }
+
+    /// Scrolls to `scrollToCommentUri` once after comments have loaded. The
+    /// `LazyVStack` only renders rows lazily, so the target row may not be
+    /// materialized yet when this fires. We yield a tick before scrolling so
+    /// `ScrollViewReader` can locate the row.
+    private func scrollToInitialCommentIfNeeded(proxy: ScrollViewProxy) {
+        guard !didScrollToInitialComment,
+              let target = scrollToCommentUri,
+              comments.contains(where: { $0.uri == target })
+        else { return }
+        didScrollToInitialComment = true
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(50))
+            withAnimation(.easeInOut(duration: 0.25)) {
+                proxy.scrollTo(target, anchor: .center)
             }
         }
     }

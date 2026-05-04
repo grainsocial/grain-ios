@@ -11,6 +11,30 @@ struct Facet: Codable, Sendable {
     }
 }
 
+extension Facet {
+    /// Encodes the facet as the dict shape used in `createRecord` calls
+    /// (matches `app.bsky.richtext.facet`).
+    func toAnyCodableDict() -> [String: AnyCodable] {
+        let featureDicts: [[String: AnyCodable]] = features.map { feature in
+            switch feature {
+            case let .link(uri):
+                ["$type": AnyCodable("app.bsky.richtext.facet#link"), "uri": AnyCodable(uri)]
+            case let .mention(did):
+                ["$type": AnyCodable("app.bsky.richtext.facet#mention"), "did": AnyCodable(did)]
+            case let .tag(tag):
+                ["$type": AnyCodable("app.bsky.richtext.facet#tag"), "tag": AnyCodable(tag)]
+            }
+        }
+        return [
+            "index": AnyCodable([
+                "byteStart": AnyCodable(index.byteStart),
+                "byteEnd": AnyCodable(index.byteEnd),
+            ] as [String: AnyCodable]),
+            "features": AnyCodable(featureDicts as [[String: AnyCodable]]),
+        ]
+    }
+}
+
 enum FacetFeature: Codable, Sendable {
     case mention(did: String)
     case link(uri: String)
