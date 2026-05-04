@@ -89,7 +89,7 @@ struct CropView: View {
             Button {
                 if state.hasModifications {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    resetToBaseline()
+                    resetToOriginal()
                 } else {
                     onCancel()
                 }
@@ -298,21 +298,32 @@ struct CropView: View {
             .frame(width: fitWidth, height: fitHeight)
             .clipped()
             .onGeometryChange(for: CGSize.self, of: { $0.size }) { size in
-                // Always normalise origin to (0,0) so cropRect coordinates
-                // are in the image's own local space, matching CropHandlesView.
-                state.imageDisplayFrame = CGRect(origin: .zero, size: size)
                 if !hasInitialized {
-                    // When restoring an existing rotation, set rotation first
-                    // and wait for the frame to update to the rotated dimensions
-                    // before placing the crop rect.
+                    // Set the target rotation up front and compute the
+                    // post-rotation fitted frame manually. The naive flow
+                    // (set rotation, return, wait for a second geometry
+                    // callback with the rotated dims) fails when post-rotation
+                    // fit equals current fit — e.g. square images, or aspect
+                    // ratios that hit the same screen-fit dim either way.
+                    // SwiftUI then never refires onGeometryChange and cropRect
+                    // stays at .zero, rendering as a tiny corner box.
                     if let existing = existingCrop, existing.rotation != 0,
                        state.rotationAngle != Double(existing.rotation)
                     {
                         state.rotationAngle = Double(existing.rotation)
-                        return
                     }
+                    let postSwapped = state.rotationDegrees == 90 || state.rotationDegrees == 270
+                    let postFit = fitSize(available: available, swapped: postSwapped)
+                    state.imageDisplayFrame = CGRect(
+                        origin: .zero,
+                        size: CGSize(width: postFit.width, height: postFit.height)
+                    )
                     hasInitialized = true
                     initializeCropState()
+                } else {
+                    // Always normalise origin to (0,0) so cropRect coordinates
+                    // are in the image's own local space, matching CropHandlesView.
+                    state.imageDisplayFrame = CGRect(origin: .zero, size: size)
                 }
             }
             .scaleEffect(state.imageScale)
@@ -368,24 +379,23 @@ struct CropView: View {
         }
     }
 
-    private func resetToBaseline() {
-        // Precompute the baseline frame in case rotation changes isSwapped.
-        let baseRotDeg = Int(state.baselineRotation.truncatingRemainder(dividingBy: 360))
-        let baseSwapped = (baseRotDeg + 360) % 360 == 90 || (baseRotDeg + 360) % 360 == 270
-        let baseFit = fitSize(available: lastGeoSize, swapped: baseSwapped)
-        let baseFrame = CGRect(x: 0, y: 0, width: baseFit.width, height: baseFit.height)
-        let base = state.baselineNormalizedCrop
-        let baseCrop = CGRect(
-            x: base.origin.x * baseFrame.width,
-            y: base.origin.y * baseFrame.height,
-            width: base.width * baseFrame.width,
-            height: base.height * baseFrame.height
-        )
+    /// Reset goes to the original untouched image — no rotation, no crop, no
+    /// zoom — matching Apple Photos' Reset semantics. Baseline is left intact
+    /// so `hasModifications` still detects state ≠ entry, keeping Apply
+    /// enabled to commit "remove the crop".
+    private func resetToOriginal() {
+        let origFit = fitSize(available: lastGeoSize, swapped: false)
+        let origFrame = CGRect(x: 0, y: 0, width: origFit.width, height: origFit.height)
 
         withAnimation(.smooth(duration: 0.4)) {
-            state.resetAll()
-            // Override the cropRect that resetAll set (it used the old frame).
-            state.cropRect = baseCrop
+            state.selectedPreset = .free
+            state.isRatioLocked = false
+            state.lockedRatio = nil
+            state.isPortrait = false
+            state.imageOffset = .zero
+            state.imageScale = 1.0
+            state.rotationAngle = 0
+            state.cropRect = origFrame
         }
     }
 
