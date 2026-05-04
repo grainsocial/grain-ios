@@ -255,7 +255,7 @@ struct CropView: View {
     /// control bands so tall images can't extend behind them.
     private func fitSize(available: CGSize, swapped: Bool) -> (width: CGFloat, height: CGFloat) {
         let availableWidth = available.width - 32
-        let availableHeight = available.height
+        let availableHeight = available.height - 24
         let baseW = displayImage.size.width
         let baseH = displayImage.size.height
         let postW = swapped ? baseH : baseW
