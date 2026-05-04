@@ -84,23 +84,35 @@ struct CropView: View {
     // MARK: - Toolbar
 
     private var toolbar: some View {
-        HStack {
-            // Close when pristine, Reset when modified
+        HStack(spacing: 8) {
+            // Close: discard session changes, dismiss to entry state.
             Button {
-                if state.hasModifications {
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    resetToOriginal()
-                } else {
-                    onCancel()
-                }
+                onCancel()
             } label: {
-                Text(state.hasModifications ? "Reset" : "Close")
-                    .contentTransition(.numericText())
+                Image(systemName: "xmark")
+                    .font(.body.weight(.semibold))
             }
             .foregroundStyle(.primary)
-            .padding(.horizontal, 14)
+            .frame(width: 28, height: 22)
+            .padding(.horizontal, 8)
             .padding(.vertical, 8)
             .glassEffect(.regular.interactive(), in: .capsule)
+
+            // Reset: stay in tool, return to original (no crop, no rotation).
+            // Only visible when there's something to reset back from.
+            if state.hasModifications {
+                Button {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    resetToOriginal()
+                } label: {
+                    Text("Reset")
+                }
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .glassEffect(.regular.interactive(), in: .capsule)
+                .transition(.scale(scale: 0.85).combined(with: .opacity))
+            }
 
             Spacer()
 
