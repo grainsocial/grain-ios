@@ -12,6 +12,7 @@ struct StoryCommentSheet: View {
     let storyUri: String
     let client: XRPCClient
     var focusInput: Bool = false
+    var readOnly: Bool = false
     var onProfileTap: ((String) -> Void)?
     var onDismiss: (() -> Void)?
 
@@ -32,7 +33,8 @@ struct StoryCommentSheet: View {
             onDismiss: { onDismiss?() },
             onProfileTap: onProfileTap,
             dismissStyle: .xmark,
-            focusOnAppear: false
+            focusOnAppear: false,
+            readOnly: readOnly
         )
         .presentationDetents([.large])
         .onAppear {
