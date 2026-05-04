@@ -1,3 +1,4 @@
+import Nuke
 import NukeUI
 import SwiftUI
 import UIKit
@@ -455,6 +456,7 @@ struct PhotoShareCard: View {
     let labelName: String
     var showsGalleryBadge: Bool = true
     var showsWordmark: Bool = false
+    var preloadedImage: UIImage?
 
     private let cardWidth: CGFloat = 380
 
@@ -505,6 +507,23 @@ struct PhotoShareCard: View {
                         Text(labelName).font(.caption)
                     }
                     .foregroundStyle(.secondary)
+                }
+        } else if let preloaded = preloadedImage {
+            Image(uiImage: preloaded)
+                .resizable()
+                .scaledToFill()
+                .frame(width: imageSize.width, height: imageSize.height)
+                .clipped()
+                .overlay(alignment: .topTrailing) {
+                    if showsGalleryBadge, photos.count > 1 {
+                        Image(systemName: "square.on.square.fill")
+                            .font(.system(size: 14))
+                            .rotationEffect(.degrees(180))
+                            .foregroundStyle(.white)
+                            .shadow(color: .black.opacity(0.5), radius: 2, x: 0, y: 1)
+                            .padding(8)
+                            .accessibilityHidden(true)
+                    }
                 }
         } else if let urlString = photo?.fullsize, let url = URL(string: urlString) {
             ZStack {
@@ -601,13 +620,30 @@ func sharePhotoAsImage(
     labelDefinitions: [LabelDefinition]
 ) {
     let lr = resolveLabels(gallery.labels, definitions: labelDefinitions)
-    let card = PhotoShareCard(
-        gallery: gallery,
-        photoIndex: photoIndex,
-        labelAction: lr.action,
-        labelName: lr.name,
-        showsGalleryBadge: false,
-        showsWordmark: true
-    )
-    presentPreviewImageShare(card)
+    let photos = gallery.items ?? []
+    let safeIndex = (photoIndex >= 0 && photoIndex < photos.count) ? photoIndex : 0
+    let photo = photos.indices.contains(safeIndex) ? photos[safeIndex] : nil
+    let imageURL = photo.flatMap { URL(string: $0.fullsize) }
+
+    Task { @MainActor in
+        var loaded: UIImage?
+        if lr.action < .warnContent || gallery.labelRevealed, let url = imageURL {
+            let request = ImageRequest(url: url)
+            if let cached = ImagePipeline.shared.cache.cachedImage(for: request)?.image {
+                loaded = cached
+            } else {
+                loaded = try? await ImagePipeline.shared.image(for: request)
+            }
+        }
+        let card = PhotoShareCard(
+            gallery: gallery,
+            photoIndex: safeIndex,
+            labelAction: lr.action,
+            labelName: lr.name,
+            showsGalleryBadge: false,
+            showsWordmark: true,
+            preloadedImage: loaded
+        )
+        presentPreviewImageShare(card)
+    }
 }
