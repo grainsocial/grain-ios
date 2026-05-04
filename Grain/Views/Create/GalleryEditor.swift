@@ -27,6 +27,10 @@ final class PreviewCacheStore {
     @ObservationIgnored private var previewCacheOrder: [UUID] = []
     @ObservationIgnored private var loadingPreviewIDs: Set<UUID> = []
     @ObservationIgnored private var prefetchTasks: [UUID: Task<Void, Never>] = [:]
+    /// Crop signature the cached image was rendered with. When the live item's
+    /// signature diverges, the cache entry is stale and gets evicted before the
+    /// next load.
+    @ObservationIgnored private var cropSignatures: [UUID: String] = [:]
 
     let previewMaxDimension: CGFloat = 1500
     let previewCacheLimit = 5
@@ -43,9 +47,27 @@ final class PreviewCacheStore {
         for offset in -2 ... 2 {
             let idx = centerIdx + offset
             guard items.indices.contains(idx) else { continue }
+            invalidateIfCropChanged(items[idx])
             loadPreviewIfNeeded(for: items[idx], items: items)
         }
         photoLoadingSignposter.endInterval("PrefetchWindow", state)
+    }
+
+    private func invalidateIfCropChanged(_ item: PhotoItem) {
+        let sig = Self.cropSignature(item.cropResult)
+        guard cropSignatures[item.id] != sig else { return }
+        cropSignatures[item.id] = sig
+        previewCache.removeValue(forKey: item.id)
+        previewCacheOrder.removeAll { $0 == item.id }
+        prefetchTasks[item.id]?.cancel()
+        prefetchTasks.removeValue(forKey: item.id)
+        loadingPreviewIDs.remove(item.id)
+    }
+
+    static func cropSignature(_ cropResult: CropResult?) -> String {
+        guard let r = cropResult else { return "none" }
+        let rect = r.cropRect
+        return "\(r.rotation):\(rect.minX):\(rect.minY):\(rect.width):\(rect.height)"
     }
 
     private func loadPreviewIfNeeded(for item: PhotoItem, items: [PhotoItem]) {
@@ -54,12 +76,13 @@ final class PreviewCacheStore {
         loadingPreviewIDs.insert(item.id)
         let id = item.id
         let source = item.source
+        let cropResult = item.cropResult
         let maxDim = previewMaxDimension
         let cacheLimit = previewCacheLimit
         let task = Task.detached(priority: .utility) { [weak self] in
             let spid = photoLoadingSignposter.makeSignpostID()
             let previewState = photoLoadingSignposter.beginInterval("LoadPreview", id: spid)
-            let image = await PreviewCacheStore.loadPreviewImage(source: source, maxDimension: maxDim)
+            let image = await PreviewCacheStore.loadPreviewImage(source: source, maxDimension: maxDim, cropResult: cropResult)
             photoLoadingSignposter.endInterval("LoadPreview", previewState, "success=\(image != nil)")
             await MainActor.run {
                 guard let self else { return }
@@ -73,13 +96,15 @@ final class PreviewCacheStore {
                 while self.previewCacheOrder.count > cacheLimit {
                     let evict = self.previewCacheOrder.removeFirst()
                     self.previewCache.removeValue(forKey: evict)
+                    self.cropSignatures.removeValue(forKey: evict)
                 }
             }
         }
         prefetchTasks[id] = task
     }
 
-    private nonisolated static func loadPreviewImage(source: PhotoSource, maxDimension: CGFloat) async -> UIImage? {
+    private nonisolated static func loadPreviewImage(source: PhotoSource, maxDimension: CGFloat, cropResult: CropResult?) async -> UIImage? {
+        let raw: UIImage
         switch source {
         case let .picker(pickerItem):
             let transferState = photoLoadingSignposter.beginInterval("LoadTransferable", id: photoLoadingSignposter.makeSignpostID())
@@ -90,22 +115,24 @@ final class PreviewCacheStore {
                 return nil
             }
             photoLoadingSignposter.endInterval("LoadTransferable", transferState, "bytes=\(data.count)")
-            let thumbState = photoLoadingSignposter.beginInterval("MakeThumbnail", id: photoLoadingSignposter.makeSignpostID())
-            let resized = PhotoItem.makeThumbnail(from: image, maxSize: maxDimension)
-            photoLoadingSignposter.endInterval("MakeThumbnail", thumbState)
-            let decodeState = photoLoadingSignposter.beginInterval("Decompress", id: photoLoadingSignposter.makeSignpostID())
-            let result = await resized.byPreparingForDisplay() ?? resized
-            photoLoadingSignposter.endInterval("Decompress", decodeState)
-            return result
+            raw = image
         case let .camera(image, _):
-            let thumbState = photoLoadingSignposter.beginInterval("MakeThumbnail", id: photoLoadingSignposter.makeSignpostID())
-            let resized = PhotoItem.makeThumbnail(from: image, maxSize: maxDimension)
-            photoLoadingSignposter.endInterval("MakeThumbnail", thumbState)
-            let decodeState = photoLoadingSignposter.beginInterval("Decompress", id: photoLoadingSignposter.makeSignpostID())
-            let result = await resized.byPreparingForDisplay() ?? resized
-            photoLoadingSignposter.endInterval("Decompress", decodeState)
-            return result
+            raw = image
         }
+
+        let processed: UIImage = if let cropResult {
+            ImageCropper.applyCrop(to: raw, normalizedRect: cropResult.cropRect, rotation: cropResult.rotation)
+        } else {
+            raw
+        }
+
+        let thumbState = photoLoadingSignposter.beginInterval("MakeThumbnail", id: photoLoadingSignposter.makeSignpostID())
+        let resized = PhotoItem.makeThumbnail(from: processed, maxSize: maxDimension)
+        photoLoadingSignposter.endInterval("MakeThumbnail", thumbState)
+        let decodeState = photoLoadingSignposter.beginInterval("Decompress", id: photoLoadingSignposter.makeSignpostID())
+        let result = await resized.byPreparingForDisplay() ?? resized
+        photoLoadingSignposter.endInterval("Decompress", decodeState)
+        return result
     }
 }
 
@@ -184,6 +211,9 @@ struct PhotoCarouselView: View {
                     if newID != nil {
                         cacheStore.prefetchPreviewsAroundSelection(items: items, selectedPhotoID: selectedPhotoID)
                     }
+                }
+                .onChange(of: items.map { PreviewCacheStore.cropSignature($0.cropResult) }.joined(separator: "|")) { _, _ in
+                    cacheStore.prefetchPreviewsAroundSelection(items: items, selectedPhotoID: selectedPhotoID)
                 }
                 .onAppear {
                     cacheStore.prefetchPreviewsAroundSelection(items: items, selectedPhotoID: selectedPhotoID)
@@ -340,6 +370,9 @@ struct GalleryEditor: View {
     @Binding var mode: EditorMode
     let sendExif: Bool
     var onDeleteItem: ((PhotoItem) -> Void)?
+    /// Owned by the caller so fullScreenCover lives outside the Form/Section
+    /// hierarchy — avoids the SwiftUI-List cell-recycling crash.
+    @Binding var cropRequest: CropRequest?
     @State private var gridContainerWidth: CGFloat = 0
     @State private var stripState = StripScrollState()
     @State private var reorderState = ReorderDragState()
@@ -415,92 +448,7 @@ struct GalleryEditor: View {
         // MARK: Photos section
 
         Section {
-            AdaptivePhotoLayout(
-                mode: mode,
-                containerWidth: gridContainerWidth,
-                stripScrollOffset: stripState.currentOffset,
-                dragPlacement: dragPlacement
-            ) {
-                ForEach($items) { $item in
-                    let index = items.firstIndex(where: { $0.id == item.id }) ?? 0
-                    let exifState: ExifState = {
-                        guard item.exifSummary != nil else { return .absent }
-                        return sendExif ? .active : .inactive
-                    }()
-
-                    cellView(item: $item, index: index, exifState: exifState)
-                        // Live drag position: offset tracks the finger without animation.
-                        // dragOffset is kept out of the Layout so the sibling spring
-                        // animation is never contaminated by the immediate offset update.
-                        .offset(
-                            x: reorderState.draggedID == item.id ? reorderState.dragOffset.width : 0,
-                            y: reorderState.draggedID == item.id ? reorderState.dragOffset.height : 0
-                        )
-                        .zIndex(reorderState.draggedID == item.id ? 1000 : 0)
-                        .gesture(
-                            ReorderRecognizer(isEnabled: mode == .reorder) { phase, translation in
-                                handleReorder(phase: phase, translation: translation, itemID: item.id, index: index)
-                            }
-                        )
-                        .transition(mode == .preview ? .walletRemove : .opacity)
-                        .layoutValue(key: PhotoIndexKey.self, value: index)
-                }
-            }
-            // No explicit .clipped() — the Form Section row clips its content
-            // naturally. Adding .clipped() here over-clips cells at strip edges
-            // (the X button and cell frame extend past the layout bounds when
-            // partially scrolled off-screen, cutting into the visible portion).
-            .contentShape(Rectangle())
-            .animation(.smooth, value: mode)
-            .gesture(
-                StripPanRecognizer(
-                    isEnabled: mode == .preview,
-                    onChanged: { stripState.dragTranslation = $0 },
-                    onEnded: { t, p in
-                        stripState.handleDragEnded(
-                            translation: t,
-                            predictedEnd: p,
-                            containerWidth: gridContainerWidth,
-                            itemCount: items.count
-                        )
-                    }
-                )
-            )
-            .listRowInsets(EdgeInsets())
-            .listRowSeparator(.hidden)
-            .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { newHeight in
-                // Signpost the actual rendered row height so Instruments shows
-                // whether the section box is sized correctly per mode.
-                morphSignposter.emitEvent("LayoutRowHeight", "mode=\(mode.label),h=\(Int(newHeight))")
-            }
-            .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { newWidth in
-                guard newWidth > 0 else { return }
-                var t = Transaction()
-                t.animation = nil
-                withTransaction(t) { gridContainerWidth = newWidth }
-            }
-            .onChange(of: gridContainerWidth) { _, newWidth in
-                guard newWidth > 0, !isAnimatingMode else { return }
-                if let id = selectedPhotoID,
-                   let idx = items.firstIndex(where: { $0.id == id })
-                {
-                    stripState.scrollToIndex(idx, itemCount: items.count, containerWidth: newWidth, animated: false)
-                }
-            }
-            .onChange(of: selectedPhotoID) { _, newID in
-                guard mode == .preview, !isAnimatingMode,
-                      let newID, let idx = items.firstIndex(where: { $0.id == newID })
-                else { return }
-                stripState.scrollToIndex(idx, itemCount: items.count, containerWidth: gridContainerWidth)
-            }
-            .onChange(of: mode) { _, newMode in
-                if newMode == .preview, gridContainerWidth > 0,
-                   let id = selectedPhotoID,
-                   let idx = items.firstIndex(where: { $0.id == id })
-                {
-                    stripState.scrollToIndex(idx, itemCount: items.count, containerWidth: gridContainerWidth, animated: false)
-                }
-            }
+            photoLayout
         } header: {
             Picker("Mode", selection: modeBinding) {
                 ForEach(EditorMode.allCases, id: \.self) { m in
@@ -509,6 +457,92 @@ struct GalleryEditor: View {
             }
             .pickerStyle(.segmented)
             .disabled(isAnimatingMode)
+        }
+    }
+
+    // MARK: - Photo layout
+
+    private var photoLayout: some View {
+        AdaptivePhotoLayout(
+            mode: mode,
+            containerWidth: gridContainerWidth,
+            stripScrollOffset: stripState.currentOffset,
+            dragPlacement: dragPlacement
+        ) {
+            ForEach($items) { $item in
+                let index = items.firstIndex(where: { $0.id == item.id }) ?? 0
+                let exifState: ExifState = {
+                    guard item.exifSummary != nil else { return .absent }
+                    return sendExif ? .active : .inactive
+                }()
+
+                cellView(item: $item, index: index, exifState: exifState)
+                    .offset(
+                        x: reorderState.draggedID == item.id ? reorderState.dragOffset.width : 0,
+                        y: reorderState.draggedID == item.id ? reorderState.dragOffset.height : 0
+                    )
+                    .zIndex(reorderState.draggedID == item.id ? 1000 : 0)
+                    .gesture(
+                        ReorderRecognizer(isEnabled: mode == .reorder) { phase, translation in
+                            handleReorder(phase: phase, translation: translation, itemID: item.id, index: index)
+                        }
+                    )
+                    .transition(mode == .preview ? .walletRemove : .opacity)
+                    .layoutValue(key: PhotoIndexKey.self, value: index)
+            }
+        }
+        // No explicit .clipped() — the Form Section row clips its content
+        // naturally. Adding .clipped() here over-clips cells at strip edges
+        // (the X button and cell frame extend past the layout bounds when
+        // partially scrolled off-screen, cutting into the visible portion).
+        .contentShape(Rectangle())
+        .animation(.smooth, value: mode)
+        .gesture(
+            StripPanRecognizer(
+                isEnabled: mode == .preview,
+                onChanged: { stripState.dragTranslation = $0 },
+                onEnded: { t, p in
+                    stripState.handleDragEnded(
+                        translation: t,
+                        predictedEnd: p,
+                        containerWidth: gridContainerWidth,
+                        itemCount: items.count
+                    )
+                }
+            )
+        )
+        .listRowInsets(EdgeInsets())
+        .listRowSeparator(.hidden)
+        .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { newHeight in
+            morphSignposter.emitEvent("LayoutRowHeight", "mode=\(mode.label),h=\(Int(newHeight))")
+        }
+        .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { newWidth in
+            guard newWidth > 0 else { return }
+            var t = Transaction()
+            t.animation = nil
+            withTransaction(t) { gridContainerWidth = newWidth }
+        }
+        .onChange(of: gridContainerWidth) { _, newWidth in
+            guard newWidth > 0, !isAnimatingMode else { return }
+            if let id = selectedPhotoID,
+               let idx = items.firstIndex(where: { $0.id == id })
+            {
+                stripState.scrollToIndex(idx, itemCount: items.count, containerWidth: newWidth, animated: false)
+            }
+        }
+        .onChange(of: selectedPhotoID) { _, newID in
+            guard mode == .preview, !isAnimatingMode,
+                  let newID, let idx = items.firstIndex(where: { $0.id == newID })
+            else { return }
+            stripState.scrollToIndex(idx, itemCount: items.count, containerWidth: gridContainerWidth)
+        }
+        .onChange(of: mode) { _, newMode in
+            if newMode == .preview, gridContainerWidth > 0,
+               let id = selectedPhotoID,
+               let idx = items.firstIndex(where: { $0.id == id })
+            {
+                stripState.scrollToIndex(idx, itemCount: items.count, containerWidth: gridContainerWidth, animated: false)
+            }
         }
     }
 
@@ -662,6 +696,7 @@ struct GalleryEditor: View {
     @Previewable @State var isReordering = false
     @Previewable @State var isAnimatingMode = false
     @Previewable @State var zoomState = ImageZoomState()
+    @Previewable @State var cropRequest: CropRequest?
     Form {
         GalleryEditor(
             items: $state,
@@ -669,8 +704,16 @@ struct GalleryEditor: View {
             isReordering: $isReordering,
             isAnimatingMode: $isAnimatingMode,
             mode: $mode,
-            sendExif: false
+            sendExif: false,
+            cropRequest: $cropRequest
         )
+    }
+    .cropSheet(request: $cropRequest) { result in
+        guard let id = selected,
+              let idx = state.firstIndex(where: { $0.id == id }) else { return }
+        state[idx].thumbnail = PhotoItem.makeThumbnail(from: result.croppedImage)
+        state[idx].carouselPreview = PhotoItem.makeCarouselPreview(from: result.croppedImage, width: UIScreen.main.bounds.width)
+        state[idx].cropResult = result
     }
     .scrollDisabled(isReordering || isAnimatingMode)
     .environment(zoomState)

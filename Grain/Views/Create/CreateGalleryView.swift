@@ -56,7 +56,7 @@ struct CreateGalleryView: View {
     @State private var errorMessage: String?
     @State private var resolvedLocation: (h3: String, name: String, address: [String: AnyCodable]?)?
     @State private var showCamera = false
-    @State private var photoItems: [PhotoItem] = []
+    @State private var photoItems: [PhotoItem]
     @State private var mentionState = MentionAutocompleteState()
     @State private var postToBluesky = false
     @State private var selectedLabels: Set<String> = []
@@ -83,9 +83,19 @@ struct CreateGalleryView: View {
     @State private var isAnimatingMode = false
     @State private var editorMode: EditorMode = .preview
     @State private var showDiscardAlert = false
+    @State private var cropRequest: CropRequest?
+    @State private var replacePickerItem: PhotosPickerItem?
+    @State private var showDeletePhotoConfirm = false
 
     let client: XRPCClient
     var onCreated: (() -> Void)?
+
+    init(client: XRPCClient, initialItems: [PhotoItem] = [], onCreated: (() -> Void)? = nil) {
+        self.client = client
+        self.onCreated = onCreated
+        _photoItems = State(initialValue: initialItems)
+        _selectedPhotoID = State(initialValue: initialItems.first?.id)
+    }
 
     private let maxTitle = 100
     private let maxDescription = 1000
@@ -124,6 +134,8 @@ struct CreateGalleryView: View {
             .scrollDisabled(isReordering || isAnimatingMode || imageZoomState.showOverlay)
             .scrollDismissesKeyboard(.interactively)
             .background(SheetGestureDisabler(isDisabled: isReordering))
+
+            cropPill
         }
         .interactiveDismissDisabled(isReordering)
         .safeAreaInset(edge: .bottom) {
@@ -159,12 +171,22 @@ struct CreateGalleryView: View {
             createSignposter.emitEvent("TaskSpawned", "source=firstPhotoChange,itemCount=\(photoItems.count)")
             Task { await detectLocation() }
         }
+        .onChange(of: replacePickerItem) { _, newItem in
+            handleReplacePick(newItem)
+        }
+        .cropSheet(request: $cropRequest) { result in
+            guard let id = selectedPhotoID,
+                  let idx = photoItems.firstIndex(where: { $0.id == id }) else { return }
+            photoItems[idx].thumbnail = PhotoItem.makeThumbnail(from: result.croppedImage)
+            photoItems[idx].carouselPreview = PhotoItem.makeCarouselPreview(from: result.croppedImage, width: UIScreen.main.bounds.width)
+            photoItems[idx].cropResult = result
+        }
         .fullScreenCover(isPresented: $showCamera) {
             CameraPicker { image, metadata in
                 let thumb = PhotoItem.makeThumbnail(from: image)
                 let carousel = PhotoItem.makeCarouselPreview(from: image, width: UIScreen.main.bounds.width)
                 let exif = metadata.flatMap { makeExifSummary(from: $0) }
-                let item = PhotoItem(thumbnail: thumb, carouselPreview: carousel, source: .camera(image, metadata: metadata), exifSummary: exif)
+                let item = PhotoItem(thumbnail: thumb, carouselPreview: carousel, source: .camera(image, metadata: metadata), exifSummary: exif, originalImage: image)
                 photoItems.append(item)
                 if selectedPhotoID == nil { selectedPhotoID = item.id }
             }
@@ -217,6 +239,127 @@ struct CreateGalleryView: View {
         .modifier(ImageZoomOverlay(zoomState: imageZoomState))
     }
 
+    // MARK: - Floating crop pill
+
+    @ViewBuilder
+    private var cropPill: some View {
+        if editorMode == .preview,
+           let id = selectedPhotoID,
+           let idx = photoItems.firstIndex(where: { $0.id == id })
+        {
+            VStack {
+                Spacer()
+                GlassEffectContainer(spacing: 8) {
+                    HStack(spacing: 0) {
+                        Button {
+                            let item = photoItems[idx]
+                            let image = item.originalImage ?? item.cameraImage ?? item.carouselPreview
+                            cropRequest = CropRequest(image: image, existingCrop: item.cropResult)
+                        } label: {
+                            Image(systemName: "crop.rotate")
+                                .font(.system(size: 18))
+                                .frame(width: 56, height: 44)
+                                .foregroundStyle(.primary)
+                                .contentShape(Rectangle())
+                                .accessibilityLabel("Crop")
+                        }
+                        .buttonStyle(.plain)
+
+                        Rectangle()
+                            .fill(.secondary.opacity(0.3))
+                            .frame(width: 1, height: 28)
+
+                        PhotosPicker(
+                            selection: $replacePickerItem,
+                            matching: .images,
+                            photoLibrary: .shared()
+                        ) {
+                            Image(systemName: "rectangle.2.swap")
+                                .font(.system(size: 18))
+                                .frame(width: 56, height: 44)
+                                .foregroundStyle(.primary)
+                                .contentShape(Rectangle())
+                                .accessibilityLabel("Replace")
+                        }
+                        .buttonStyle(.plain)
+
+                        Rectangle()
+                            .fill(.secondary.opacity(0.3))
+                            .frame(width: 1, height: 28)
+
+                        Button(role: .destructive) {
+                            showDeletePhotoConfirm = true
+                        } label: {
+                            Image(systemName: "trash")
+                                .font(.system(size: 18))
+                                .frame(width: 56, height: 44)
+                                .foregroundStyle(.red)
+                                .contentShape(Rectangle())
+                                .accessibilityLabel("Delete")
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .glassEffect(.regular, in: .capsule)
+                }
+                .padding(.bottom, 22)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+            .alert("Delete Photo?", isPresented: $showDeletePhotoConfirm) {
+                Button("Delete", role: .destructive) { deleteSelectedPhoto() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This removes the photo from the gallery. You can add it again from the picker.")
+            }
+        }
+    }
+
+    private func deleteSelectedPhoto() {
+        guard let id = selectedPhotoID,
+              let idx = photoItems.firstIndex(where: { $0.id == id })
+        else { return }
+        let item = photoItems[idx]
+        if case let .picker(pickerItem) = item.source,
+           let pickerID = pickerItem.itemIdentifier
+        {
+            editorRemovedIDs.insert(pickerID)
+            selectedPhotos.removeAll { $0.itemIdentifier == pickerID }
+        }
+        let nextID: UUID? = idx > 0
+            ? photoItems[idx - 1].id
+            : (idx < photoItems.count - 1 ? photoItems[idx + 1].id : nil)
+        selectedPhotoID = nextID
+        withAnimation(.smooth) {
+            photoItems.removeAll { $0.id == id }
+        }
+    }
+
+    private func handleReplacePick(_ pickerItem: PhotosPickerItem?) {
+        guard let pickerItem,
+              let targetID = selectedPhotoID,
+              let idx = photoItems.firstIndex(where: { $0.id == targetID })
+        else { return }
+        Task { await replacePhoto(at: idx, with: pickerItem) }
+    }
+
+    private func replacePhoto(at idx: Int, with pickerItem: PhotosPickerItem) async {
+        guard let data = try? await pickerItem.loadTransferable(type: Data.self),
+              let image = UIImage(data: data)
+        else { return }
+        let thumb = PhotoItem.makeThumbnail(from: image)
+        let carousel = PhotoItem.makeCarouselPreview(from: image, width: UIScreen.main.bounds.width)
+        let exif = makeExifSummary(from: data)
+        await MainActor.run {
+            guard idx < photoItems.count else { return }
+            photoItems[idx].thumbnail = thumb
+            photoItems[idx].carouselPreview = carousel
+            photoItems[idx].source = .picker(pickerItem)
+            photoItems[idx].exifSummary = exif
+            photoItems[idx].originalImage = image
+            photoItems[idx].cropResult = nil
+            replacePickerItem = nil
+        }
+    }
+
     // MARK: - Form Sections
 
     private var photosSection: some View {
@@ -254,7 +397,8 @@ struct CreateGalleryView: View {
                           let id = pickerItem.itemIdentifier else { return }
                     editorRemovedIDs.insert(id)
                     selectedPhotos.removeAll { $0.itemIdentifier == id }
-                }
+                },
+                cropRequest: $cropRequest
             )
         }
     }
@@ -395,7 +539,7 @@ struct CreateGalleryView: View {
                     let carousel = PhotoItem.makeCarouselPreview(from: image, width: carouselWidth)
                     let exif = makeExifSummary(from: data)
                     createSignposter.endInterval("LoadPhoto", state, "result=ok")
-                    return (index, PhotoItem(thumbnail: thumb, carouselPreview: carousel, source: .picker(pickerItem), exifSummary: exif))
+                    return (index, PhotoItem(thumbnail: thumb, carouselPreview: carousel, source: .picker(pickerItem), exifSummary: exif, originalImage: image))
                 }
             }
             for await (index, item) in group {
@@ -573,16 +717,23 @@ struct ExifSummary {
 
 struct PhotoItem: Identifiable {
     let id = UUID()
-    let thumbnail: UIImage
+    var thumbnail: UIImage
     /// Screen-width image for the carousel. Built at creation time via
     /// `UIGraphicsImageRenderer`, which forces a full decode during the draw
     /// call — so the resulting UIImage is backed by a decoded bitmap and
     /// displays with zero decode work. Kept in memory for the editor session
     /// so the carousel never stalls on first draw regardless of scroll speed.
-    let carouselPreview: UIImage
-    let source: PhotoSource
+    var carouselPreview: UIImage
+    var source: PhotoSource
     var alt: String = ""
     var exifSummary: ExifSummary?
+    var originalImage: UIImage?
+    var cropResult: CropResult?
+
+    var cameraImage: UIImage? {
+        if case let .camera(image, _) = source { return image }
+        return nil
+    }
 
     /// Thumbnail's natural width-to-height ratio. Computed once from `thumbnail.size`
     /// and used everywhere a cell needs aspect geometry — single source of truth.
@@ -865,51 +1016,11 @@ private func extractGalleryExif(from data: Data) -> [String: AnyCodable]? {
 }
 
 #Preview {
-    @Previewable @State var photos = PreviewData.photoItems
-    @Previewable @State var selectedID: UUID?
     NavigationStack {
-        CreateGalleryViewPreview(photoItems: $photos, selectedPhotoID: $selectedID)
+        CreateGalleryView(client: .preview, initialItems: PreviewData.photoItems)
     }
     .previewEnvironments()
-    .onAppear { selectedID = photos.first?.id }
-}
-
-/// Thin wrapper that exposes photoItems for preview injection
-private struct CreateGalleryViewPreview: View {
-    @Binding var photoItems: [PhotoItem]
-    @Binding var selectedPhotoID: UUID?
-
-    var body: some View {
-        Form {
-            Section("Photos") {
-                Label("5 photos selected", systemImage: "photo.on.rectangle.angled")
-                    .foregroundStyle(.secondary)
-            }
-            Section {
-                TextField("Add a title (required)...", text: .constant("Golden Hour, Kyoto"))
-                TextField("Add a description...", text: .constant("Shot on Leica M6 with Kodak Portra 400. #analog #japan #35mm"), axis: .vertical)
-                    .lineLimit(3 ... 6)
-            } header: {
-                Text("Gallery")
-            }
-            Section {
-                GalleryEditor(
-                    items: $photoItems,
-                    selectedPhotoID: $selectedPhotoID,
-                    isReordering: .constant(false),
-                    isAnimatingMode: .constant(false),
-                    mode: .constant(.preview),
-                    sendExif: true
-                )
-            }
-        }
-        .navigationTitle("New Gallery")
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) { Button("Cancel") {} }
-            ToolbarItem(placement: .topBarTrailing) { Button("Post") {}.bold() }
-        }
-        .grainPreview()
-    }
+    .grainPreview()
 }
 
 // MARK: - Sheet gesture disabler

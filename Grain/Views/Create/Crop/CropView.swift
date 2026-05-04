@@ -1,0 +1,613 @@
+import os
+import SwiftUI
+
+let cropViewSignposter = OSSignposter(subsystem: "social.grain.grain", category: "CropView")
+
+/// Full-screen crop tool. Presented as `.fullScreenCover` from both story
+/// and gallery create flows.
+struct CropView: View {
+    let image: UIImage
+    let existingCrop: CropResult?
+    let onDone: (CropResult) -> Void
+    let onCancel: () -> Void
+
+    @State private var state = CropState()
+    @AppStorage("crop.defaultRatioID") private var defaultRatioID: String = "Free"
+    /// Always the orientation-normalized original. Never mutated — rotation
+    /// is applied visually via `.rotationEffect()`.
+    @State private var displayImage: UIImage
+    @State private var hasInitialized = false
+    @State private var isRotating = false
+    @State private var postRotationNormalizedCrop: CGRect?
+    @State private var isProcessing = false
+    @State private var lastGeoSize: CGSize = .zero
+    /// Rotation-only handle-sizing overrides. Set OUTSIDE `withAnimation` to
+    /// pre-rotation values, then INSIDE `withAnimation` to post values, so
+    /// SwiftUI interpolates them via `CropHandlesView.animatableData`. nil
+    /// outside rotation; the natural derivations are passed instead.
+    @State private var rotationOverrideZoomRef: CGFloat?
+    @State private var rotationOverrideCropShortSide: CGFloat?
+
+    init(
+        image: UIImage,
+        existingCrop: CropResult? = nil,
+        onDone: @escaping (CropResult) -> Void,
+        onCancel: @escaping () -> Void
+    ) {
+        self.image = image
+        self.existingCrop = existingCrop
+        self.onDone = onDone
+        self.onCancel = onCancel
+        _displayImage = State(initialValue: ImageCropper.normalizeOrientation(image))
+    }
+
+    private var isSwapped: Bool {
+        state.rotationDegrees == 90 || state.rotationDegrees == 270
+    }
+
+    var body: some View {
+        ZStack {
+            Color(.systemBackground).ignoresSafeArea()
+
+            GeometryReader { geo in
+                Color(.systemBackground)
+                imageArea(in: geo, available: geo.size)
+                    .position(x: geo.size.width / 2, y: geo.size.height / 2)
+            }
+            .onGeometryChange(for: CGSize.self, of: { $0.size }) { lastGeoSize = $0 }
+            // Controls attach as safe-area insets so the GeometryReader's geo
+            // shrinks to the image zone — tall images can't extend behind them.
+            .safeAreaInset(edge: .top, spacing: 0) {
+                VStack(spacing: 8) {
+                    toolbar
+                        .padding(.horizontal, 16)
+
+                    toolButtons
+                }
+                .padding(.top, 8)
+                .tint(.primary)
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                VStack(spacing: 8) {
+                    bottomControls
+
+                    AspectRatioBar(state: state)
+                }
+                .padding(.bottom, 16)
+                .tint(.primary)
+            }
+        }
+        .statusBarHidden()
+        .persistentSystemOverlays(.hidden)
+    }
+
+    // MARK: - Toolbar
+
+    private var toolbar: some View {
+        HStack(spacing: 8) {
+            // Close: discard session changes, dismiss to entry state.
+            Button {
+                onCancel()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.body.weight(.semibold))
+                    .frame(width: 32, height: 32)
+            }
+            .foregroundStyle(.primary)
+            .glassEffect(.regular.interactive(), in: .circle)
+
+            // Reset: stay in tool, return to original (no crop, no rotation).
+            // Disabled rather than hidden — affordance is always relevant in
+            // a crop tool; greying it out tells the user there's nothing
+            // currently to reset, without UI elements popping in/out.
+            Button {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                resetToOriginal()
+            } label: {
+                Text("Reset")
+            }
+            .foregroundStyle(state.isOriginal ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.primary))
+            .disabled(state.isOriginal)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .glassEffect(state.isOriginal ? .regular : .regular.interactive(), in: .capsule)
+
+            Spacer()
+
+            Button("Apply") {
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                confirmCrop()
+            }
+            .fontWeight(.semibold)
+            .foregroundStyle(state.hasModifications ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
+            .disabled(!state.hasModifications)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .glassEffect(
+                state.hasModifications ? .regular.interactive() : .regular,
+                in: .capsule
+            )
+        }
+        .animation(.smooth(duration: 0.3), value: state.hasModifications)
+        .animation(.smooth(duration: 0.3), value: state.isOriginal)
+    }
+
+    // MARK: - Tool buttons — top row
+
+    /// Standalone tool button with its own glass circle.
+    private func toolButton(_ icon: String, active: Bool = true, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 18))
+                .foregroundStyle(active ? .primary : .tertiary)
+                .frame(width: 40, height: 40)
+                .contentShape(Rectangle())
+        }
+        .glassEffect(active ? .regular.interactive() : .regular, in: .circle)
+    }
+
+    /// Button inside a shared pill — no individual glass.
+    private func pillButton(_ icon: String, active: Bool = true, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 18))
+                .foregroundStyle(active ? .primary : .tertiary)
+                .frame(width: 40, height: 40)
+                .contentShape(Rectangle())
+        }
+    }
+
+    private var toolButtons: some View {
+        HStack(spacing: 16) {
+            // Rotate pair in a single pill
+            HStack(spacing: 0) {
+                pillButton("rotate.left") {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    rotate(degrees: -90)
+                }
+                .offset(y: -1) // optical center — arrow weight sits low
+                pillButton("rotate.right") {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    rotate(degrees: 90)
+                }
+                .offset(y: -1)
+            }
+            .glassEffect(.regular.interactive(), in: .capsule)
+
+            toolButton("grid", active: state.showGrid) { state.showGrid.toggle() }
+
+            // Zoom pair in a single pill — minus (fit) left, plus (zoom) right
+            HStack(spacing: 0) {
+                pillButton("minus.magnifyingglass",
+                           active: state.isViewModified)
+                {
+                    animateSnapZoom(kind: "resetView") { state.resetView() }
+                }
+                pillButton("plus.magnifyingglass") {
+                    animateSnapZoom(kind: "zoomToCrop") { state.zoomToCrop() }
+                }
+            }
+            .glassEffect(.regular.interactive(), in: .capsule)
+        }
+    }
+
+    // MARK: - Bottom controls (lock + orientation toggle)
+
+    private var bottomControls: some View {
+        let orientationEnabled = state.showOrientationToggle
+        return HStack(spacing: 12) {
+            // Lock toggle
+            Button {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                withAnimation(.smooth(duration: 0.3)) {
+                    state.toggleRatioLock()
+                }
+            } label: {
+                Image(systemName: state.isRatioLocked ? "lock.fill" : "lock.open.fill")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(state.isRatioLocked ? .primary : .tertiary)
+                    .contentTransition(.symbolEffect(.replace))
+                    .frame(width: 36, height: 36)
+                    .contentShape(Rectangle())
+            }
+            .glassEffect(state.isRatioLocked ? .regular.interactive() : .regular, in: .circle)
+
+            // Landscape / Portrait pair in a single pill
+            HStack(spacing: 0) {
+                Button {
+                    guard orientationEnabled, state.isPortrait else { return }
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    withAnimation(.smooth(duration: 0.3)) {
+                        state.toggleOrientation()
+                    }
+                } label: {
+                    RoundedRectangle(cornerRadius: 2)
+                        .strokeBorder(lineWidth: 1.5)
+                        .frame(width: 18, height: 12)
+                        .foregroundStyle(
+                            orientationEnabled
+                                ? (!state.isPortrait ? .primary : .tertiary)
+                                : .quaternary
+                        )
+                        .frame(width: 40, height: 36)
+                        .contentShape(Rectangle())
+                }
+
+                Button {
+                    guard orientationEnabled, !state.isPortrait else { return }
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    withAnimation(.smooth(duration: 0.3)) {
+                        state.toggleOrientation()
+                    }
+                } label: {
+                    RoundedRectangle(cornerRadius: 2)
+                        .strokeBorder(lineWidth: 1.5)
+                        .frame(width: 12, height: 18)
+                        .foregroundStyle(
+                            orientationEnabled
+                                ? (state.isPortrait ? .primary : .tertiary)
+                                : .quaternary
+                        )
+                        .frame(width: 40, height: 36)
+                        .contentShape(Rectangle())
+                }
+            }
+            .glassEffect(
+                orientationEnabled ? .regular.interactive() : .regular,
+                in: .capsule
+            )
+        }
+    }
+
+    // MARK: - Image area
+
+    /// Compute the fitted image dimensions for a given rotation state.
+    /// availableSize is the image-zone after subtracting the top/bottom
+    /// control bands so tall images can't extend behind them.
+    private func fitSize(available: CGSize, swapped: Bool) -> (width: CGFloat, height: CGFloat) {
+        let availableWidth = available.width - 32
+        let availableHeight = available.height - 24
+        let baseW = displayImage.size.width
+        let baseH = displayImage.size.height
+        let postW = swapped ? baseH : baseW
+        let postH = swapped ? baseW : baseH
+        let imgAspect = postW / max(postH, 1)
+        let w = min(availableWidth, availableHeight * imgAspect)
+        let h = w / imgAspect
+        if h > availableHeight {
+            return (availableHeight * imgAspect, availableHeight)
+        }
+        return (w, h)
+    }
+
+    @ViewBuilder
+    private func imageArea(in _: GeometryProxy, available: CGSize) -> some View {
+        let fit = fitSize(available: available, swapped: isSwapped)
+        let fitWidth = fit.width
+        let fitHeight = fit.height
+
+        // The outer ZStack sizes to fitWidth × fitHeight (image + handles).
+        // The gesture overlay is attached as an .overlay so its +88pt frame
+        // doesn't inflate the ZStack — that extra width caused a sub-pixel
+        // centering offset on landscape photos.
+        ZStack {
+            // Image + overlay in the same coordinate space.
+            // scaleEffect/offset are applied to both so the mask
+            // tracks the image during zoom and pan.
+            ZStack {
+                // Black fill prevents white corners during rotation animation
+                Color.black
+
+                Image(uiImage: displayImage)
+                    .resizable()
+                    .frame(
+                        width: isSwapped ? fitHeight : fitWidth,
+                        height: isSwapped ? fitWidth : fitHeight
+                    )
+                    .rotationEffect(.degrees(state.rotationAngle))
+            }
+            .frame(width: fitWidth, height: fitHeight)
+            .clipped()
+            .onGeometryChange(for: CGSize.self, of: { $0.size }) { size in
+                if !hasInitialized {
+                    // Set the target rotation up front and compute the
+                    // post-rotation fitted frame manually. The naive flow
+                    // (set rotation, return, wait for a second geometry
+                    // callback with the rotated dims) fails when post-rotation
+                    // fit equals current fit — e.g. square images, or aspect
+                    // ratios that hit the same screen-fit dim either way.
+                    // SwiftUI then never refires onGeometryChange and cropRect
+                    // stays at .zero, rendering as a tiny corner box.
+                    if let existing = existingCrop, existing.rotation != 0,
+                       state.rotationAngle != Double(existing.rotation)
+                    {
+                        state.rotationAngle = Double(existing.rotation)
+                    }
+                    let postSwapped = state.rotationDegrees == 90 || state.rotationDegrees == 270
+                    let postFit = fitSize(available: available, swapped: postSwapped)
+                    state.imageDisplayFrame = CGRect(
+                        origin: .zero,
+                        size: CGSize(width: postFit.width, height: postFit.height)
+                    )
+                    hasInitialized = true
+                    initializeCropState()
+                } else {
+                    // Always normalise origin to (0,0) so cropRect coordinates
+                    // are in the image's own local space, matching CropHandlesView.
+                    state.imageDisplayFrame = CGRect(origin: .zero, size: size)
+                }
+            }
+            .scaleEffect(state.imageScale)
+            .offset(state.imageOffset)
+
+            // Screen-space handles (outside transform chain — constant size at any zoom)
+            CropHandlesView(
+                screenCropRect: state.screenCropRect,
+                showGrid: state.showGrid,
+                zoomReference: rotationOverrideZoomRef
+                    ?? min(fitWidth, fitHeight) * state.imageScale,
+                cropShortSide: rotationOverrideCropShortSide
+                    ?? min(state.screenCropRect.width, state.screenCropRect.height)
+            )
+            .frame(width: fitWidth, height: fitHeight)
+        }
+        // Gesture layer extends 44pt beyond image frame so handles at
+        // the image boundary can be grabbed from outside. Attached as
+        // .overlay so it doesn't widen the ZStack and skew centering.
+        .overlay {
+            CropGestureOverlay(
+                state: state,
+                frameSize: CGSize(width: fitWidth, height: fitHeight),
+                touchInset: 44
+            )
+            .frame(width: fitWidth + 88, height: fitHeight + 88)
+        }
+    }
+
+    // MARK: - Actions
+
+    /// Wraps a snap-zoom mutation in a spring animation and brackets it
+    /// with a signpost interval capturing pre/post handle-sizing inputs
+    /// (zoomReference + cropShortSide) for Instruments.
+    private func animateSnapZoom(kind: String, _ mutate: () -> Void) {
+        let fit = fitSize(available: lastGeoSize, swapped: isSwapped)
+        let preZoomRef = min(fit.width, fit.height) * state.imageScale
+        let preCropShort = min(state.screenCropRect.width, state.screenCropRect.height)
+        let spID = cropViewSignposter.makeSignpostID()
+        let spState = cropViewSignposter.beginInterval(
+            "ZoomSnap", id: spID,
+            "kind=\(kind, privacy: .public) preZoomRef=\(preZoomRef, format: .fixed(precision: 1)) preCropShort=\(preCropShort, format: .fixed(precision: 1))"
+        )
+        withAnimation(.spring(response: 0.35, dampingFraction: 1.0)) {
+            mutate()
+        } completion: {
+            let postZoomRef = min(fit.width, fit.height) * state.imageScale
+            let postCropShort = min(state.screenCropRect.width, state.screenCropRect.height)
+            cropViewSignposter.endInterval(
+                "ZoomSnap", spState,
+                "postZoomRef=\(postZoomRef, format: .fixed(precision: 1)) postCropShort=\(postCropShort, format: .fixed(precision: 1))"
+            )
+        }
+    }
+
+    /// Reset goes to the original untouched image — no rotation, no crop, no
+    /// zoom — matching Apple Photos' Reset semantics. Baseline is left intact
+    /// so `hasModifications` still detects state ≠ entry, keeping Apply
+    /// enabled to commit "remove the crop".
+    private func resetToOriginal() {
+        let origFit = fitSize(available: lastGeoSize, swapped: false)
+        let origFrame = CGRect(x: 0, y: 0, width: origFit.width, height: origFit.height)
+
+        withAnimation(.smooth(duration: 0.4)) {
+            state.selectedPreset = .free
+            state.isRatioLocked = false
+            state.lockedRatio = nil
+            state.isPortrait = false
+            state.imageOffset = .zero
+            state.imageScale = 1.0
+            state.rotationAngle = 0
+            state.cropRect = origFrame
+        }
+    }
+
+    private func initializeCropState() {
+        state.originalImageRatio = displayImage.size.width / max(displayImage.size.height, 1)
+
+        // Max zoom: slightly above 1:1 pixel match (each source pixel = 1 screen pixel).
+        let imagePixels = max(displayImage.size.width, displayImage.size.height) * displayImage.scale
+        let framePoints = max(state.imageDisplayFrame.width, state.imageDisplayFrame.height)
+        if framePoints > 0 {
+            let screenScale: CGFloat = UITraitCollection.current.displayScale
+            let oneToOne = imagePixels / (framePoints * max(screenScale, 1))
+            state.maxImageScale = max(2.0, oneToOne * 1.2)
+        }
+
+        // Disable animation so the crop rect snaps into place immediately.
+        // Without this, the fullScreenCover presentation animation causes
+        // CropOverlayView and CropHandlesView to independently interpolate
+        // their Animatable data from .zero → final rect, desyncing the mask
+        // from the handles until the next explicit animation (e.g. rotate).
+        var t = Transaction()
+        t.animation = nil
+        withTransaction(t) {
+            if let existing = existingCrop {
+                // Rotation was already set in onGeometryChange (before this call),
+                // and imageDisplayFrame now has the correct rotated dimensions.
+                let frame = state.imageDisplayFrame
+                state.cropRect = CGRect(
+                    x: frame.origin.x + existing.cropRect.origin.x * frame.width,
+                    y: frame.origin.y + existing.cropRect.origin.y * frame.height,
+                    width: existing.cropRect.width * frame.width,
+                    height: existing.cropRect.height * frame.height
+                )
+                state.setBaseline(rotation: Double(existing.rotation), normalizedCrop: existing.cropRect)
+            } else {
+                state.resetCrop()
+                let preset = AspectRatioPreset.from(storageID: defaultRatioID) ?? .free
+                if preset != .free {
+                    state.selectPreset(preset)
+                }
+                state.setBaseline(rotation: 0, normalizedCrop: state.normalizedCropRect)
+            }
+        }
+    }
+
+    private func rotate(degrees: Int) {
+        // Normalize crop to 0…1 in the current frame
+        let frame = state.imageDisplayFrame
+        guard frame.width > 0, frame.height > 0 else { return }
+        let preNorm = CGRect(
+            x: (state.cropRect.minX - frame.minX) / frame.width,
+            y: (state.cropRect.minY - frame.minY) / frame.height,
+            width: state.cropRect.width / frame.width,
+            height: state.cropRect.height / frame.height
+        )
+
+        // Map through rotation.
+        // 90° CW:  point (x,y) → (1-y, x)  ⇒  rect → (1-maxY, minX, h, w)
+        // 270° CW: point (x,y) → (y, 1-x)  ⇒  rect → (minY, 1-maxX, h, w)
+        // 180°:    point (x,y) → (1-x, 1-y) ⇒  rect → (1-maxX, 1-maxY, w, h)
+        let normDeg = ((degrees % 360) + 360) % 360
+        let postNorm: CGRect = switch normDeg {
+        case 90:
+            CGRect(x: 1 - preNorm.maxY, y: preNorm.minX,
+                   width: preNorm.height, height: preNorm.width)
+        case 270:
+            CGRect(x: preNorm.minY, y: 1 - preNorm.maxX,
+                   width: preNorm.height, height: preNorm.width)
+        case 180:
+            CGRect(x: 1 - preNorm.maxX, y: 1 - preNorm.maxY,
+                   width: preNorm.width, height: preNorm.height)
+        default:
+            preNorm
+        }
+        postRotationNormalizedCrop = postNorm
+
+        // Precompute the new frame so cropRect can be set inside withAnimation
+        // (onGeometryChange callbacks don't inherit the animation transaction).
+        let newRotDeg = ((state.rotationDegrees + normDeg) % 360)
+        let newSwapped = newRotDeg == 90 || newRotDeg == 270
+        let newFit = fitSize(available: lastGeoSize, swapped: newSwapped)
+        let newFrame = CGRect(x: 0, y: 0, width: newFit.width, height: newFit.height)
+
+        // Compute the final crop rect directly in the new frame so the
+        // animation goes straight from old position → new position without
+        // the intermediate "expand to full frame" step.
+        var finalCrop = CGRect(
+            x: postNorm.origin.x * newFrame.width,
+            y: postNorm.origin.y * newFrame.height,
+            width: postNorm.width * newFrame.width,
+            height: postNorm.height * newFrame.height
+        )
+        // Manual validation against new frame (can't use nearestValidCrop
+        // because imageDisplayFrame hasn't updated yet).
+        finalCrop.size.width = max(finalCrop.size.width, 44)
+        finalCrop.size.height = max(finalCrop.size.height, 44)
+        if finalCrop.minX < 0 { finalCrop.origin.x = 0 }
+        if finalCrop.minY < 0 { finalCrop.origin.y = 0 }
+        if finalCrop.maxX > newFrame.width { finalCrop.origin.x = newFrame.width - finalCrop.width }
+        if finalCrop.maxY > newFrame.height { finalCrop.origin.y = newFrame.height - finalCrop.height }
+        if let ratio = state.effectiveLockedRatio {
+            let currentRatio = finalCrop.width / max(finalCrop.height, 1)
+            if abs(currentRatio - ratio) > 0.01 {
+                finalCrop.size.height = finalCrop.width / ratio
+            }
+        }
+
+        isRotating = true
+        postRotationNormalizedCrop = nil
+
+        // Drive handle sizing from explicit pre→post values across the
+        // animation. The natural derivations would jump at the moment
+        // isSwapped flips (mid-animation) and after imageScale resets;
+        // overriding with values that animatableData interpolates gives
+        // a clean morph. Cleared in completion — at that moment the
+        // natural values equal post so the handoff is a no-op.
+        let preFit = fitSize(available: lastGeoSize, swapped: isSwapped)
+        let postFit = fitSize(available: lastGeoSize, swapped: newSwapped)
+        let preZoomRef = min(preFit.width, preFit.height) * state.imageScale
+        let preCropShort = min(state.screenCropRect.width, state.screenCropRect.height)
+        let postZoomRef = min(postFit.width, postFit.height)
+        let postCropShort = min(finalCrop.width, finalCrop.height)
+        rotationOverrideZoomRef = preZoomRef
+        rotationOverrideCropShortSide = preCropShort
+
+        let rotID = cropViewSignposter.makeSignpostID()
+        let rotState = cropViewSignposter.beginInterval(
+            "Rotate", id: rotID,
+            "deg=\(degrees) preZoomRef=\(preZoomRef, format: .fixed(precision: 1)) postZoomRef=\(postZoomRef, format: .fixed(precision: 1)) preCropShort=\(preCropShort, format: .fixed(precision: 1)) postCropShort=\(postCropShort, format: .fixed(precision: 1))"
+        )
+        withAnimation(.smooth(duration: 0.4)) {
+            state.rotationAngle += Double(degrees)
+            state.imageOffset = .zero
+            state.imageScale = 1.0
+            state.cropRect = finalCrop
+            rotationOverrideZoomRef = postZoomRef
+            rotationOverrideCropShortSide = postCropShort
+        } completion: {
+            isRotating = false
+            rotationOverrideZoomRef = nil
+            rotationOverrideCropShortSide = nil
+            cropViewSignposter.endInterval("Rotate", rotState)
+        }
+    }
+
+    private func confirmCrop() {
+        guard !isProcessing else { return }
+        isProcessing = true
+
+        // In overlay space the image fills imageDisplayFrame,
+        // so normalized rect is just cropRect / frameSize.
+        let frame = state.imageDisplayFrame
+        let validCrop = state.nearestValidCrop(state.cropRect, ratio: state.effectiveLockedRatio)
+        let normalizedRect = CGRect(
+            x: (validCrop.minX - frame.minX) / max(frame.width, 1),
+            y: (validCrop.minY - frame.minY) / max(frame.height, 1),
+            width: validCrop.width / max(frame.width, 1),
+            height: validCrop.height / max(frame.height, 1)
+        )
+        let rotation = state.rotationDegrees
+        let sourceImage = image
+
+        Task.detached {
+            let spid = cropViewSignposter.makeSignpostID()
+            let spState = cropViewSignposter.beginInterval("confirmCrop", id: spid)
+            let croppedImage = ImageCropper.applyCrop(
+                to: sourceImage,
+                normalizedRect: normalizedRect,
+                rotation: rotation
+            )
+            cropViewSignposter.endInterval("confirmCrop", spState)
+
+            await MainActor.run {
+                onDone(CropResult(
+                    croppedImage: croppedImage,
+                    rotation: rotation,
+                    cropRect: normalizedRect
+                ))
+            }
+        }
+    }
+}
+
+// MARK: - Preview
+
+#Preview {
+    let sampleImage: UIImage = {
+        guard let path = Bundle.main.url(forResource: "Union_Bank_Tower,_Portland_(2024)-L1006272", withExtension: "jpg")?.path,
+              let img = UIImage(contentsOfFile: path)
+        else {
+            return PreviewData.gradientThumb(
+                colors: [UIColor.systemOrange.cgColor, UIColor.systemPurple.cgColor],
+                size: CGSize(width: 600, height: 400)
+            )
+        }
+        return img
+    }()
+
+    CropView(
+        image: sampleImage,
+        onDone: { _ in },
+        onCancel: {}
+    )
+}
