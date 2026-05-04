@@ -449,20 +449,6 @@ struct GalleryEditor: View {
 
         Section {
             photoLayout
-
-            if let id = selectedPhotoID,
-               let idx = items.firstIndex(where: { $0.id == id })
-            {
-                Button {
-                    let image = items[idx].originalImage ?? items[idx].cameraImage ?? items[idx].carouselPreview
-                    cropRequest = CropRequest(image: image, existingCrop: items[idx].cropResult)
-                } label: {
-                    Label("Crop Photo", systemImage: "crop.rotate")
-                        .frame(maxWidth: .infinity)
-                }
-                .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 11, trailing: 20))
-                .listRowSeparator(.hidden)
-            }
         } header: {
             Picker("Mode", selection: modeBinding) {
                 ForEach(EditorMode.allCases, id: \.self) { m in

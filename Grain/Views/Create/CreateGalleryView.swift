@@ -84,6 +84,7 @@ struct CreateGalleryView: View {
     @State private var editorMode: EditorMode = .preview
     @State private var showDiscardAlert = false
     @State private var cropRequest: CropRequest?
+    @State private var replacePickerItem: PhotosPickerItem?
 
     let client: XRPCClient
     var onCreated: (() -> Void)?
@@ -132,6 +133,8 @@ struct CreateGalleryView: View {
             .scrollDisabled(isReordering || isAnimatingMode || imageZoomState.showOverlay)
             .scrollDismissesKeyboard(.interactively)
             .background(SheetGestureDisabler(isDisabled: isReordering))
+
+            cropPill
         }
         .interactiveDismissDisabled(isReordering)
         .safeAreaInset(edge: .bottom) {
@@ -166,6 +169,9 @@ struct CreateGalleryView: View {
         .onChange(of: photoItems.first?.id) {
             createSignposter.emitEvent("TaskSpawned", "source=firstPhotoChange,itemCount=\(photoItems.count)")
             Task { await detectLocation() }
+        }
+        .onChange(of: replacePickerItem) { _, newItem in
+            handleReplacePick(newItem)
         }
         .cropSheet(request: $cropRequest) { result in
             guard let id = selectedPhotoID,
@@ -230,6 +236,82 @@ struct CreateGalleryView: View {
         }
         .environment(imageZoomState)
         .modifier(ImageZoomOverlay(zoomState: imageZoomState))
+    }
+
+    // MARK: - Floating crop pill
+
+    @ViewBuilder
+    private var cropPill: some View {
+        if editorMode == .preview,
+           let id = selectedPhotoID,
+           let idx = photoItems.firstIndex(where: { $0.id == id })
+        {
+            VStack {
+                Spacer()
+                HStack(spacing: 0) {
+                    Button {
+                        let item = photoItems[idx]
+                        let image = item.originalImage ?? item.cameraImage ?? item.carouselPreview
+                        cropRequest = CropRequest(image: image, existingCrop: item.cropResult)
+                    } label: {
+                        Label("Crop", systemImage: "crop.rotate")
+                            .font(.subheadline.weight(.semibold))
+                            .padding(.horizontal, 18)
+                            .padding(.vertical, 12)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+
+                    Rectangle()
+                        .fill(.secondary.opacity(0.25))
+                        .frame(width: 1, height: 22)
+
+                    PhotosPicker(
+                        selection: $replacePickerItem,
+                        matching: .images,
+                        photoLibrary: .shared()
+                    ) {
+                        Label("Replace", systemImage: "photo")
+                            .font(.subheadline.weight(.semibold))
+                            .padding(.horizontal, 18)
+                            .padding(.vertical, 12)
+                            .contentShape(Rectangle())
+                    }
+                }
+                .background(.regularMaterial, in: Capsule())
+                .overlay(Capsule().strokeBorder(.white.opacity(0.06)))
+                .shadow(color: .black.opacity(0.18), radius: 12, y: 4)
+                .padding(.bottom, 22)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+    }
+
+    private func handleReplacePick(_ pickerItem: PhotosPickerItem?) {
+        guard let pickerItem,
+              let targetID = selectedPhotoID,
+              let idx = photoItems.firstIndex(where: { $0.id == targetID })
+        else { return }
+        Task { await replacePhoto(at: idx, with: pickerItem) }
+    }
+
+    private func replacePhoto(at idx: Int, with pickerItem: PhotosPickerItem) async {
+        guard let data = try? await pickerItem.loadTransferable(type: Data.self),
+              let image = UIImage(data: data)
+        else { return }
+        let thumb = PhotoItem.makeThumbnail(from: image)
+        let carousel = PhotoItem.makeCarouselPreview(from: image, width: UIScreen.main.bounds.width)
+        let exif = makeExifSummary(from: data)
+        await MainActor.run {
+            guard idx < photoItems.count else { return }
+            photoItems[idx].thumbnail = thumb
+            photoItems[idx].carouselPreview = carousel
+            photoItems[idx].source = .picker(pickerItem)
+            photoItems[idx].exifSummary = exif
+            photoItems[idx].originalImage = image
+            photoItems[idx].cropResult = nil
+            replacePickerItem = nil
+        }
     }
 
     // MARK: - Form Sections
@@ -596,7 +678,7 @@ struct PhotoItem: Identifiable {
     /// displays with zero decode work. Kept in memory for the editor session
     /// so the carousel never stalls on first draw regardless of scroll speed.
     var carouselPreview: UIImage
-    let source: PhotoSource
+    var source: PhotoSource
     var alt: String = ""
     var exifSummary: ExifSummary?
     var originalImage: UIImage?
