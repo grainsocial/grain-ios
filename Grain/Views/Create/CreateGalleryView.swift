@@ -256,13 +256,12 @@ struct CreateGalleryView: View {
                             let image = item.originalImage ?? item.cameraImage ?? item.carouselPreview
                             cropRequest = CropRequest(image: image, existingCrop: item.cropResult)
                         } label: {
-                            VStack(spacing: 4) {
-                                Image(systemName: "crop.rotate").font(.title3)
-                                Text("Crop").font(.caption2)
-                            }
-                            .frame(width: 84, height: 60)
-                            .foregroundStyle(.primary)
-                            .contentShape(Rectangle())
+                            Image(systemName: "crop.rotate")
+                                .font(.system(size: 18))
+                                .frame(width: 56, height: 44)
+                                .foregroundStyle(.primary)
+                                .contentShape(Rectangle())
+                                .accessibilityLabel("Crop")
                         }
                         .buttonStyle(.plain)
 
@@ -275,14 +274,14 @@ struct CreateGalleryView: View {
                             matching: .images,
                             photoLibrary: .shared()
                         ) {
-                            VStack(spacing: 4) {
-                                Image(systemName: "photo").font(.title3)
-                                Text("Replace").font(.caption2)
-                            }
-                            .frame(width: 84, height: 60)
-                            .foregroundStyle(.primary)
-                            .contentShape(Rectangle())
+                            Image(systemName: "rectangle.2.swap")
+                                .font(.system(size: 18))
+                                .frame(width: 56, height: 44)
+                                .foregroundStyle(.primary)
+                                .contentShape(Rectangle())
+                                .accessibilityLabel("Replace")
                         }
+                        .buttonStyle(.plain)
 
                         Rectangle()
                             .fill(.secondary.opacity(0.3))
@@ -291,13 +290,12 @@ struct CreateGalleryView: View {
                         Button(role: .destructive) {
                             showDeletePhotoConfirm = true
                         } label: {
-                            VStack(spacing: 4) {
-                                Image(systemName: "trash").font(.title3)
-                                Text("Delete").font(.caption2)
-                            }
-                            .frame(width: 84, height: 60)
-                            .foregroundStyle(.red)
-                            .contentShape(Rectangle())
+                            Image(systemName: "trash")
+                                .font(.system(size: 18))
+                                .frame(width: 56, height: 44)
+                                .foregroundStyle(.red)
+                                .contentShape(Rectangle())
+                                .accessibilityLabel("Delete")
                         }
                         .buttonStyle(.plain)
                     }
