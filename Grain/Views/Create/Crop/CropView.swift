@@ -12,6 +12,7 @@ struct CropView: View {
     let onCancel: () -> Void
 
     @State private var state = CropState()
+    @AppStorage("crop.defaultRatioID") private var defaultRatioID: String = "Free"
     /// Always the orientation-normalized original. Never mutated — rotation
     /// is applied visually via `.rotationEffect()`.
     @State private var displayImage: UIImage
@@ -421,7 +422,11 @@ struct CropView: View {
                 state.setBaseline(rotation: Double(existing.rotation), normalizedCrop: existing.cropRect)
             } else {
                 state.resetCrop()
-                state.setBaseline(rotation: 0, normalizedCrop: CGRect(x: 0, y: 0, width: 1, height: 1))
+                let preset = AspectRatioPreset.from(storageID: defaultRatioID) ?? .free
+                if preset != .free {
+                    state.selectPreset(preset)
+                }
+                state.setBaseline(rotation: 0, normalizedCrop: state.normalizedCropRect)
             }
         }
     }

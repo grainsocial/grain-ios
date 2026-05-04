@@ -42,6 +42,9 @@ struct SettingsView: View {
                 NavigationLink("Privacy") {
                     UploadDefaultsView(client: client)
                 }
+                NavigationLink("Photo Editor") {
+                    PhotoEditorSettingsView()
+                }
             }
 
             Section {
@@ -263,6 +266,36 @@ private struct AppearanceSettingsView: View {
             }
         }
         .navigationTitle("Appearance")
+    }
+}
+
+private struct PhotoEditorSettingsView: View {
+    @AppStorage("crop.defaultRatioID") private var defaultRatioID: String = "Free"
+
+    var body: some View {
+        List {
+            Section {
+                ForEach(AspectRatioPreset.allPresets) { preset in
+                    HStack {
+                        Text(preset.label)
+                        Spacer()
+                        if defaultRatioID == preset.label {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(Color.accentColor)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        defaultRatioID = preset.label
+                    }
+                }
+            } header: {
+                Text("Default crop ratio")
+            } footer: {
+                Text("Applied when opening the crop tool on a new photo.")
+            }
+        }
+        .navigationTitle("Photo Editor")
     }
 }
 

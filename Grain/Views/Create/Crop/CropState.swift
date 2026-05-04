@@ -54,6 +54,10 @@ enum AspectRatioPreset: Equatable, Identifiable {
     static let allPresets: [AspectRatioPreset] = [
         .free, .original, .square, .ratio4x3, .ratio4x5, .ratio16x9,
     ]
+
+    static func from(storageID: String) -> AspectRatioPreset? {
+        allPresets.first { $0.label == storageID }
+    }
 }
 
 // MARK: - Crop state
@@ -670,7 +674,7 @@ final class CropState {
     /// below the crop top edge.
     var moveIndicatorScreenRect: CGRect {
         let topCenter = overlayToScreenPoint(CGPoint(x: cropRect.midX, y: cropRect.minY))
-        let cy = topCenter.y + 17   // 11 (pillHeight/2) + 6 (margin)
+        let cy = topCenter.y + 17 // 11 (pillHeight/2) + 6 (margin)
         return CGRect(x: topCenter.x - 40, y: cy - 22, width: 80, height: 44)
     }
 }
