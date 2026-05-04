@@ -500,32 +500,37 @@ struct GalleryCardView: View {
             ShareLink(item: galleryShareURL) {
                 Image(systemName: "paperplane")
                     .font(.system(size: 20))
-                    .rotationEffect(.degrees(shareAnimating ? -15 : 0))
-                    .animation(
-                        shareAnimating
-                            ? .easeInOut(duration: 0.08).repeatCount(5, autoreverses: true)
-                            : .default,
-                        value: shareAnimating
-                    )
             }
             .foregroundStyle(.secondary)
             .accessibilityLabel("Share gallery")
-            .disabled(shareAnimating)
-            .simultaneousGesture(
-                LongPressGesture(minimumDuration: 0.5)
-                    .onEnded { _ in
-                        UIPasteboard.general.url = galleryShareURL
-                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                        shareAnimating = true
-                        showCopiedToast = true
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                            shareAnimating = false
-                        }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                            showCopiedToast = false
-                        }
-                    }
-            )
+            .tint(Color.accentColor)
+            .contextMenu {
+                ShareLink(item: galleryShareURL) {
+                    Label("Share Link", systemImage: "link")
+                }
+                Button {
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    sharePhotoAsImage(
+                        gallery: gallery,
+                        photoIndex: currentPage,
+                        labelDefinitions: labelDefsCache.definitions
+                    )
+                } label: {
+                    Label("Share Image", systemImage: "photo.on.rectangle")
+                }
+                Button {
+                    UIPasteboard.general.url = galleryShareURL
+                } label: {
+                    Label("Copy Link", systemImage: "doc.on.doc")
+                }
+            } preview: {
+                PhotoShareCard(
+                    gallery: gallery,
+                    photoIndex: currentPage,
+                    labelAction: labelResult.action,
+                    labelName: labelResult.name
+                )
+            }
 
             Spacer()
         }

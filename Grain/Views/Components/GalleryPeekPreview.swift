@@ -19,7 +19,7 @@ extension View {
             labelAction: lr.action,
             labelName: lr.name
         )
-        return contextMenu {
+        return tint(Color.accentColor).contextMenu {
             Button {
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                 onOpen()
@@ -38,7 +38,11 @@ extension View {
                 Label("Share", systemImage: "square.and.arrow.up")
             }
             Button {
-                presentPreviewImageShare(preview)
+                sharePhotoAsImage(
+                    gallery: gallery,
+                    photoIndex: 0,
+                    labelDefinitions: labelDefinitions
+                )
             } label: {
                 Label("Share as Image", systemImage: "photo.on.rectangle")
             }
@@ -190,6 +194,23 @@ private func countChip(systemImage: String, value: Int) -> some View {
     }
 }
 
+/// Stacked Syne wordmark + URL line. Both lines use primary color so they remain
+/// readable on light or dark backgrounds.
+struct GrainWordmark: View {
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 1) {
+            Text("grain")
+                .font(.custom("Syne", size: 22).weight(.heavy))
+                .foregroundStyle(Color.primary)
+            Text("grain.social")
+                .font(.system(size: 12))
+                .foregroundStyle(Color.primary)
+        }
+        .multilineTextAlignment(.trailing)
+        .fixedSize(horizontal: true, vertical: false)
+    }
+}
+
 extension View {
     /// Long-press context menu for archived-story grid cells with a peek preview.
     func storyPeekContextMenu(
@@ -204,7 +225,13 @@ extension View {
             labelAction: lr.action,
             labelName: lr.name
         )
-        return contextMenu {
+        let shareImage = StoryPeekPreview(
+            story: story,
+            labelAction: lr.action,
+            labelName: lr.name,
+            showsWordmark: true
+        )
+        return tint(Color.accentColor).contextMenu {
             Button {
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                 onOpen()
@@ -215,7 +242,7 @@ extension View {
                 Label("Share", systemImage: "square.and.arrow.up")
             }
             Button {
-                presentPreviewImageShare(preview)
+                presentPreviewImageShare(shareImage)
             } label: {
                 Label("Share as Image", systemImage: "photo.on.rectangle")
             }
@@ -243,7 +270,12 @@ private func activeWindowScene() -> UIWindowScene? {
 @MainActor
 func presentPreviewImageShare(_ view: some View) {
     let scene = activeWindowScene()
-    let renderer = ImageRenderer(content: view)
+    let isDark = scene?.keyWindow?.traitCollection.userInterfaceStyle == .dark
+    let scheme: ColorScheme = isDark ? .dark : .light
+    let themed = view
+        .environment(\.colorScheme, scheme)
+        .background(Color(.systemBackground))
+    let renderer = ImageRenderer(content: themed)
     renderer.scale = scene?.screen.scale ?? 3
     guard let image = renderer.uiImage else { return }
     let activity = UIActivityViewController(activityItems: [image], applicationActivities: nil)
@@ -273,6 +305,7 @@ struct StoryPeekPreview: View {
     let story: GrainStory
     let labelAction: LabelAction
     let labelName: String
+    var showsWordmark: Bool = false
 
     private let maxWidth: CGFloat = 420
 
@@ -345,31 +378,38 @@ struct StoryPeekPreview: View {
     }
 
     private var footer: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                AvatarView(url: story.creator.avatar, size: 24)
-                Text(story.creator.displayName ?? "@\(story.creator.handle)")
-                    .font(.subheadline.weight(.medium))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    AvatarView(url: story.creator.avatar, size: 24)
+                    Text(story.creator.displayName ?? "@\(story.creator.handle)")
+                        .font(.subheadline.weight(.medium))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+
+                HStack(spacing: 14) {
+                    if let dateText = formattedDate {
+                        HStack(spacing: 3) {
+                            Image(systemName: "calendar")
+                            Text(dateText)
+                        }
+                    }
+                    if let loc = story.locationDisplay, !loc.isEmpty {
+                        HStack(spacing: 3) {
+                            Image(systemName: "location")
+                            Text(loc).lineLimit(1)
+                        }
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
 
-            HStack(spacing: 14) {
-                if let dateText = formattedDate {
-                    HStack(spacing: 3) {
-                        Image(systemName: "calendar")
-                        Text(dateText)
-                    }
-                }
-                if let loc = story.locationDisplay, !loc.isEmpty {
-                    HStack(spacing: 3) {
-                        Image(systemName: "location")
-                        Text(loc).lineLimit(1)
-                    }
-                }
+            if showsWordmark {
+                Spacer(minLength: 0)
+                GrainWordmark()
             }
-            .font(.caption)
-            .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 16)
         .padding(.top, 14)
@@ -386,4 +426,193 @@ struct StoryPeekPreview: View {
         f.dateFormat = "MMM d, yyyy"
         return f.string(from: date)
     }
+}
+
+// MARK: - PhotoShareCard (single-photo share-as-image card)
+
+/// Renders one photo from a gallery alongside its metadata as a shareable image.
+/// Used as both the long-press peek preview and the `ImageRenderer` source so what
+/// the user sees is what gets shared. Includes a stacked Syne wordmark + URL line
+/// in the footer.
+struct PhotoShareCard: View {
+    let gallery: GrainGallery
+    let photoIndex: Int
+    let labelAction: LabelAction
+    let labelName: String
+    var showsGalleryBadge: Bool = true
+    var showsWordmark: Bool = false
+
+    private let cardWidth: CGFloat = 380
+
+    private var maxImageHeight: CGFloat {
+        dynamicPreviewMaxImageHeight()
+    }
+
+    private var photos: [GrainPhoto] {
+        gallery.items ?? []
+    }
+
+    private var photo: GrainPhoto? {
+        guard photoIndex >= 0, photoIndex < photos.count else { return photos.first }
+        return photos[photoIndex]
+    }
+
+    private var aspectRatio: Double {
+        let r = photo?.aspectRatio.ratio ?? (3.0 / 4.0)
+        return r > 0 ? r : (3.0 / 4.0)
+    }
+
+    private var imageSize: CGSize {
+        let widthBoundHeight = cardWidth / aspectRatio
+        if widthBoundHeight <= maxImageHeight {
+            return CGSize(width: cardWidth, height: widthBoundHeight)
+        }
+        return CGSize(width: maxImageHeight * aspectRatio, height: maxImageHeight)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            imageSection
+            footer
+        }
+        .frame(width: imageSize.width)
+        .background(Color(.systemBackground))
+    }
+
+    @ViewBuilder
+    private var imageSection: some View {
+        if labelAction >= .warnContent, !gallery.labelRevealed {
+            Rectangle()
+                .fill(Color(.secondarySystemBackground))
+                .frame(width: imageSize.width, height: imageSize.height)
+                .overlay {
+                    VStack(spacing: 6) {
+                        Image(systemName: "info.circle.fill").font(.title3)
+                        Text(labelName).font(.caption)
+                    }
+                    .foregroundStyle(.secondary)
+                }
+        } else if let urlString = photo?.fullsize, let url = URL(string: urlString) {
+            ZStack {
+                Rectangle().fill(.quaternary)
+                LazyImage(url: url) { state in
+                    if let image = state.image {
+                        image.resizable().scaledToFill()
+                    }
+                }
+            }
+            .frame(width: imageSize.width, height: imageSize.height)
+            .clipped()
+            .overlay(alignment: .topTrailing) {
+                if showsGalleryBadge, photos.count > 1 {
+                    Image(systemName: "square.on.square.fill")
+                        .font(.system(size: 14))
+                        .rotationEffect(.degrees(180))
+                        .foregroundStyle(.white)
+                        .shadow(color: .black.opacity(0.5), radius: 2, x: 0, y: 1)
+                        .padding(8)
+                        .accessibilityHidden(true)
+                }
+            }
+        } else {
+            Rectangle().fill(.quaternary)
+                .frame(width: imageSize.width, height: imageSize.height)
+        }
+    }
+
+    private var footer: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 12) {
+                HStack(alignment: .center, spacing: 10) {
+                    AvatarView(url: gallery.creator.avatar, size: 40)
+                    VStack(alignment: .leading, spacing: 1) {
+                        HStack(spacing: 6) {
+                            Text(gallery.creator.displayName ?? gallery.creator.handle)
+                                .font(.subheadline.weight(.medium))
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                            if let dateText = formattedCreatedAt {
+                                Text("·")
+                                    .foregroundStyle(.tertiary)
+                                Text(dateText)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                    .layoutPriority(1)
+                            }
+                        }
+                        Text("@\(gallery.creator.handle)")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                }
+                .frame(height: 40)
+
+                if showsWordmark {
+                    Spacer(minLength: 0)
+                    GrainWordmark()
+                        .frame(height: 40, alignment: .top)
+                }
+            }
+
+            if let title = gallery.title, !title.isEmpty {
+                Text(title)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+
+            if photos.count > 1 {
+                HStack(spacing: 3) {
+                    Image(systemName: "photo")
+                    Text("\(photoIndex + 1)/\(photos.count)")
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 14)
+        .padding(.bottom, 26)
+    }
+
+    private var formattedCreatedAt: String? {
+        guard let iso = gallery.createdAt else { return nil }
+        let isoF = ISO8601DateFormatter()
+        isoF.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        guard let date = isoF.date(from: iso) ?? ISO8601DateFormatter().date(from: iso) else {
+            return nil
+        }
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = .none
+        return f.string(from: date)
+    }
+}
+
+private func shareCountChip(systemImage: String, text: String) -> some View {
+    HStack(spacing: 3) {
+        Image(systemName: systemImage)
+        Text(text)
+    }
+}
+
+@MainActor
+func sharePhotoAsImage(
+    gallery: GrainGallery,
+    photoIndex: Int,
+    labelDefinitions: [LabelDefinition]
+) {
+    let lr = resolveLabels(gallery.labels, definitions: labelDefinitions)
+    let card = PhotoShareCard(
+        gallery: gallery,
+        photoIndex: photoIndex,
+        labelAction: lr.action,
+        labelName: lr.name,
+        showsGalleryBadge: false,
+        showsWordmark: true
+    )
+    presentPreviewImageShare(card)
 }
