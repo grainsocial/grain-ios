@@ -85,6 +85,7 @@ struct CreateGalleryView: View {
     @State private var showDiscardAlert = false
     @State private var cropRequest: CropRequest?
     @State private var replacePickerItem: PhotosPickerItem?
+    @State private var showDeletePhotoConfirm = false
 
     let client: XRPCClient
     var onCreated: (() -> Void)?
@@ -248,67 +249,70 @@ struct CreateGalleryView: View {
         {
             VStack {
                 Spacer()
-                HStack(spacing: 0) {
-                    Button {
-                        let item = photoItems[idx]
-                        let image = item.originalImage ?? item.cameraImage ?? item.carouselPreview
-                        cropRequest = CropRequest(image: image, existingCrop: item.cropResult)
-                    } label: {
-                        VStack(spacing: 2) {
-                            Image(systemName: "crop.rotate").font(.body)
-                            Text("Crop").font(.caption2)
+                GlassEffectContainer(spacing: 8) {
+                    HStack(spacing: 0) {
+                        Button {
+                            let item = photoItems[idx]
+                            let image = item.originalImage ?? item.cameraImage ?? item.carouselPreview
+                            cropRequest = CropRequest(image: image, existingCrop: item.cropResult)
+                        } label: {
+                            VStack(spacing: 4) {
+                                Image(systemName: "crop.rotate").font(.title3)
+                                Text("Crop").font(.caption2)
+                            }
+                            .frame(width: 84, height: 60)
+                            .foregroundStyle(.primary)
+                            .contentShape(Rectangle())
                         }
-                        .frame(minWidth: 64, minHeight: 44)
-                        .padding(.horizontal, 6)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
+                        .buttonStyle(.plain)
 
-                    pillDivider
+                        Rectangle()
+                            .fill(.secondary.opacity(0.3))
+                            .frame(width: 1, height: 28)
 
-                    PhotosPicker(
-                        selection: $replacePickerItem,
-                        matching: .images,
-                        photoLibrary: .shared()
-                    ) {
-                        VStack(spacing: 2) {
-                            Image(systemName: "photo").font(.body)
-                            Text("Replace").font(.caption2)
+                        PhotosPicker(
+                            selection: $replacePickerItem,
+                            matching: .images,
+                            photoLibrary: .shared()
+                        ) {
+                            VStack(spacing: 4) {
+                                Image(systemName: "photo").font(.title3)
+                                Text("Replace").font(.caption2)
+                            }
+                            .frame(width: 84, height: 60)
+                            .foregroundStyle(.primary)
+                            .contentShape(Rectangle())
                         }
-                        .frame(minWidth: 64, minHeight: 44)
-                        .padding(.horizontal, 6)
-                        .contentShape(Rectangle())
-                    }
 
-                    pillDivider
+                        Rectangle()
+                            .fill(.secondary.opacity(0.3))
+                            .frame(width: 1, height: 28)
 
-                    Button(role: .destructive) {
-                        deleteSelectedPhoto()
-                    } label: {
-                        VStack(spacing: 2) {
-                            Image(systemName: "trash").font(.body)
-                            Text("Delete").font(.caption2)
+                        Button(role: .destructive) {
+                            showDeletePhotoConfirm = true
+                        } label: {
+                            VStack(spacing: 4) {
+                                Image(systemName: "trash").font(.title3)
+                                Text("Delete").font(.caption2)
+                            }
+                            .frame(width: 84, height: 60)
+                            .foregroundStyle(.red)
+                            .contentShape(Rectangle())
                         }
-                        .frame(minWidth: 64, minHeight: 44)
-                        .padding(.horizontal, 6)
-                        .contentShape(Rectangle())
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
+                    .glassEffect(.regular, in: .capsule)
                 }
-                .foregroundStyle(.primary)
-                .background(.regularMaterial, in: Capsule())
-                .overlay(Capsule().strokeBorder(.white.opacity(0.06)))
-                .shadow(color: .black.opacity(0.18), radius: 12, y: 4)
                 .padding(.bottom, 22)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
+            .alert("Delete Photo?", isPresented: $showDeletePhotoConfirm) {
+                Button("Delete", role: .destructive) { deleteSelectedPhoto() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This removes the photo from the gallery. You can add it again from the picker.")
+            }
         }
-    }
-
-    private var pillDivider: some View {
-        Rectangle()
-            .fill(.secondary.opacity(0.25))
-            .frame(width: 1, height: 28)
     }
 
     private func deleteSelectedPhoto() {
