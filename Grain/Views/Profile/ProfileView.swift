@@ -443,6 +443,10 @@ struct ProfileView: View {
                         initialStories: viewModel.archivedStories,
                         startStoryIndex: startIndex,
                         client: client,
+                        archiveStoriesBinding: Bindable(viewModel).archivedStories,
+                        onNeedsMoreArchive: {
+                            Task { await viewModel.loadMoreArchive(did: did, auth: auth.authContext()) }
+                        },
                         onProfileTap: { did in
                             selectedArchivedStory = nil
                             selectedProfileDid = did
@@ -725,12 +729,13 @@ struct ProfileView: View {
                 GridItem(.flexible(), spacing: 2),
             ], spacing: 2) {
                 ForEach(viewModel.galleries) { gallery in
-                    Button {
+                    let openGallery = {
                         selectedGallery = nil
                         DispatchQueue.main.async {
                             selectedGallery = ProfileGallerySelection(uri: gallery.uri, source: .galleries)
                         }
-                    } label: {
+                    }
+                    Button(action: openGallery) {
                         Color.clear
                             .aspectRatio(3.0 / 4.0, contentMode: .fit)
                             .overlay {
@@ -767,6 +772,11 @@ struct ProfileView: View {
                     }
                     .buttonStyle(.plain)
                     .matchedTransitionSource(id: gallery.uri, in: galleryZoomNS)
+                    .galleryPeekContextMenu(
+                        gallery: gallery,
+                        labelDefinitions: labelDefsCache.definitions,
+                        onOpen: openGallery
+                    )
                     .onAppear {
                         if gallery.id == viewModel.galleries.last?.id {
                             Task { await viewModel.loadMoreGalleries(did: did, auth: auth.authContext()) }
@@ -792,11 +802,12 @@ struct ProfileView: View {
                 GridItem(.flexible(), spacing: 2),
             ], spacing: 2) {
                 ForEach(viewModel.archivedStories) { story in
-                    Button {
+                    let openStory = {
                         if let index = viewModel.archivedStories.firstIndex(where: { $0.id == story.id }) {
                             selectedArchivedStory = viewModel.archivedStories[index]
                         }
-                    } label: {
+                    }
+                    Button(action: openStory) {
                         Color.clear
                             .aspectRatio(3.0 / 4.0, contentMode: .fit)
                             .overlay {
@@ -820,6 +831,11 @@ struct ProfileView: View {
                             }
                     }
                     .buttonStyle(.plain)
+                    .storyPeekContextMenu(
+                        story: story,
+                        labelDefinitions: labelDefsCache.definitions,
+                        onOpen: openStory
+                    )
                     .onAppear {
                         if story.id == viewModel.archivedStories.last?.id {
                             Task { await viewModel.loadMoreArchive(did: did, auth: auth.authContext()) }
@@ -869,12 +885,13 @@ struct ProfileView: View {
                 GridItem(.flexible(), spacing: 2),
             ], spacing: 2) {
                 ForEach(visible) { gallery in
-                    Button {
+                    let openGallery = {
                         selectedGallery = nil
                         DispatchQueue.main.async {
                             selectedGallery = ProfileGallerySelection(uri: gallery.uri, source: .favorites)
                         }
-                    } label: {
+                    }
+                    Button(action: openGallery) {
                         Color.clear
                             .aspectRatio(3.0 / 4.0, contentMode: .fit)
                             .overlay {
@@ -899,6 +916,14 @@ struct ProfileView: View {
                     }
                     .buttonStyle(.plain)
                     .matchedTransitionSource(id: gallery.uri, in: galleryZoomNS)
+                    .galleryPeekContextMenu(
+                        gallery: gallery,
+                        labelDefinitions: labelDefsCache.definitions,
+                        onOpen: openGallery,
+                        onOpenProfile: gallery.creator.did != did
+                            ? { selectedProfileDid = gallery.creator.did }
+                            : nil
+                    )
                     .onAppear {
                         if gallery.id == visible.last?.id {
                             Task { await viewModel.loadMoreFavorites(did: did, auth: auth.authContext()) }

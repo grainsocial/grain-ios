@@ -111,6 +111,12 @@ struct StoryViewer: View {
     let client: XRPCClient
     var onProfileTap: ((String) -> Void)?
     var onDismiss: (() -> Void)?
+    /// When set, the viewer is in archive mode: auto-advance is off, the
+    /// binding's list is the source of truth for `stories` (new entries
+    /// appended on change), and `onNeedsMoreArchive` fires when the user
+    /// nears the end so the caller can paginate.
+    var archiveStoriesBinding: Binding<[GrainStory]>?
+    var onNeedsMoreArchive: (() -> Void)?
     @State private var currentAuthorIndex: Int
     @State private var currentStoryIndex = 0
     @State private var stories: [GrainStory] = []
@@ -149,9 +155,21 @@ struct StoryViewer: View {
     @State private var heartBeatTrigger = 0
     @State private var instanceID: Int = 0
 
-    init(authors: [GrainStoryAuthor], startAuthorDid: String? = nil, initialStories: [GrainStory]? = nil, startStoryIndex: Int? = nil, client: XRPCClient, onProfileTap: ((String) -> Void)? = nil, onDismiss: (() -> Void)? = nil) {
+    init(
+        authors: [GrainStoryAuthor],
+        startAuthorDid: String? = nil,
+        initialStories: [GrainStory]? = nil,
+        startStoryIndex: Int? = nil,
+        client: XRPCClient,
+        archiveStoriesBinding: Binding<[GrainStory]>? = nil,
+        onNeedsMoreArchive: (() -> Void)? = nil,
+        onProfileTap: ((String) -> Void)? = nil,
+        onDismiss: (() -> Void)? = nil
+    ) {
         self.authors = authors
         self.client = client
+        self.archiveStoriesBinding = archiveStoriesBinding
+        self.onNeedsMoreArchive = onNeedsMoreArchive
         self.onProfileTap = onProfileTap
         self.onDismiss = onDismiss
         _commentsViewModel = State(initialValue: StoryCommentsViewModel(client: client))
@@ -244,6 +262,9 @@ struct StoryViewer: View {
         }
         .onChange(of: currentStory?.uri) { _, _ in
             hearts.removeAll()
+        }
+        .onChange(of: archiveStoriesBinding?.wrappedValue.count ?? 0) { _, _ in
+            syncArchiveStories()
         }
         .task {
             // Guard against re-runs: .task can re-fire when the view re-enters the
@@ -640,16 +661,36 @@ struct StoryViewer: View {
             && Date().timeIntervalSince(lastNavTime) > 0.3
     }
 
+    private var isArchiveMode: Bool {
+        archiveStoriesBinding != nil
+    }
+
     private func startTimerIfSafe() {
+        guard !isArchiveMode else { return }
         guard imageLoaded, !isCommentSheetOpen else { return }
         let action = storyLabelResult.action
         if action == .none || action == .badge { timer.start() }
     }
 
     private func resumeTimerIfSafe() {
+        guard !isArchiveMode else { return }
         guard imageLoaded, !isCommentSheetOpen else { return }
         let action = storyLabelResult.action
         if action == .none || action == .badge { timer.resume() }
+    }
+
+    private func syncArchiveStories() {
+        guard let updated = archiveStoriesBinding?.wrappedValue, updated.count > stories.count else { return }
+        let known = Set(stories.map(\.uri))
+        let extras = updated.filter { !known.contains($0.uri) }
+        if extras.isEmpty { return }
+        stories.append(contentsOf: extras)
+        prefetchStoryImages()
+    }
+
+    private func maybeRequestMoreArchive() {
+        guard isArchiveMode, let onNeedsMore = onNeedsMoreArchive else { return }
+        if currentStoryIndex >= stories.count - 3 { onNeedsMore() }
     }
 
     private func isFullsizeCached(_ story: GrainStory?) -> Bool {
@@ -712,6 +753,7 @@ struct StoryViewer: View {
         }
         labelRevealed = false
         prefetchStoryImages()
+        maybeRequestMoreArchive()
         if let uri = nextStory?.uri {
             Task { await commentsViewModel.switchToStory(uri: uri, auth: auth.authContext()) }
         }
@@ -939,6 +981,7 @@ struct StoryViewer: View {
         startTimerIfSafe()
         prefetchAdjacentAuthors()
         prefetchStoryImages()
+        maybeRequestMoreArchive()
         if let uri = targetStory?.uri {
             Task {
                 let ctx = await auth.authContext()
