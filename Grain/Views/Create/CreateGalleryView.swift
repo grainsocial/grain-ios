@@ -254,36 +254,80 @@ struct CreateGalleryView: View {
                         let image = item.originalImage ?? item.cameraImage ?? item.carouselPreview
                         cropRequest = CropRequest(image: image, existingCrop: item.cropResult)
                     } label: {
-                        Label("Crop", systemImage: "crop.rotate")
-                            .font(.subheadline.weight(.semibold))
-                            .padding(.horizontal, 18)
-                            .padding(.vertical, 12)
-                            .contentShape(Rectangle())
+                        VStack(spacing: 2) {
+                            Image(systemName: "crop.rotate").font(.body)
+                            Text("Crop").font(.caption2)
+                        }
+                        .frame(minWidth: 64, minHeight: 44)
+                        .padding(.horizontal, 6)
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
 
-                    Rectangle()
-                        .fill(.secondary.opacity(0.25))
-                        .frame(width: 1, height: 22)
+                    pillDivider
 
                     PhotosPicker(
                         selection: $replacePickerItem,
                         matching: .images,
                         photoLibrary: .shared()
                     ) {
-                        Label("Replace", systemImage: "photo")
-                            .font(.subheadline.weight(.semibold))
-                            .padding(.horizontal, 18)
-                            .padding(.vertical, 12)
-                            .contentShape(Rectangle())
+                        VStack(spacing: 2) {
+                            Image(systemName: "photo").font(.body)
+                            Text("Replace").font(.caption2)
+                        }
+                        .frame(minWidth: 64, minHeight: 44)
+                        .padding(.horizontal, 6)
+                        .contentShape(Rectangle())
                     }
+
+                    pillDivider
+
+                    Button(role: .destructive) {
+                        deleteSelectedPhoto()
+                    } label: {
+                        VStack(spacing: 2) {
+                            Image(systemName: "trash").font(.body)
+                            Text("Delete").font(.caption2)
+                        }
+                        .frame(minWidth: 64, minHeight: 44)
+                        .padding(.horizontal, 6)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                 }
+                .foregroundStyle(.primary)
                 .background(.regularMaterial, in: Capsule())
                 .overlay(Capsule().strokeBorder(.white.opacity(0.06)))
                 .shadow(color: .black.opacity(0.18), radius: 12, y: 4)
                 .padding(.bottom, 22)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
+        }
+    }
+
+    private var pillDivider: some View {
+        Rectangle()
+            .fill(.secondary.opacity(0.25))
+            .frame(width: 1, height: 28)
+    }
+
+    private func deleteSelectedPhoto() {
+        guard let id = selectedPhotoID,
+              let idx = photoItems.firstIndex(where: { $0.id == id })
+        else { return }
+        let item = photoItems[idx]
+        if case let .picker(pickerItem) = item.source,
+           let pickerID = pickerItem.itemIdentifier
+        {
+            editorRemovedIDs.insert(pickerID)
+            selectedPhotos.removeAll { $0.itemIdentifier == pickerID }
+        }
+        let nextID: UUID? = idx > 0
+            ? photoItems[idx - 1].id
+            : (idx < photoItems.count - 1 ? photoItems[idx + 1].id : nil)
+        selectedPhotoID = nextID
+        withAnimation(.smooth) {
+            photoItems.removeAll { $0.id == id }
         }
     }
 
