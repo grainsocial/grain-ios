@@ -27,6 +27,10 @@ final class PreviewCacheStore {
     @ObservationIgnored private var previewCacheOrder: [UUID] = []
     @ObservationIgnored private var loadingPreviewIDs: Set<UUID> = []
     @ObservationIgnored private var prefetchTasks: [UUID: Task<Void, Never>] = [:]
+    /// Crop signature the cached image was rendered with. When the live item's
+    /// signature diverges, the cache entry is stale and gets evicted before the
+    /// next load.
+    @ObservationIgnored private var cropSignatures: [UUID: String] = [:]
 
     let previewMaxDimension: CGFloat = 1500
     let previewCacheLimit = 5
@@ -43,9 +47,27 @@ final class PreviewCacheStore {
         for offset in -2 ... 2 {
             let idx = centerIdx + offset
             guard items.indices.contains(idx) else { continue }
+            invalidateIfCropChanged(items[idx])
             loadPreviewIfNeeded(for: items[idx], items: items)
         }
         photoLoadingSignposter.endInterval("PrefetchWindow", state)
+    }
+
+    private func invalidateIfCropChanged(_ item: PhotoItem) {
+        let sig = Self.cropSignature(item.cropResult)
+        guard cropSignatures[item.id] != sig else { return }
+        cropSignatures[item.id] = sig
+        previewCache.removeValue(forKey: item.id)
+        previewCacheOrder.removeAll { $0 == item.id }
+        prefetchTasks[item.id]?.cancel()
+        prefetchTasks.removeValue(forKey: item.id)
+        loadingPreviewIDs.remove(item.id)
+    }
+
+    static func cropSignature(_ cropResult: CropResult?) -> String {
+        guard let r = cropResult else { return "none" }
+        let rect = r.cropRect
+        return "\(r.rotation):\(rect.minX):\(rect.minY):\(rect.width):\(rect.height)"
     }
 
     private func loadPreviewIfNeeded(for item: PhotoItem, items: [PhotoItem]) {
@@ -54,12 +76,13 @@ final class PreviewCacheStore {
         loadingPreviewIDs.insert(item.id)
         let id = item.id
         let source = item.source
+        let cropResult = item.cropResult
         let maxDim = previewMaxDimension
         let cacheLimit = previewCacheLimit
         let task = Task.detached(priority: .utility) { [weak self] in
             let spid = photoLoadingSignposter.makeSignpostID()
             let previewState = photoLoadingSignposter.beginInterval("LoadPreview", id: spid)
-            let image = await PreviewCacheStore.loadPreviewImage(source: source, maxDimension: maxDim)
+            let image = await PreviewCacheStore.loadPreviewImage(source: source, maxDimension: maxDim, cropResult: cropResult)
             photoLoadingSignposter.endInterval("LoadPreview", previewState, "success=\(image != nil)")
             await MainActor.run {
                 guard let self else { return }
@@ -73,13 +96,15 @@ final class PreviewCacheStore {
                 while self.previewCacheOrder.count > cacheLimit {
                     let evict = self.previewCacheOrder.removeFirst()
                     self.previewCache.removeValue(forKey: evict)
+                    self.cropSignatures.removeValue(forKey: evict)
                 }
             }
         }
         prefetchTasks[id] = task
     }
 
-    private nonisolated static func loadPreviewImage(source: PhotoSource, maxDimension: CGFloat) async -> UIImage? {
+    private nonisolated static func loadPreviewImage(source: PhotoSource, maxDimension: CGFloat, cropResult: CropResult?) async -> UIImage? {
+        let raw: UIImage
         switch source {
         case let .picker(pickerItem):
             let transferState = photoLoadingSignposter.beginInterval("LoadTransferable", id: photoLoadingSignposter.makeSignpostID())
@@ -90,22 +115,24 @@ final class PreviewCacheStore {
                 return nil
             }
             photoLoadingSignposter.endInterval("LoadTransferable", transferState, "bytes=\(data.count)")
-            let thumbState = photoLoadingSignposter.beginInterval("MakeThumbnail", id: photoLoadingSignposter.makeSignpostID())
-            let resized = PhotoItem.makeThumbnail(from: image, maxSize: maxDimension)
-            photoLoadingSignposter.endInterval("MakeThumbnail", thumbState)
-            let decodeState = photoLoadingSignposter.beginInterval("Decompress", id: photoLoadingSignposter.makeSignpostID())
-            let result = await resized.byPreparingForDisplay() ?? resized
-            photoLoadingSignposter.endInterval("Decompress", decodeState)
-            return result
+            raw = image
         case let .camera(image, _):
-            let thumbState = photoLoadingSignposter.beginInterval("MakeThumbnail", id: photoLoadingSignposter.makeSignpostID())
-            let resized = PhotoItem.makeThumbnail(from: image, maxSize: maxDimension)
-            photoLoadingSignposter.endInterval("MakeThumbnail", thumbState)
-            let decodeState = photoLoadingSignposter.beginInterval("Decompress", id: photoLoadingSignposter.makeSignpostID())
-            let result = await resized.byPreparingForDisplay() ?? resized
-            photoLoadingSignposter.endInterval("Decompress", decodeState)
-            return result
+            raw = image
         }
+
+        let processed: UIImage = if let cropResult {
+            ImageCropper.applyCrop(to: raw, normalizedRect: cropResult.cropRect, rotation: cropResult.rotation)
+        } else {
+            raw
+        }
+
+        let thumbState = photoLoadingSignposter.beginInterval("MakeThumbnail", id: photoLoadingSignposter.makeSignpostID())
+        let resized = PhotoItem.makeThumbnail(from: processed, maxSize: maxDimension)
+        photoLoadingSignposter.endInterval("MakeThumbnail", thumbState)
+        let decodeState = photoLoadingSignposter.beginInterval("Decompress", id: photoLoadingSignposter.makeSignpostID())
+        let result = await resized.byPreparingForDisplay() ?? resized
+        photoLoadingSignposter.endInterval("Decompress", decodeState)
+        return result
     }
 }
 
@@ -184,6 +211,9 @@ struct PhotoCarouselView: View {
                     if newID != nil {
                         cacheStore.prefetchPreviewsAroundSelection(items: items, selectedPhotoID: selectedPhotoID)
                     }
+                }
+                .onChange(of: items.map { PreviewCacheStore.cropSignature($0.cropResult) }.joined(separator: "|")) { _, _ in
+                    cacheStore.prefetchPreviewsAroundSelection(items: items, selectedPhotoID: selectedPhotoID)
                 }
                 .onAppear {
                     cacheStore.prefetchPreviewsAroundSelection(items: items, selectedPhotoID: selectedPhotoID)
