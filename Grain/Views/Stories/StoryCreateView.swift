@@ -8,6 +8,14 @@ struct StoryCreateView: View {
     let client: XRPCClient
     var onCreated: (() -> Void)?
 
+    init(client: XRPCClient, initialImage: UIImage? = nil, onCreated: (() -> Void)? = nil) {
+        self.client = client
+        self.onCreated = onCreated
+        _previewImage = State(initialValue: initialImage)
+        _originalImage = State(initialValue: initialImage)
+        _photoData = State(initialValue: initialImage?.jpegData(compressionQuality: 1.0))
+    }
+
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var photoData: Data?
     @State private var previewImage: UIImage?
@@ -33,14 +41,21 @@ struct StoryCreateView: View {
                             .scaledToFit()
                             .frame(maxHeight: 300)
                             .clipShape(RoundedRectangle(cornerRadius: 12))
-
-                        Button {
-                            if let originalImage {
-                                cropRequest = CropRequest(image: originalImage, existingCrop: cropState)
+                            .overlay(alignment: .topTrailing) {
+                                Image(systemName: "crop.rotate")
+                                    .font(.callout.weight(.semibold))
+                                    .foregroundStyle(.white)
+                                    .padding(9)
+                                    .background(.black.opacity(0.55), in: Circle())
+                                    .padding(10)
+                                    .allowsHitTesting(false)
                             }
-                        } label: {
-                            Label("Crop Photo", systemImage: "crop.rotate")
-                        }
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                if let originalImage {
+                                    cropRequest = CropRequest(image: originalImage, existingCrop: cropState)
+                                }
+                            }
                     }
 
                     PhotosPicker(selection: $selectedPhoto, matching: .images) {
