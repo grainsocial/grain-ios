@@ -432,15 +432,16 @@ struct ProfileView: View {
             }
             .fullScreenCover(item: $selectedArchivedStory) { story in
                 if let profile = viewModel.profile,
-                   viewModel.archivedStories.contains(where: { $0.id == story.id })
+                   let startIndex = viewModel.archivedStories.firstIndex(where: { $0.id == story.id })
                 {
                     StoryViewer(
                         authors: [GrainStoryAuthor(
                             profile: GrainProfile(cid: "", did: did, handle: profile.handle, displayName: profile.displayName, avatar: profile.avatar),
-                            storyCount: 1,
-                            latestAt: story.createdAt
+                            storyCount: viewModel.archivedStories.count,
+                            latestAt: viewModel.archivedStories.first?.createdAt ?? story.createdAt
                         )],
-                        initialStories: [story],
+                        initialStories: viewModel.archivedStories,
+                        startStoryIndex: startIndex,
                         client: client,
                         onProfileTap: { did in
                             selectedArchivedStory = nil

@@ -143,6 +143,7 @@ struct StoryViewer: View {
     /// re-render (black flash on sheet transitions).
     @State private var isCommentSheetOpen = false
     @State private var hasLoadedInitialStories = false
+    @State private var initialResumeIndex: Int?
     @State private var hearts: [HeartAnimationState] = []
     @State private var favoritingStoryUris: Set<String> = []
     @State private var heartBeatTrigger = 0
@@ -161,6 +162,7 @@ struct StoryViewer: View {
             _prefetchedStories = State(initialValue: [did: initialStories])
             if let startStoryIndex {
                 _currentStoryIndex = State(initialValue: startStoryIndex)
+                _initialResumeIndex = State(initialValue: startStoryIndex)
             }
         }
         let id = svNextInstanceID()
@@ -258,7 +260,9 @@ struct StoryViewer: View {
                 timer.onComplete = { [self] in goToNext() }
                 timer.onQuarter = { [self] in markCurrentStoryViewed() }
             }
-            await loadStoriesForCurrentAuthor()
+            let resume = initialResumeIndex
+            initialResumeIndex = nil
+            await loadStoriesForCurrentAuthor(resumeIndex: resume)
         }
     }
 
@@ -892,7 +896,7 @@ struct StoryViewer: View {
         }
     }
 
-    private func loadStoriesForCurrentAuthor() async {
+    private func loadStoriesForCurrentAuthor(resumeIndex: Int? = nil) async {
         svLogger.info("[loadStoriesForCurrentAuthor] enter authorIdx=\(currentAuthorIndex)")
         svSignposter.emitEvent("loadStoriesForCurrentAuthor.enter")
         guard currentAuthorIndex < authors.count else { return }
@@ -908,7 +912,7 @@ struct StoryViewer: View {
                 try await client.getStories(actor: did, auth: auth.authContext()).stories
             }
             svLogger.info("[loadStoriesForCurrentAuthor] fetched count=\(fetched.count) fromCache=\(fromCache)")
-            presentStories(fetched)
+            presentStories(fetched, resumeIndex: resumeIndex)
         } catch {
             svLogger.error("[loadStoriesForCurrentAuthor] error: \(error)")
             stories = []
