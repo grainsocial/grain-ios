@@ -513,235 +513,26 @@ private struct SettingsPlacement_Current: View {
     }
 }
 
-// MARK: - Final: Story (tap photo + corner badge)
+// MARK: - Final: Story / Gallery / Settings (real production views)
 
 private struct StoryFinal: View {
-    @State private var showCropToast = false
-    private let photo = PreviewData.photoItems.first?.carouselPreview ?? UIImage()
-
     var body: some View {
-        Form {
-            Section("Photo") {
-                Image(uiImage: photo)
-                    .resizable()
-                    .scaledToFit()
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .overlay(alignment: .topTrailing) {
-                        Image(systemName: "crop.rotate")
-                            .font(.callout.weight(.semibold))
-                            .foregroundStyle(.white)
-                            .padding(9)
-                            .background(.black.opacity(0.55), in: Circle())
-                            .padding(10)
-                            .allowsHitTesting(false)
-                    }
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        withAnimation { showCropToast = true }
-                        Task { @MainActor in
-                            try? await Task.sleep(for: .seconds(1.2))
-                            withAnimation { showCropToast = false }
-                        }
-                    }
-                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-
-                Label("Choose from Library", systemImage: "photo.on.rectangle")
-                Label("Take Photo", systemImage: "camera")
-            }
-
-            Section("Location") {
-                LabeledContent("Place", value: "Add location")
-                    .foregroundStyle(.secondary)
-            }
-
-            Section {
-                Toggle("Post to Bluesky", isOn: .constant(true))
-            } footer: {
-                Text("Includes location and photo.")
-            }
-        }
-        .navigationTitle("New Story")
-        .overlay(alignment: .top) {
-            if showCropToast {
-                Text("→ Crop sheet would open")
-                    .font(.footnote.weight(.medium))
-                    .padding(.horizontal, 14).padding(.vertical, 8)
-                    .background(.thinMaterial, in: Capsule())
-                    .padding(.top, 8)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-            }
-        }
+        StoryCreateView(
+            client: .preview,
+            initialImage: PreviewData.photoItems.first?.originalImage
+        )
     }
 }
-
-// MARK: - Final: Gallery (single floating pill, no context menu)
 
 private struct GalleryFinal: View {
-    @State private var selectedIndex: Int? = 1
-    @State private var actionToast: String?
-
-    private let items = Array(PreviewData.photoItems.prefix(6))
-
     var body: some View {
-        Form {
-            Section {
-                let cols = [
-                    GridItem(.flexible(), spacing: 4),
-                    GridItem(.flexible(), spacing: 4),
-                    GridItem(.flexible(), spacing: 4),
-                ]
-                LazyVGrid(columns: cols, spacing: 4) {
-                    ForEach(items.indices, id: \.self) { i in
-                        Image(uiImage: items[i].thumbnail)
-                            .resizable()
-                            .scaledToFill()
-                            .aspectRatio(1, contentMode: .fit)
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .strokeBorder(Color.accentColor, lineWidth: selectedIndex == i ? 3 : 0)
-                            )
-                            .onTapGesture {
-                                withAnimation(.smooth) {
-                                    selectedIndex = (selectedIndex == i) ? nil : i
-                                }
-                            }
-                    }
-                }
-                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-            } header: {
-                Picker("Mode", selection: .constant(0)) {
-                    Text("Edit").tag(0); Text("Reorder").tag(1); Text("Preview").tag(2)
-                }
-                .pickerStyle(.segmented)
-            } footer: {
-                Text("Tap a photo to select. Tap again to deselect.")
-            }
-
-            Section("Caption") {
-                TextField("Describe this gallery", text: .constant(""), axis: .vertical)
-                    .lineLimit(3, reservesSpace: true)
-            }
-        }
-        .navigationTitle("New Gallery")
-        .overlay(alignment: .bottom) {
-            if selectedIndex != nil {
-                HStack(spacing: 0) {
-                    pillButton("crop.rotate", "Crop") { fire("Crop") }
-                    pillDivider
-                    pillButton("photo", "Replace") { fire("Replace") }
-                    pillDivider
-                    pillButton("trash", "Remove", tint: .red) { fire("Remove") }
-                }
-                .padding(.horizontal, 4).padding(.vertical, 4)
-                .background(.regularMaterial, in: Capsule())
-                .overlay(Capsule().strokeBorder(.white.opacity(0.06)))
-                .shadow(color: .black.opacity(0.18), radius: 12, y: 4)
-                .padding(.bottom, 18)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-        }
-        .animation(.smooth, value: selectedIndex)
-        .overlay(alignment: .top) {
-            if let actionToast {
-                Text("→ \(actionToast)")
-                    .font(.footnote.weight(.medium))
-                    .padding(.horizontal, 14).padding(.vertical, 8)
-                    .background(.thinMaterial, in: Capsule())
-                    .padding(.top, 8)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-            }
-        }
-    }
-
-    private var pillDivider: some View {
-        Rectangle()
-            .fill(.secondary.opacity(0.25))
-            .frame(width: 1, height: 22)
-    }
-
-    private func pillButton(_ icon: String, _ label: String, tint: Color = .primary, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            VStack(spacing: 2) {
-                Image(systemName: icon).font(.body.weight(.medium))
-                Text(label).font(.caption2)
-            }
-            .frame(minWidth: 64, minHeight: 44)
-            .foregroundStyle(tint)
-        }
-    }
-
-    private func fire(_ label: String) {
-        withAnimation { actionToast = label }
-        Task { @MainActor in
-            try? await Task.sleep(for: .seconds(1.2))
-            withAnimation { actionToast = nil }
-        }
+        CreateGalleryView(client: .preview, initialItems: PreviewData.photoItems)
     }
 }
-
-// MARK: - Final: Settings (inline menu picker, Privacy section TBD-renamed)
 
 private struct SettingsFinal: View {
-    @State private var ratio: String = "Free"
-    @State private var appearance = "Auto"
-
     var body: some View {
-        List {
-            Section {
-                NavigationLink {
-                    Text("Appearance")
-                } label: {
-                    LabeledContent("Appearance", value: appearance)
-                }
-                NavigationLink("Account") { Text("Account") }
-                NavigationLink("Notifications") { Text("Notifications") }
-                NavigationLink("Moderation") { Text("Moderation") }
-                NavigationLink("Feeds") { Text("Feeds") }
-                NavigationLink("Privacy & Sharing") { PrivacyAndSharingMock() }
-                Picker("Default Crop", selection: $ratio) {
-                    ForEach(AspectRatioPreset.allPresets) { p in Text(p.label).tag(p.label) }
-                }
-                .pickerStyle(.menu)
-            }
-
-            Section {
-                Text("Privacy Policy").foregroundStyle(.primary)
-                Text("Terms of Service").foregroundStyle(.primary)
-            }
-
-            Section {
-                Button("Sign Out", role: .destructive) {}
-            }
-        }
-        .navigationTitle("Settings")
-    }
-}
-
-private struct PrivacyAndSharingMock: View {
-    @State private var includeLocation = true
-    @State private var includeExif = true
-
-    var body: some View {
-        List {
-            Section("Defaults for new uploads") {
-                Toggle(isOn: $includeLocation) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Include location")
-                        Text("Auto-detected from photo metadata")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-                Toggle(isOn: $includeExif) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Include camera data")
-                        Text("Make, model, and exposure info")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-            }
-        }
-        .navigationTitle("Privacy & Sharing")
+        SettingsView(client: .preview)
     }
 }
 
