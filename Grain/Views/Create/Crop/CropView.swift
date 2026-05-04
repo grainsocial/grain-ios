@@ -87,6 +87,7 @@ struct CropView: View {
             // Close when pristine, Reset when modified
             Button {
                 if state.hasModifications {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     resetToBaseline()
                 } else {
                     onCancel()
@@ -103,6 +104,7 @@ struct CropView: View {
             Spacer()
 
             Button("Apply") {
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
                 confirmCrop()
             }
             .fontWeight(.semibold)
@@ -147,10 +149,16 @@ struct CropView: View {
         HStack(spacing: 16) {
             // Rotate pair in a single pill
             HStack(spacing: 0) {
-                pillButton("rotate.left") { rotate(degrees: -90) }
-                    .offset(y: -1) // optical center — arrow weight sits low
-                pillButton("rotate.right") { rotate(degrees: 90) }
-                    .offset(y: -1)
+                pillButton("rotate.left") {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    rotate(degrees: -90)
+                }
+                .offset(y: -1) // optical center — arrow weight sits low
+                pillButton("rotate.right") {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    rotate(degrees: 90)
+                }
+                .offset(y: -1)
             }
             .glassEffect(.regular.interactive(), in: .capsule)
 
@@ -178,6 +186,7 @@ struct CropView: View {
         return HStack(spacing: 12) {
             // Lock toggle
             Button {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 withAnimation(.smooth(duration: 0.3)) {
                     state.toggleRatioLock()
                 }
@@ -195,6 +204,7 @@ struct CropView: View {
             HStack(spacing: 0) {
                 Button {
                     guard orientationEnabled, state.isPortrait else { return }
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     withAnimation(.smooth(duration: 0.3)) {
                         state.toggleOrientation()
                     }
@@ -213,6 +223,7 @@ struct CropView: View {
 
                 Button {
                     guard orientationEnabled, !state.isPortrait else { return }
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     withAnimation(.smooth(duration: 0.3)) {
                         state.toggleOrientation()
                     }

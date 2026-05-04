@@ -9,6 +9,9 @@ struct AspectRatioBar: View {
             HStack(spacing: 6) {
                 ForEach(AspectRatioPreset.allPresets) { preset in
                     Button {
+                        if state.selectedPreset != preset {
+                            UISelectionFeedbackGenerator().selectionChanged()
+                        }
                         withAnimation(.smooth(duration: 0.3)) {
                             state.selectPreset(preset)
                         }
