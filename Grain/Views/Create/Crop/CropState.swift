@@ -136,6 +136,18 @@ final class CropState {
         imageScale = 1.0
     }
 
+    /// True when state represents the untouched original — no crop, no
+    /// rotation, no zoom. Used to gate the Reset action.
+    var isOriginal: Bool {
+        let rot = rotationAngle.truncatingRemainder(dividingBy: 360)
+        if abs(rot) > 0.1 { return false }
+        if abs(imageScale - 1.0) > 0.001 { return false }
+        if imageOffset != .zero { return false }
+        let n = normalizedCropRect
+        return abs(n.minX) < 0.001 && abs(n.minY) < 0.001 &&
+            abs(n.width - 1.0) < 0.001 && abs(n.height - 1.0) < 0.001
+    }
+
     /// Resets only zoom and pan, preserving crop rect and rotation.
     func resetView() {
         imageOffset = .zero

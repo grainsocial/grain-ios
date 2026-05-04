@@ -91,28 +91,26 @@ struct CropView: View {
             } label: {
                 Image(systemName: "xmark")
                     .font(.body.weight(.semibold))
+                    .frame(width: 32, height: 32)
             }
             .foregroundStyle(.primary)
-            .frame(width: 28, height: 22)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 8)
-            .glassEffect(.regular.interactive(), in: .capsule)
+            .glassEffect(.regular.interactive(), in: .circle)
 
             // Reset: stay in tool, return to original (no crop, no rotation).
-            // Only visible when there's something to reset back from.
-            if state.hasModifications {
-                Button {
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    resetToOriginal()
-                } label: {
-                    Text("Reset")
-                }
-                .foregroundStyle(.primary)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .glassEffect(.regular.interactive(), in: .capsule)
-                .transition(.scale(scale: 0.85).combined(with: .opacity))
+            // Disabled rather than hidden — affordance is always relevant in
+            // a crop tool; greying it out tells the user there's nothing
+            // currently to reset, without UI elements popping in/out.
+            Button {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                resetToOriginal()
+            } label: {
+                Text("Reset")
             }
+            .foregroundStyle(state.isOriginal ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.primary))
+            .disabled(state.isOriginal)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .glassEffect(state.isOriginal ? .regular : .regular.interactive(), in: .capsule)
 
             Spacer()
 
@@ -131,6 +129,7 @@ struct CropView: View {
             )
         }
         .animation(.smooth(duration: 0.3), value: state.hasModifications)
+        .animation(.smooth(duration: 0.3), value: state.isOriginal)
     }
 
     // MARK: - Tool buttons — top row
