@@ -639,7 +639,7 @@ struct StoryViewer: View {
                     }
                     .animation(.easeInOut(duration: 0.2), value: commentsViewModel.firstComment?.uri)
 
-                    bottomInputBar(interactive: true, story: currentStory)
+                    bottomInputBar(interactive: true, archive: isArchiveMode, story: currentStory)
                 }
             }
         }
@@ -1081,6 +1081,7 @@ struct StoryViewer: View {
         commentPresenter.open(
             storyUri: uri,
             focusInput: focusInput,
+            readOnly: isArchiveMode,
             commentsViewModel: commentsViewModel,
             client: client,
             onProfileTap: { [commentPresenter, fadeDismissHandle] did in
@@ -1101,15 +1102,15 @@ struct StoryViewer: View {
         return story.viewer?.fav != nil
     }
 
-    private func bottomInputBar(interactive: Bool, story: GrainStory?) -> some View {
+    private func bottomInputBar(interactive: Bool, archive: Bool = false, story: GrainStory?) -> some View {
         let favState = interactive ? isFavorited : (story?.viewer?.fav != nil)
+        let placeholder = archive ? "View comments" : "Add a comment..."
         return HStack(spacing: 12) {
-            // "Add a comment..." — opens sheet with keyboard
             if interactive {
                 Button {
-                    openCommentSheet(focusInput: true)
+                    openCommentSheet(focusInput: !archive)
                 } label: {
-                    Text("Add a comment...")
+                    Text(placeholder)
                         .font(.subheadline)
                         .foregroundStyle(.white.opacity(0.6))
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1120,7 +1121,7 @@ struct StoryViewer: View {
                 .buttonStyle(.plain)
                 .glassEffect(.regular, in: .capsule)
             } else {
-                Text("Add a comment...")
+                Text(placeholder)
                     .font(.subheadline)
                     .foregroundStyle(.white.opacity(0.6))
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1129,21 +1130,22 @@ struct StoryViewer: View {
                     .glassEffect(.regular, in: .capsule)
             }
 
-            // Heart — favorite/unfavorite
-            if interactive {
-                Button {
-                    if !favState { heartBeatTrigger &+= 1 }
-                    triggerFavoriteToggle()
-                } label: {
-                    heartIcon(isFavorited: favState)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            } else {
-                heartIcon(isFavorited: favState)
-                    .onChange(of: favState) { oldValue, newValue in
-                        if oldValue != true, newValue == true { heartBeatTrigger &+= 1 }
+            if !archive {
+                if interactive {
+                    Button {
+                        if !favState { heartBeatTrigger &+= 1 }
+                        triggerFavoriteToggle()
+                    } label: {
+                        heartIcon(isFavorited: favState)
+                            .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
+                } else {
+                    heartIcon(isFavorited: favState)
+                        .onChange(of: favState) { oldValue, newValue in
+                            if oldValue != true, newValue == true { heartBeatTrigger &+= 1 }
+                        }
+                }
             }
         }
         .padding(.horizontal, 16)

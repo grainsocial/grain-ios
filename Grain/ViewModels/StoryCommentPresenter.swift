@@ -13,6 +13,7 @@ struct CommentSheetTarget: Identifiable, Equatable {
     let id = UUID()
     let storyUri: String
     let focusInput: Bool
+    let readOnly: Bool
     let viewModel: StoryCommentsViewModel
     let client: XRPCClient
     var onProfileTap: ((String) -> Void)?
@@ -81,6 +82,7 @@ private struct CommentSheetHostView: View {
                 storyUri: target.storyUri,
                 client: target.client,
                 focusInput: target.focusInput,
+                readOnly: target.readOnly,
                 onProfileTap: target.onProfileTap,
                 onDismiss: {
                     state.pendingDismissSource = "content.onDismiss"
@@ -139,6 +141,7 @@ final class StoryCommentPresenter {
     func open(
         storyUri: String,
         focusInput: Bool,
+        readOnly: Bool = false,
         commentsViewModel: StoryCommentsViewModel,
         client: XRPCClient,
         onProfileTap: ((String) -> Void)? = nil,
@@ -221,6 +224,7 @@ final class StoryCommentPresenter {
         state.target = CommentSheetTarget(
             storyUri: storyUri,
             focusInput: focusInput,
+            readOnly: readOnly,
             viewModel: commentsViewModel,
             client: client,
             onProfileTap: onProfileTap
