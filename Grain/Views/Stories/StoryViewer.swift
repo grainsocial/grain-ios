@@ -111,6 +111,12 @@ struct StoryViewer: View {
     let client: XRPCClient
     var onProfileTap: ((String) -> Void)?
     var onDismiss: (() -> Void)?
+    /// When set, the viewer is in archive mode: auto-advance is off, the
+    /// binding's list is the source of truth for `stories` (new entries
+    /// appended on change), and `onNeedsMoreArchive` fires when the user
+    /// nears the end so the caller can paginate.
+    var archiveStoriesBinding: Binding<[GrainStory]>?
+    var onNeedsMoreArchive: (() -> Void)?
     @State private var currentAuthorIndex: Int
     @State private var currentStoryIndex = 0
     @State private var stories: [GrainStory] = []
@@ -143,14 +149,27 @@ struct StoryViewer: View {
     /// re-render (black flash on sheet transitions).
     @State private var isCommentSheetOpen = false
     @State private var hasLoadedInitialStories = false
+    @State private var initialResumeIndex: Int?
     @State private var hearts: [HeartAnimationState] = []
     @State private var favoritingStoryUris: Set<String> = []
     @State private var heartBeatTrigger = 0
     @State private var instanceID: Int = 0
 
-    init(authors: [GrainStoryAuthor], startAuthorDid: String? = nil, initialStories: [GrainStory]? = nil, startStoryIndex: Int? = nil, client: XRPCClient, onProfileTap: ((String) -> Void)? = nil, onDismiss: (() -> Void)? = nil) {
+    init(
+        authors: [GrainStoryAuthor],
+        startAuthorDid: String? = nil,
+        initialStories: [GrainStory]? = nil,
+        startStoryIndex: Int? = nil,
+        client: XRPCClient,
+        archiveStoriesBinding: Binding<[GrainStory]>? = nil,
+        onNeedsMoreArchive: (() -> Void)? = nil,
+        onProfileTap: ((String) -> Void)? = nil,
+        onDismiss: (() -> Void)? = nil
+    ) {
         self.authors = authors
         self.client = client
+        self.archiveStoriesBinding = archiveStoriesBinding
+        self.onNeedsMoreArchive = onNeedsMoreArchive
         self.onProfileTap = onProfileTap
         self.onDismiss = onDismiss
         _commentsViewModel = State(initialValue: StoryCommentsViewModel(client: client))
@@ -161,6 +180,7 @@ struct StoryViewer: View {
             _prefetchedStories = State(initialValue: [did: initialStories])
             if let startStoryIndex {
                 _currentStoryIndex = State(initialValue: startStoryIndex)
+                _initialResumeIndex = State(initialValue: startStoryIndex)
             }
         }
         let id = svNextInstanceID()
@@ -243,6 +263,9 @@ struct StoryViewer: View {
         .onChange(of: currentStory?.uri) { _, _ in
             hearts.removeAll()
         }
+        .onChange(of: archiveStoriesBinding?.wrappedValue.count ?? 0) { _, _ in
+            syncArchiveStories()
+        }
         .task {
             // Guard against re-runs: .task can re-fire when the view re-enters the
             // hierarchy (e.g. after sheet presentation cycles), and we only want to
@@ -258,7 +281,9 @@ struct StoryViewer: View {
                 timer.onComplete = { [self] in goToNext() }
                 timer.onQuarter = { [self] in markCurrentStoryViewed() }
             }
-            await loadStoriesForCurrentAuthor()
+            let resume = initialResumeIndex
+            initialResumeIndex = nil
+            await loadStoriesForCurrentAuthor(resumeIndex: resume)
         }
     }
 
@@ -614,7 +639,7 @@ struct StoryViewer: View {
                     }
                     .animation(.easeInOut(duration: 0.2), value: commentsViewModel.firstComment?.uri)
 
-                    bottomInputBar(interactive: true, story: currentStory)
+                    bottomInputBar(interactive: true, archive: isArchiveMode, story: currentStory)
                 }
             }
         }
@@ -636,16 +661,36 @@ struct StoryViewer: View {
             && Date().timeIntervalSince(lastNavTime) > 0.3
     }
 
+    private var isArchiveMode: Bool {
+        archiveStoriesBinding != nil
+    }
+
     private func startTimerIfSafe() {
+        guard !isArchiveMode else { return }
         guard imageLoaded, !isCommentSheetOpen else { return }
         let action = storyLabelResult.action
         if action == .none || action == .badge { timer.start() }
     }
 
     private func resumeTimerIfSafe() {
+        guard !isArchiveMode else { return }
         guard imageLoaded, !isCommentSheetOpen else { return }
         let action = storyLabelResult.action
         if action == .none || action == .badge { timer.resume() }
+    }
+
+    private func syncArchiveStories() {
+        guard let updated = archiveStoriesBinding?.wrappedValue, updated.count > stories.count else { return }
+        let known = Set(stories.map(\.uri))
+        let extras = updated.filter { !known.contains($0.uri) }
+        if extras.isEmpty { return }
+        stories.append(contentsOf: extras)
+        prefetchStoryImages()
+    }
+
+    private func maybeRequestMoreArchive() {
+        guard isArchiveMode, let onNeedsMore = onNeedsMoreArchive else { return }
+        if currentStoryIndex >= stories.count - 3 { onNeedsMore() }
     }
 
     private func isFullsizeCached(_ story: GrainStory?) -> Bool {
@@ -708,6 +753,7 @@ struct StoryViewer: View {
         }
         labelRevealed = false
         prefetchStoryImages()
+        maybeRequestMoreArchive()
         if let uri = nextStory?.uri {
             Task { await commentsViewModel.switchToStory(uri: uri, auth: auth.authContext()) }
         }
@@ -892,7 +938,7 @@ struct StoryViewer: View {
         }
     }
 
-    private func loadStoriesForCurrentAuthor() async {
+    private func loadStoriesForCurrentAuthor(resumeIndex: Int? = nil) async {
         svLogger.info("[loadStoriesForCurrentAuthor] enter authorIdx=\(currentAuthorIndex)")
         svSignposter.emitEvent("loadStoriesForCurrentAuthor.enter")
         guard currentAuthorIndex < authors.count else { return }
@@ -908,7 +954,7 @@ struct StoryViewer: View {
                 try await client.getStories(actor: did, auth: auth.authContext()).stories
             }
             svLogger.info("[loadStoriesForCurrentAuthor] fetched count=\(fetched.count) fromCache=\(fromCache)")
-            presentStories(fetched)
+            presentStories(fetched, resumeIndex: resumeIndex)
         } catch {
             svLogger.error("[loadStoriesForCurrentAuthor] error: \(error)")
             stories = []
@@ -935,6 +981,7 @@ struct StoryViewer: View {
         startTimerIfSafe()
         prefetchAdjacentAuthors()
         prefetchStoryImages()
+        maybeRequestMoreArchive()
         if let uri = targetStory?.uri {
             Task {
                 let ctx = await auth.authContext()
@@ -1034,6 +1081,7 @@ struct StoryViewer: View {
         commentPresenter.open(
             storyUri: uri,
             focusInput: focusInput,
+            readOnly: isArchiveMode,
             commentsViewModel: commentsViewModel,
             client: client,
             onProfileTap: { [commentPresenter, fadeDismissHandle] did in
@@ -1054,15 +1102,15 @@ struct StoryViewer: View {
         return story.viewer?.fav != nil
     }
 
-    private func bottomInputBar(interactive: Bool, story: GrainStory?) -> some View {
+    private func bottomInputBar(interactive: Bool, archive: Bool = false, story: GrainStory?) -> some View {
         let favState = interactive ? isFavorited : (story?.viewer?.fav != nil)
+        let placeholder = archive ? "View comments" : "Add a comment..."
         return HStack(spacing: 12) {
-            // "Add a comment..." — opens sheet with keyboard
             if interactive {
                 Button {
-                    openCommentSheet(focusInput: true)
+                    openCommentSheet(focusInput: !archive)
                 } label: {
-                    Text("Add a comment...")
+                    Text(placeholder)
                         .font(.subheadline)
                         .foregroundStyle(.white.opacity(0.6))
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1073,7 +1121,7 @@ struct StoryViewer: View {
                 .buttonStyle(.plain)
                 .glassEffect(.regular, in: .capsule)
             } else {
-                Text("Add a comment...")
+                Text(placeholder)
                     .font(.subheadline)
                     .foregroundStyle(.white.opacity(0.6))
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1082,21 +1130,22 @@ struct StoryViewer: View {
                     .glassEffect(.regular, in: .capsule)
             }
 
-            // Heart — favorite/unfavorite
-            if interactive {
-                Button {
-                    if !favState { heartBeatTrigger &+= 1 }
-                    triggerFavoriteToggle()
-                } label: {
-                    heartIcon(isFavorited: favState)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            } else {
-                heartIcon(isFavorited: favState)
-                    .onChange(of: favState) { oldValue, newValue in
-                        if oldValue != true, newValue == true { heartBeatTrigger &+= 1 }
+            if !archive {
+                if interactive {
+                    Button {
+                        if !favState { heartBeatTrigger &+= 1 }
+                        triggerFavoriteToggle()
+                    } label: {
+                        heartIcon(isFavorited: favState)
+                            .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
+                } else {
+                    heartIcon(isFavorited: favState)
+                        .onChange(of: favState) { oldValue, newValue in
+                            if oldValue != true, newValue == true { heartBeatTrigger &+= 1 }
+                        }
+                }
             }
         }
         .padding(.horizontal, 16)

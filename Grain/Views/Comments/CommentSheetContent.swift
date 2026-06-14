@@ -21,6 +21,7 @@ struct CommentSheetContent: View {
 
     var dismissStyle: CommentDismissStyle = .xmark
     var focusOnAppear: Bool = false
+    var readOnly: Bool = false
 
     @Environment(AuthManager.self) private var auth
     @Environment(\.dismiss) private var dismiss
@@ -44,11 +45,13 @@ struct CommentSheetContent: View {
                 commentList
             }
             .safeAreaInset(edge: .bottom) {
-                VStack(spacing: 0) {
-                    MentionSuggestionOverlay(state: mentionState) { suggestion in
-                        mentionState.complete(handle: suggestion.handle, in: &commentText)
+                if !readOnly {
+                    VStack(spacing: 0) {
+                        MentionSuggestionOverlay(state: mentionState) { suggestion in
+                            mentionState.complete(handle: suggestion.handle, in: &commentText)
+                        }
+                        glassInputPill
                     }
-                    glassInputPill
                 }
             }
             .navigationTitle("Comments")
@@ -109,7 +112,7 @@ struct CommentSheetContent: View {
                             onProfileTap: onProfileTap,
                             onHashtagTap: onHashtagTap,
                             onStoryTap: onStoryTap,
-                            onReply: { startReply(to: thread.root) },
+                            onReply: readOnly ? nil : { startReply(to: thread.root) },
                             onDelete: { Task { await onDelete(thread.root) } }
                         )
 
@@ -123,7 +126,7 @@ struct CommentSheetContent: View {
                                 onProfileTap: onProfileTap,
                                 onHashtagTap: onHashtagTap,
                                 onStoryTap: onStoryTap,
-                                onReply: { startReplyToReply(reply, root: thread.root) },
+                                onReply: readOnly ? nil : { startReplyToReply(reply, root: thread.root) },
                                 onDelete: { Task { await onDelete(reply) } }
                             )
                         }
