@@ -5,7 +5,7 @@ set dotenv-load
 sim_sign := 'CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""'
 
 # Apple Developer Team ID (override with APPLE_TEAM_ID env var)
-team_id := env_var_or_default("APPLE_TEAM_ID", "54P9BCDR92")
+team_id := env_var_or_default("APPLE_TEAM_ID", "YN68LN9T7Z")
 
 # Bundle identifier (override with BUNDLE_ID env var)
 bundle_id := env_var_or_default("BUNDLE_ID", "social.grain.grain")
