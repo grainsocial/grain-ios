@@ -74,27 +74,41 @@ final class ProfileDetailViewModel {
             }
         }
 
-        do {
-            async let profileFetch = client.getActorProfile(actor: did, viewer: viewer, auth: auth)
-            async let feedFetch = client.getFeed(feed: "actor", actor: did, auth: auth)
-            async let storiesFetch = client.getStories(actor: did, auth: auth)
-            async let knownFollowersFetch: [FollowerItem] = {
-                guard let viewer, viewer != did else { return [] }
-                let response = try? await client.getKnownFollowers(actor: did, viewer: viewer, auth: auth)
-                return response?.items ?? []
-            }()
-            let profileResult = try await profileFetch
-            let feedResult = try await feedFetch
-            let storiesResult = try await storiesFetch
+        async let profileFetch = client.getActorProfile(actor: did, viewer: viewer, auth: auth)
+        async let feedFetch = client.getFeed(feed: "actor", actor: did, auth: auth)
+        async let storiesFetch = client.getStories(actor: did, auth: auth)
+        async let knownFollowersFetch: [FollowerItem] = {
+            guard let viewer, viewer != did else { return [] }
+            let response = try? await client.getKnownFollowers(actor: did, viewer: viewer, auth: auth)
+            return response?.items ?? []
+        }()
 
-            profile = profileResult
-            galleries = feedResult.items ?? []
-            galleryCursor = feedResult.cursor
-            hasMoreGalleries = feedResult.cursor != nil
-            stories = storiesResult.stories
-            knownFollowers = await knownFollowersFetch
+        // Await every `async let` binding in declaration order with no early
+        // throw. `async let` child tasks are allocated on a stack and must be
+        // torn down in reverse (LIFO) order; if `try await profileFetch` threw
+        // before the later bindings were awaited, their tasks got finished out
+        // of allocation order, tripping the Swift task allocator and aborting
+        // the app (SIGABRT in asyncLet_finish_after_task_completion — App Store
+        // crash at ProfileView.swift:487, builds 53/56). Capturing each result
+        // first guarantees all four tasks are awaited in-scope before teardown.
+        let profileResult: GrainProfileDetailed?
+        do {
+            profileResult = try await profileFetch
         } catch {
             self.error = error
+            profileResult = nil
+        }
+        let feedResult = try? await feedFetch
+        let storiesResult = try? await storiesFetch
+        let knownResult = await knownFollowersFetch
+
+        if let profileResult {
+            profile = profileResult
+            galleries = feedResult?.items ?? []
+            galleryCursor = feedResult?.cursor
+            hasMoreGalleries = feedResult?.cursor != nil
+            stories = storiesResult?.stories ?? []
+            knownFollowers = knownResult
         }
         isLoading = false
 
