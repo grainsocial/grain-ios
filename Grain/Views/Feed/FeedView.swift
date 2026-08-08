@@ -95,7 +95,11 @@ struct FeedView: View {
             }
             .fullScreenCover(isPresented: Binding(
                 get: { storyViewerDid != nil },
-                set: { if !$0 { storyViewerDid = nil } }
+                set: {
+                    if !$0 {
+                        storyViewerDid = nil
+                    }
+                }
             )) {
                 if let did = storyViewerDid {
                     StoryViewer(
@@ -241,6 +245,35 @@ struct FeedView: View {
     private func consumeDeepLink() {
         guard let link = pendingDeepLink else { return }
         pendingDeepLink = nil
+
+        // A deep-linked destination may already be on screen (e.g. the user opened a
+        // gallery link, backgrounded the app, then opened a second one). SwiftUI won't
+        // re-push when navigationDestination(item:) swaps straight from one non-nil
+        // value to another, and the destination keeps its @State either way — so pop
+        // what's showing first and present the new link once the pop settles.
+        if hasActiveDeepLinkDestination {
+            clearDeepLinkDestinations()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                present(link)
+            }
+        } else {
+            present(link)
+        }
+    }
+
+    private var hasActiveDeepLinkDestination: Bool {
+        deepLinkProfileDid != nil || deepLinkGalleryUri != nil
+            || deepLinkStoryAuthor != nil || deepLinkStory != nil
+    }
+
+    private func clearDeepLinkDestinations() {
+        deepLinkProfileDid = nil
+        deepLinkGalleryUri = nil
+        deepLinkStoryAuthor = nil
+        deepLinkStory = nil
+    }
+
+    private func present(_ link: DeepLink) {
         switch link {
         case let .profile(did):
             deepLinkProfileDid = did
@@ -426,7 +459,11 @@ private struct FeedTabContent: View {
         }
         .sheet(isPresented: Binding(
             get: { commentSheetUri != nil },
-            set: { if !$0 { commentSheetUri = nil } }
+            set: {
+                if !$0 {
+                    commentSheetUri = nil
+                }
+            }
         )) {
             if let uri = commentSheetUri {
                 CommentSheetView(
