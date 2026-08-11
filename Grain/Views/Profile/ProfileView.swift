@@ -90,10 +90,17 @@ struct ProfileView: View {
         .contentShape(Circle())
         .onTapGesture {
             if did == auth.userDID {
-                if hasStory { showStoryViewer = true } else { showStoryCreate = true }
+                if hasStory {
+                    showStoryViewer = true
+                } else {
+                    showStoryCreate = true
+                }
             } else {
-                if hasStory { showStoryViewer = true }
-                else if profile.avatar != nil { openAvatarOverlay() }
+                if hasStory {
+                    showStoryViewer = true
+                } else if profile.avatar != nil {
+                    openAvatarOverlay()
+                }
             }
         }
         .profileContextMenu(
@@ -499,7 +506,9 @@ struct ProfileView: View {
                 Text("Please sign out and back in to enable blocking. This is a one-time step after the update.")
             }
             .overlay(alignment: .center) {
-                if showCopiedToast { CopiedCheckmarkToast() }
+                if showCopiedToast {
+                    CopiedCheckmarkToast()
+                }
             }
             .animation(.spring(response: 0.4, dampingFraction: 0.7), value: showCopiedToast)
             .sensoryFeedback(.impact(weight: .medium), trigger: showCopiedToast)
@@ -527,23 +536,16 @@ struct ProfileView: View {
     private var knownFollowersRow: some View {
         let followers = viewModel.knownFollowers
         let displayCount = max(followers.count, 0)
-        let avatars = Array(followers.prefix(3))
         let names = followers.prefix(2).compactMap { f -> String? in
-            if let name = f.displayName, !name.isEmpty { return name }
+            if let name = f.displayName, !name.isEmpty {
+                return name
+            }
             return f.handle
         }
         let othersCount = displayCount - names.count
 
         HStack(spacing: 6) {
-            // Overlapping avatars
-            HStack(spacing: -8) {
-                ForEach(Array(avatars.enumerated()), id: \.element.did) { index, follower in
-                    AvatarView(url: follower.avatar, size: 24)
-                        .background(Circle().fill(Color(.systemBackground)))
-                        .overlay(Circle().stroke(Color(.systemBackground), lineWidth: 2))
-                        .zIndex(Double(3 - index))
-                }
-            }
+            FacepileView(people: followers)
 
             // "Followed by X, Y and Z others" text
             Group {
@@ -687,7 +689,9 @@ struct ProfileView: View {
                 tabScrollOffsetX = newValue
             }
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { newWidth in
-                if newWidth > 0 { tabPageWidth = newWidth }
+                if newWidth > 0 {
+                    tabPageWidth = newWidth
+                }
             }
             .frame(height: interpolatedTabHeight(modes: modes), alignment: .top)
             .clipped()
@@ -1072,7 +1076,9 @@ struct AvatarOverlay: View {
                                 // Ignore taps while actively pinch-zoomed — ZoomableImage
                                 // emits a single tap on release too, and we don't want
                                 // that to dismiss.
-                                if !zoomState.showOverlay { onDismiss() }
+                                if !zoomState.showOverlay {
+                                    onDismiss()
+                                }
                             }
                         )
                         .frame(width: side, height: side)
@@ -1095,7 +1101,9 @@ struct AvatarOverlay: View {
                 .updating($dragDelta) { val, state, _ in
                     // Don't let a 1-finger drag move the image while the user is
                     // pinch-zooming — ZoomableImage's 2-finger pan handles that.
-                    if !zoomState.showOverlay { state = val.translation.height }
+                    if !zoomState.showOverlay {
+                        state = val.translation.height
+                    }
                 }
                 .onEnded { val in
                     guard !zoomState.showOverlay else { return }
@@ -1183,7 +1191,9 @@ private struct ProfileGridThumbnail: View {
     private func loadIfNeeded() {
         guard let imageURL, asyncImage == nil else { return }
         let request = ImageRequest(url: imageURL)
-        if ImagePipeline.shared.cache.cachedImage(for: request) != nil { return }
+        if ImagePipeline.shared.cache.cachedImage(for: request) != nil {
+            return
+        }
         Task {
             if let image = try? await ImagePipeline.shared.image(for: request) {
                 asyncImage = image

@@ -7,6 +7,7 @@ struct GalleryDetailView: View {
     @State private var selectedProfileDid: String?
     @State private var selectedHashtag: String?
     @State private var selectedLocation: LocationDestination?
+    @State private var favoritesGalleryUri: FavoritesDestination?
     @State private var showDeleteConfirmation = false
     @State private var showReportSheet = false
     @State private var showCommentSheet = false
@@ -40,6 +41,9 @@ struct GalleryDetailView: View {
                         },
                         onCommentTap: {
                             showCommentSheet = true
+                        },
+                        onFavoritesTap: {
+                            favoritesGalleryUri = FavoritesDestination(galleryUri: galleryUri)
                         },
                         onProfileTap: { did in
                             selectedProfileDid = did
@@ -93,6 +97,9 @@ struct GalleryDetailView: View {
         }
         .navigationDestination(item: $selectedLocation) { loc in
             LocationFeedView(client: client, h3Index: loc.h3Index, locationName: loc.name)
+        }
+        .navigationDestination(item: $favoritesGalleryUri) { dest in
+            FollowListView(client: client, mode: .galleryFavorites(dest.galleryUri))
         }
         .toolbarTitleDisplayMode(.inline)
         .alert("Delete Gallery?", isPresented: $showDeleteConfirmation) {

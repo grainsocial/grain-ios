@@ -219,7 +219,7 @@ private struct ReasonIcon: View {
 
     private var label: String {
         switch reason {
-        case .galleryFavorite, .storyFavorite, .commentFavorite: "Liked"
+        case .galleryFavorite, .storyFavorite, .commentFavorite: "Favorited"
         case .follow: "Followed"
         case .galleryComment, .storyComment: "Commented"
         case .reply: "Replied"

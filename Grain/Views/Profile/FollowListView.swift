@@ -5,12 +5,25 @@ enum FollowListMode: Hashable {
     case followers
     case following
     case knownFollowers
+    /// Everyone who favorited a gallery. `did` is unused in this mode — the
+    /// gallery URI carries the subject.
+    case galleryFavorites(String)
+}
+
+/// Navigation payload for a gallery's favorites list. A distinct type keeps it
+/// from colliding with the other `String?` destinations a feed view registers.
+struct FavoritesDestination: Hashable, Identifiable {
+    let galleryUri: String
+    var id: String {
+        galleryUri
+    }
 }
 
 struct FollowListView: View {
     @Environment(AuthManager.self) private var auth
     let client: XRPCClient
-    let did: String
+    /// The profile whose graph is being listed. Unused for `.galleryFavorites`.
+    var did: String = ""
     let mode: FollowListMode
     @State private var items: [FollowListItem] = []
     @State private var cursor: String?
@@ -27,11 +40,37 @@ struct FollowListView: View {
         case .followers: "Followers"
         case .following: "Following"
         case .knownFollowers: "Followers you know"
+        case .galleryFavorites: "Favorited by"
         }
     }
 
     private var displayCount: String {
         "\(totalCount ?? items.count) \(title.lowercased())"
+    }
+
+    private var emptyTitle: String {
+        switch mode {
+        case .followers, .knownFollowers: "No Followers"
+        case .following: "No Following"
+        case .galleryFavorites: "No Favorites"
+        }
+    }
+
+    private var emptyIcon: String {
+        switch mode {
+        case .followers, .knownFollowers: "person.2"
+        case .following: "person.badge.plus"
+        case .galleryFavorites: "heart"
+        }
+    }
+
+    private var emptyDescription: String {
+        switch mode {
+        case .followers: "No one is following this account yet."
+        case .following: "This account isn't following anyone yet."
+        case .knownFollowers: "None of the people you follow are following this account."
+        case .galleryFavorites: "No one has favorited this gallery yet."
+        }
     }
 
     var body: some View {
@@ -41,15 +80,9 @@ struct FollowListView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if hasLoaded, items.isEmpty {
                 ContentUnavailableView(
-                    "No \(title)",
-                    systemImage: mode == .knownFollowers ? "person.2" : mode == .followers ? "person.2" : "person.badge.plus",
-                    description: Text(
-                        mode == .knownFollowers
-                            ? "None of the people you follow are following this account."
-                            : mode == .followers
-                            ? "No one is following this account yet."
-                            : "This account isn't following anyone yet."
-                    )
+                    emptyTitle,
+                    systemImage: emptyIcon,
+                    description: Text(emptyDescription)
                 )
             } else {
                 List {
@@ -176,6 +209,11 @@ struct FollowListView: View {
                     items = (response.items ?? []).map { FollowListItem(from: $0) }
                     totalCount = items.count
                 }
+            case let .galleryFavorites(uri):
+                let response = try await client.getGalleryFavorites(gallery: uri, viewer: auth.userDID, cursor: nil, auth: auth.authContext())
+                items = (response.items ?? []).map { FollowListItem(from: $0) }
+                cursor = response.cursor
+                totalCount = response.totalCount
             }
         } catch {
             // keep existing items on error
@@ -185,7 +223,9 @@ struct FollowListView: View {
 
     private func loadMore() async {
         guard !isLoading else { return }
-        if !items.isEmpty, cursor == nil { return }
+        if !items.isEmpty, cursor == nil {
+            return
+        }
         isLoading = true
         defer { isLoading = false }
 
@@ -208,6 +248,13 @@ struct FollowListView: View {
                 cursor = response.cursor
             case .knownFollowers:
                 break // No pagination for known followers
+            case let .galleryFavorites(uri):
+                let response = try await client.getGalleryFavorites(gallery: uri, viewer: auth.userDID, cursor: cursor, auth: auth.authContext())
+                if let newItems = response.items {
+                    let filtered = newItems.filter { !existingIDs.contains($0.did) }
+                    items.append(contentsOf: filtered.map { FollowListItem(from: $0) })
+                }
+                cursor = response.cursor
             }
         } catch {
             // silently fail
@@ -228,7 +275,9 @@ struct FollowListView: View {
                     if let idx = items.firstIndex(where: { $0.did == targetDid }) {
                         items.remove(at: idx)
                     }
-                    if let count = totalCount { totalCount = max(0, count - 1) }
+                    if let count = totalCount {
+                        totalCount = max(0, count - 1)
+                    }
                 }
             } catch {
                 if let idx = items.firstIndex(where: { $0.did == targetDid }) {
@@ -278,6 +327,15 @@ struct FollowListItem: Identifiable {
         description = follower.description
         avatar = follower.avatar
         followingUri = follower.viewer?.following
+    }
+
+    init(from favorite: FavoriteItem) {
+        did = favorite.did
+        handle = favorite.handle
+        displayName = favorite.displayName
+        description = favorite.description
+        avatar = favorite.avatar
+        followingUri = favorite.viewer?.following
     }
 
     init(from following: FollowingItem) {

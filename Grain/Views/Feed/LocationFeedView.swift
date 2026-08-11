@@ -11,6 +11,7 @@ struct LocationFeedView: View {
     @State private var selectedUri: String?
     @State private var selectedProfileDid: String?
     @State private var selectedHashtag: String?
+    @State private var favoritesGalleryUri: FavoritesDestination?
     @State private var zoomState = ImageZoomState()
     @State private var cardStoryAuthor: GrainStoryAuthor?
     @State private var commentSheetUri: String?
@@ -76,6 +77,8 @@ struct LocationFeedView: View {
                         selectedUri = gallery.uri
                     }, onCommentTap: {
                         commentSheetUri = gallery.uri
+                    }, onFavoritesTap: {
+                        favoritesGalleryUri = FavoritesDestination(galleryUri: gallery.uri)
                     }, onProfileTap: { did in
                         selectedProfileDid = did
                     }, onHashtagTap: { tag in
@@ -144,6 +147,9 @@ struct LocationFeedView: View {
         .navigationDestination(item: $selectedHashtag) { tag in
             HashtagFeedView(client: client, tag: tag)
         }
+        .navigationDestination(item: $favoritesGalleryUri) { dest in
+            FollowListView(client: client, mode: .galleryFavorites(dest.galleryUri))
+        }
         .fullScreenCover(item: $cardStoryAuthor) { author in
             StoryViewer(
                 authors: [author],
@@ -158,7 +164,11 @@ struct LocationFeedView: View {
         }
         .sheet(isPresented: Binding(
             get: { commentSheetUri != nil },
-            set: { if !$0 { commentSheetUri = nil } }
+            set: {
+                if !$0 {
+                    commentSheetUri = nil
+                }
+            }
         )) {
             if let uri = commentSheetUri {
                 CommentSheetView(

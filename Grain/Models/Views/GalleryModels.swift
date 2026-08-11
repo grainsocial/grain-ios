@@ -15,6 +15,9 @@ struct GrainGallery: Codable, Sendable, Identifiable {
     var record: AnyCodable?
     var items: [GrainPhoto]?
     var favCount: Int?
+    /// Accounts the viewer follows who favorited this gallery, capped server-side
+    /// for the card facepile. Never includes the viewer.
+    var favedByFollowing: [GrainProfile]?
     var commentCount: Int?
     var labels: [ATLabel]?
     var createdAt: String?
@@ -28,7 +31,7 @@ struct GrainGallery: Codable, Sendable, Identifiable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case uri, cid, title, description, cameras, location, address, locationDisplay, facets, creator, record, items, favCount, commentCount, labels, createdAt, indexedAt, viewer, crossPost
+        case uri, cid, title, description, cameras, location, address, locationDisplay, facets, creator, record, items, favCount, favedByFollowing, commentCount, labels, createdAt, indexedAt, viewer, crossPost
     }
 }
 

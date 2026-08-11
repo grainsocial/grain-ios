@@ -183,8 +183,12 @@ private extension View {
     /// Overlays a "Link copied" toast and drives its entrance/exit animation.
     /// Bundles the overlay and animation so they can't be accidentally separated.
     func copiedToast(isShowing: Bool) -> some View {
-        overlay { if isShowing { CopiedToastView() } }
-            .animation(.spring(response: 0.4, dampingFraction: 0.7), value: isShowing)
+        overlay {
+            if isShowing {
+                CopiedToastView()
+            }
+        }
+        .animation(.spring(response: 0.4, dampingFraction: 0.7), value: isShowing)
     }
 }
 
@@ -197,6 +201,7 @@ struct GalleryCardView: View {
     let client: XRPCClient
     var onNavigate: () -> Void = {}
     var onCommentTap: (() -> Void)?
+    var onFavoritesTap: (() -> Void)?
     var onProfileTap: ((String) -> Void)?
     var onHashtagTap: ((String) -> Void)?
     var onLocationTap: ((String, String) -> Void)?
@@ -247,6 +252,7 @@ struct GalleryCardView: View {
                 photoCarousel(photos: photos, lr: lr)
             }
             engagementRow
+            favedByRow
             captionSection(lr: lr)
         }
         .copiedToast(isShowing: showCopiedToast)
@@ -448,41 +454,67 @@ struct GalleryCardView: View {
         }
     }
 
+    /// Count text sized to a fixed-width digit proxy so the row doesn't shift
+    /// when the tally changes.
+    private var favCountLabel: some View {
+        ZStack {
+            let count = gallery.favCount ?? 0
+            Text(count.compactCount.digitWidthProxy)
+                .hidden()
+            Text(count.compactCount)
+        }
+    }
+
     private var engagementRow: some View {
         HStack(spacing: 16) {
-            Button {
-                guard !isFavoriting else { return }
-                if !isFavorited { addParticleBurst() }
-                triggerFavoriteToggle()
-            } label: {
-                HStack(spacing: 5) {
+            // Heart toggles; the count next to it opens the favorited-by list.
+            // They're separate hit targets so tapping the tally can't like.
+            HStack(spacing: 5) {
+                Button {
+                    guard !isFavoriting else { return }
+                    if !isFavorited {
+                        addParticleBurst()
+                    }
+                    triggerFavoriteToggle()
+                } label: {
                     Image(systemName: isFavorited ? "heart.fill" : "heart")
                         .font(.system(size: 22))
                         .contentTransition(.symbolEffect(.replace.downUp.byLayer, options: .nonRepeating))
                         .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isFavorited)
+                        // The count used to be part of this button. Grow the hit
+                        // target back to what it was, then negatively pad so the
+                        // row lays out exactly as before.
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
+                        .padding(.horizontal, -4)
+                        .padding(.vertical, -5)
+                }
+                .accessibilityLabel(isFavorited ? "Remove favorite" : "Favorite")
+                .accessibilityValue("\(gallery.favCount ?? 0) favorites")
+                .overlay(alignment: .leading) {
                     ZStack {
-                        let count = gallery.favCount ?? 0
-                        Text(count.compactCount.digitWidthProxy)
-                            .hidden()
-                        Text(count.compactCount)
+                        ForEach(likeParticleBursts, id: \.self) { _ in
+                            ForEach(0 ..< 5, id: \.self) { i in
+                                LikeParticleView(index: i)
+                            }
+                        }
                     }
+                    .offset(x: 11)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                }
+
+                if let onFavoritesTap, (gallery.favCount ?? 0) > 0 {
+                    Button(action: onFavoritesTap) {
+                        favCountLabel
+                    }
+                    .accessibilityLabel("\(gallery.favCount ?? 0) favorites")
+                    .accessibilityHint("Shows everyone who favorited this gallery")
+                } else {
+                    favCountLabel
                 }
             }
             .foregroundStyle(isFavorited ? AnyShapeStyle(Color.heart) : AnyShapeStyle(.secondary))
-            .accessibilityLabel(isFavorited ? "Unlike" : "Like")
-            .accessibilityValue("\(gallery.favCount ?? 0) likes")
-            .overlay(alignment: .leading) {
-                ZStack {
-                    ForEach(likeParticleBursts, id: \.self) { _ in
-                        ForEach(0 ..< 5, id: \.self) { i in
-                            LikeParticleView(index: i)
-                        }
-                    }
-                }
-                .offset(x: 11)
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
-            }
 
             Button {
                 (onCommentTap ?? onNavigate)()
@@ -534,6 +566,46 @@ struct GalleryCardView: View {
         .padding(.horizontal, 12)
         .padding(.top, 12)
         .padding(.bottom, 4)
+    }
+
+    /// "Favorited by <people you follow>" facepile. The server caps the list,
+    /// so past two names we say "and others" rather than a count we don't have.
+    @ViewBuilder
+    private var favedByRow: some View {
+        let people = gallery.favedByFollowing ?? []
+        if !people.isEmpty {
+            let names = people.prefix(2).map { person -> String in
+                if let name = person.displayName, !name.isEmpty {
+                    return name
+                }
+                return person.handle
+            }
+
+            HStack(spacing: 6) {
+                FacepileView(people: people, size: 20)
+
+                Group {
+                    if names.count == 1 {
+                        Text("Favorited by **\(names[0])**")
+                    } else if people.count > 2 {
+                        Text("Favorited by **\(names[0])**, **\(names[1])** and others you follow")
+                    } else {
+                        Text("Favorited by **\(names[0])** and **\(names[1])**")
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 6)
+            .contentShape(Rectangle())
+            .onTapGesture { onFavoritesTap?() }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(onFavoritesTap != nil ? .isButton : [])
+        }
     }
 
     @ViewBuilder

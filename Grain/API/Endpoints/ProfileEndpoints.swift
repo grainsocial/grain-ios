@@ -18,6 +18,12 @@ struct GetKnownFollowersResponse: Codable, Sendable {
     var items: [FollowerItem]?
 }
 
+struct GetGalleryFavoritesResponse: Codable, Sendable {
+    var totalCount: Int?
+    var items: [FavoriteItem]?
+    var cursor: String?
+}
+
 struct GetSuggestedFollowsResponse: Codable, Sendable {
     var items: [SuggestedItem]?
 }
@@ -40,6 +46,18 @@ struct FollowerItem: Codable, Sendable, Identifiable {
 }
 
 struct FollowingItem: Codable, Sendable, Identifiable {
+    let did: String
+    var handle: String?
+    var displayName: String?
+    var description: String?
+    var avatar: String?
+    var viewer: ActorViewerState?
+    var id: String {
+        did
+    }
+}
+
+struct FavoriteItem: Codable, Sendable, Identifiable {
     let did: String
     var handle: String?
     var displayName: String?
@@ -79,26 +97,47 @@ struct ProfileSearchResult: Codable, Sendable, Identifiable {
 extension XRPCClient {
     func getActorProfile(actor: String, viewer: String? = nil, auth: AuthContext? = nil) async throws -> GrainProfileDetailed {
         var params = ["actor": actor]
-        if let viewer { params["viewer"] = viewer }
+        if let viewer {
+            params["viewer"] = viewer
+        }
         return try await query("social.grain.unspecced.getActorProfile", params: params, auth: auth, as: GrainProfileDetailed.self)
     }
 
     func getFollowers(actor: String, viewer: String? = nil, limit: Int = 50, cursor: String? = nil, auth: AuthContext? = nil) async throws -> GetFollowersResponse {
         var params = ["actor": actor, "limit": String(limit)]
-        if let viewer { params["viewer"] = viewer }
-        if let cursor { params["cursor"] = cursor }
+        if let viewer {
+            params["viewer"] = viewer
+        }
+        if let cursor {
+            params["cursor"] = cursor
+        }
         return try await query("social.grain.unspecced.getFollowers", params: params, auth: auth, as: GetFollowersResponse.self)
     }
 
     func getFollowing(actor: String, viewer: String? = nil, limit: Int = 50, cursor: String? = nil, auth: AuthContext? = nil) async throws -> GetFollowingResponse {
         var params = ["actor": actor, "limit": String(limit)]
-        if let viewer { params["viewer"] = viewer }
-        if let cursor { params["cursor"] = cursor }
+        if let viewer {
+            params["viewer"] = viewer
+        }
+        if let cursor {
+            params["cursor"] = cursor
+        }
         return try await query("social.grain.unspecced.getFollowing", params: params, auth: auth, as: GetFollowingResponse.self)
     }
 
     func getKnownFollowers(actor: String, viewer: String, auth: AuthContext? = nil) async throws -> GetKnownFollowersResponse {
         try await query("social.grain.unspecced.getKnownFollowers", params: ["actor": actor, "viewer": viewer], auth: auth, as: GetKnownFollowersResponse.self)
+    }
+
+    func getGalleryFavorites(gallery: String, viewer: String? = nil, limit: Int = 50, cursor: String? = nil, auth: AuthContext? = nil) async throws -> GetGalleryFavoritesResponse {
+        var params = ["gallery": gallery, "limit": String(limit)]
+        if let viewer {
+            params["viewer"] = viewer
+        }
+        if let cursor {
+            params["cursor"] = cursor
+        }
+        return try await query("social.grain.unspecced.getGalleryFavorites", params: params, auth: auth, as: GetGalleryFavoritesResponse.self)
     }
 
     func getSuggestedFollows(actor: String, limit: Int = 10, auth: AuthContext? = nil) async throws -> GetSuggestedFollowsResponse {
@@ -107,7 +146,9 @@ extension XRPCClient {
 
     func searchProfiles(query queryString: String, limit: Int = 30, cursor: String? = nil, auth: AuthContext? = nil) async throws -> SearchProfilesResponse {
         var params = ["q": queryString, "limit": String(limit)]
-        if let cursor { params["cursor"] = cursor }
+        if let cursor {
+            params["cursor"] = cursor
+        }
         return try await query("social.grain.unspecced.searchProfiles", params: params, auth: auth, as: SearchProfilesResponse.self)
     }
 }
