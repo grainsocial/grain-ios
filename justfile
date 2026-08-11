@@ -16,7 +16,7 @@ default:
 
 # Regenerate Xcode project from project.yml
 generate:
-    BUNDLE_ID={{bundle_id}} xcodegen generate
+    APPLE_TEAM_ID={{team_id}} BUNDLE_ID={{bundle_id}} xcodegen generate
     git config core.hooksPath .githooks
 
 # Worktree-local DerivedData path (avoids collisions with other worktrees)
@@ -106,8 +106,8 @@ device device_id:
     #!/usr/bin/env bash
     set -euo pipefail
     echo "Building for device {{device_id}}..."
-    set -o pipefail && xcodebuild build -scheme Grain -destination 'platform=iOS,id={{device_id}}' PRODUCT_BUNDLE_IDENTIFIER={{bundle_id}} -allowProvisioningUpdates 2>&1 | xcbeautify
-    APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData/Grain-*/Build/Products/Debug-iphoneos -name "${BUNDLE_NAME:-Grain}.app" -type d | head -1)
+    set -o pipefail && xcodebuild build -scheme Grain -destination 'platform=iOS,id={{device_id}}' -derivedDataPath "{{derived_data}}" PRODUCT_BUNDLE_IDENTIFIER={{bundle_id}} DEVELOPMENT_TEAM={{team_id}} -allowProvisioningUpdates 2>&1 | xcbeautify
+    APP_PATH=$(find "{{derived_data}}/Build/Products/Debug-iphoneos" -name "${BUNDLE_NAME:-Grain}.app" -type d | head -1)
     echo "Installing $APP_PATH..."
     xcrun devicectl device install app --device {{device_id}} "$APP_PATH"
     xcrun devicectl device process execute --device {{device_id}} /usr/bin/log -- config --subsystem {{bundle_id}} --mode level:debug 2>/dev/null || true
