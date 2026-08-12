@@ -145,7 +145,7 @@ final class XRPCClient: Sendable {
         var req = request
         try await applyAuth(&req, auth: auth)
 
-        let (data, response) = try await session.data(for: req)
+        let (data, response) = try await send(req)
         guard let httpResponse = response as? HTTPURLResponse else { return }
 
         if httpResponse.statusCode == 400,
@@ -157,9 +157,11 @@ final class XRPCClient: Sendable {
             updatedAuth?.nonce = nonce
             var retryReq = request
             try await applyAuth(&retryReq, auth: updatedAuth)
-            let (_, retryResponse) = try await session.data(for: retryReq)
+            let (_, retryResponse) = try await send(retryReq)
             guard let retryHttp = retryResponse as? HTTPURLResponse else { return }
-            if retryHttp.statusCode == 401 { throw XRPCError.unauthorized }
+            if retryHttp.statusCode == 401 {
+                throw XRPCError.unauthorized
+            }
             guard (200 ... 299).contains(retryHttp.statusCode) else {
                 throw XRPCError.httpError(statusCode: retryHttp.statusCode, body: nil)
             }
@@ -174,9 +176,11 @@ final class XRPCClient: Sendable {
                 updatedAuth?.nonce = nonce
                 var retryReq = request
                 try await applyAuth(&retryReq, auth: updatedAuth)
-                let (_, retryResponse) = try await session.data(for: retryReq)
+                let (_, retryResponse) = try await send(retryReq)
                 guard let retryHttp = retryResponse as? HTTPURLResponse else { return }
-                if retryHttp.statusCode == 401 { throw XRPCError.unauthorized }
+                if retryHttp.statusCode == 401 {
+                    throw XRPCError.unauthorized
+                }
                 guard (200 ... 299).contains(retryHttp.statusCode) else {
                     throw XRPCError.httpError(statusCode: retryHttp.statusCode, body: nil)
                 }
@@ -203,8 +207,17 @@ final class XRPCClient: Sendable {
         }
     }
 
+    /// Single funnel for network I/O, so DEBUG latency simulation covers every
+    /// request including retries. See `DebugDelay`.
+    private func send(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        #if DEBUG
+            await DebugDelay.wait()
+        #endif
+        return try await session.data(for: request)
+    }
+
     private func execute<T: Decodable>(_ request: URLRequest, as type: T.Type) async throws -> T {
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await send(request)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw XRPCError.httpError(statusCode: 0, body: data)
         }

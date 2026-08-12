@@ -317,8 +317,9 @@ struct ProfileView: View {
                     }
                     .padding(.top, 40)
                 } else {
-                    ProgressView()
-                        .padding(.top, 100)
+                    DelayedSkeleton {
+                        ProfileSkeletonView(showsTabBar: did == auth.userDID)
+                    }
                 }
             }
             .environment(zoomState)
@@ -715,7 +716,11 @@ struct ProfileView: View {
 
     @ViewBuilder
     private var galleriesGrid: some View {
-        if viewModel.galleries.isEmpty, !viewModel.isLoading {
+        if viewModel.galleries.isEmpty, viewModel.isLoading {
+            // Header lands before the feed does, so the grid carries its own
+            // placeholder for the gap.
+            DelayedSkeleton { SkeletonGrid() }
+        } else if viewModel.galleries.isEmpty {
             Text("No galleries yet")
                 .font(.subheadline)
                 .foregroundStyle(.tertiary)
@@ -836,9 +841,7 @@ struct ProfileView: View {
     @ViewBuilder
     private var favoritesGrid: some View {
         if viewModel.favoriteGalleries.isEmpty, !viewModel.favoritesLoaded {
-            ProgressView()
-                .frame(maxWidth: .infinity)
-                .padding(.top, 60)
+            DelayedSkeleton { SkeletonGrid(rows: 2) }
         } else if viewModel.favoriteGalleries.isEmpty, let err = viewModel.favoritesError {
             VStack(spacing: 8) {
                 Text("Couldn't load favorites")

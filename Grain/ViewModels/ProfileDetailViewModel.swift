@@ -98,12 +98,17 @@ final class ProfileDetailViewModel {
             self.error = error
             profileResult = nil
         }
+        // Publish the header the moment its own fetch lands rather than gating
+        // it on the feed/stories/known-followers requests. Purely an assignment
+        // — the await order below is untouched, per the note above.
+        if let profileResult {
+            profile = profileResult
+        }
         let feedResult = try? await feedFetch
         let storiesResult = try? await storiesFetch
         let knownResult = await knownFollowersFetch
 
-        if let profileResult {
-            profile = profileResult
+        if profileResult != nil {
             galleries = feedResult?.items ?? []
             galleryCursor = feedResult?.cursor
             hasMoreGalleries = feedResult?.cursor != nil
