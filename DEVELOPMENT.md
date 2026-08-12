@@ -77,20 +77,20 @@ output and isn't committed, `ci_scripts/ci_post_clone.sh` runs on every Xcode
 Cloud build to pull git-lfs assets, generate the project, and copy the committed
 package pins into place.
 
-Build numbers come from Xcode Cloud's run counter plus `BUILD_OFFSET` (59, the
-last build uploaded by hand), so the first Xcode Cloud build is 60.
-`CURRENT_PROJECT_VERSION` in `project.yml` is only rewritten on the CI runner —
-the committed value stays put.
+Build numbers are assigned by Xcode Cloud, which overwrites `CFBundleVersion`
+with its own run counter at archive time — `CURRENT_PROJECT_VERSION` in
+`project.yml` is ignored on CI. They only need to be unique and increasing
+within a marketing version, so a new train starting at a low number is fine.
 
 `MARKETING_VERSION` is still bumped by hand. Once a marketing version is
 approved on the App Store that train closes, and further uploads against it fail
 with `90186`/`90062` — so raise it in `project.yml` before releasing against an
 already-approved version.
 
-`just release` still archives and uploads from your Mac if you need it, but it
-bumps `CURRENT_PROJECT_VERSION` in `project.yml` and would collide with the
-Xcode Cloud sequence. If you use it, raise `BUILD_OFFSET` past the number it
-burned.
+`just release` still archives and uploads from your Mac if you need it, but
+don't mix the two: it uploads `project.yml`'s `CURRENT_PROJECT_VERSION`, which
+is far ahead of Xcode Cloud's run counter, and once a higher build number exists
+on the current train Xcode Cloud's next run would be rejected as not increasing.
 
 When SPM dependencies change, refresh the committed pins — Xcode Cloud disables
 automatic package resolution, and the live file lives inside the gitignored

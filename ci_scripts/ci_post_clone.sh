@@ -36,18 +36,14 @@ export APPLE_TEAM_ID="${APPLE_TEAM_ID:-YN68LN9T7Z}"
 export BUNDLE_ID="${BUNDLE_ID:-social.grain.grain}"
 export BUNDLE_NAME="${BUNDLE_NAME:-Grain}"
 
-# TestFlight rejects duplicate build numbers, and Xcode Cloud's run counter
-# starts at 1 while builds up to 59 already shipped from `just release`. Offset
-# the counter past the last manually uploaded build so the first Xcode Cloud
-# build is 60. Override BUILD_OFFSET as an environment variable in the App Store
-# Connect workflow if the sequence ever needs to jump again.
-BUILD_OFFSET="${BUILD_OFFSET:-59}"
-BUILD_NUMBER=$((${CI_BUILD_NUMBER:-1} + BUILD_OFFSET))
-
-# project.yml keeps CURRENT_PROJECT_VERSION as a literal so `just release` can
-# still bump it locally; CI overwrites it here rather than in the committed file.
-# MARKETING_VERSION is deliberately left alone — bumping the train is manual.
-sed -i '' "s/CURRENT_PROJECT_VERSION: \".*\"/CURRENT_PROJECT_VERSION: \"$BUILD_NUMBER\"/" project.yml
+# Build numbers are Xcode Cloud's to assign — it overwrites CFBundleVersion with
+# its own run counter when it archives, so writing one into project.yml here has
+# no effect (run 45 set CURRENT_PROJECT_VERSION to 104 and still uploaded as
+# build 45). Build numbers only have to be unique and increasing *within* a
+# marketing version, so restarting at a low number on a new train is fine.
+#
+# MARKETING_VERSION is left alone: bumping the train is manual and deliberate,
+# and it has to happen before the current version is approved (see DEVELOPMENT.md).
 
 xcodegen generate
 
