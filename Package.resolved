@@ -1,0 +1,33 @@
+{
+  "originHash" : "2da38bad5f973ceb21dd9cdca03d806a878c46740b57d15b440b6fd64e3780df",
+  "pins" : [
+    {
+      "identity" : "keychainaccess",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/kishikawakatsumi/KeychainAccess",
+      "state" : {
+        "revision" : "84e546727d66f1adc5439debad16270d0fdd04e7",
+        "version" : "4.2.2"
+      }
+    },
+    {
+      "identity" : "nuke",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/kean/Nuke",
+      "state" : {
+        "revision" : "83e19143355b02e9261edb2323b3e1e93287ebb9",
+        "version" : "12.9.0"
+      }
+    },
+    {
+      "identity" : "swiftyh3",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/pawelmajcher/SwiftyH3",
+      "state" : {
+        "revision" : "d5091720769598f3747f0b86c597f3ff73c18e65",
+        "version" : "0.6.0"
+      }
+    }
+  ],
+  "version" : 3
+}

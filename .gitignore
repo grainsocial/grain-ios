@@ -22,6 +22,9 @@ build/
 Packages/
 Package.pins
 Package.resolved
+# ...except the root copy, which Xcode Cloud needs (see ci_scripts/ci_post_clone.sh).
+# The real one lives inside the gitignored .xcodeproj, so it's mirrored here.
+!/Package.resolved
 
 # CocoaPods (not used but just in case)
 Pods/
