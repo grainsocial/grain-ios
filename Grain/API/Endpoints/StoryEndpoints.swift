@@ -28,7 +28,9 @@ extension XRPCClient {
 
     func getStoryArchive(actor: String, limit: Int = 50, cursor: String? = nil, auth: AuthContext? = nil) async throws -> GetStoryArchiveResponse {
         var params = ["actor": actor, "limit": String(limit)]
-        if let cursor { params["cursor"] = cursor }
+        if let cursor {
+            params["cursor"] = cursor
+        }
         return try await query("social.grain.unspecced.getStoryArchive", params: params, auth: auth, as: GetStoryArchiveResponse.self)
     }
 

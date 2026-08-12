@@ -3,6 +3,17 @@ import os
 
 private let logger = Logger(subsystem: "social.grain.grain", category: "BlueskyPost")
 
+/// Facet regexes, compiled once. The patterns are literals so they can't
+/// actually fail to compile — `try?` rather than `try!` keeps the linter happy,
+/// and a nil here just means that facet type is skipped.
+private enum FacetPattern {
+    static let url = try? NSRegularExpression(pattern: #"https?://[^\s<>\[\]()]+"#)
+    static let mention = try? NSRegularExpression(
+        pattern: #"@([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)*[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?"#
+    )
+    static let hashtag = try? NSRegularExpression(pattern: #"#(\p{L}[\p{L}\p{N}_]*)"#)
+}
+
 struct BlueskyPostOptions {
     let url: String
     let title: String?
@@ -154,7 +165,9 @@ enum BlueskyPost {
                 var parts: [String] = []
                 func appendIfDistinct(_ value: String?) {
                     guard let value = value?.trimmingCharacters(in: .whitespaces), !value.isEmpty else { return }
-                    if parts.last?.caseInsensitiveCompare(value) == .orderedSame { return }
+                    if parts.last?.caseInsensitiveCompare(value) == .orderedSame {
+                        return
+                    }
                     parts.append(value)
                 }
 
@@ -206,7 +219,9 @@ enum BlueskyPost {
         }
 
         var lines: [String] = []
-        if !content.isEmpty { lines.append(content) }
+        if !content.isEmpty {
+            lines.append(content)
+        }
         lines.append(contentsOf: suffixLines)
 
         return lines.joined(separator: "\n")
@@ -243,8 +258,7 @@ enum BlueskyPost {
         let nsText = text as NSString
 
         // URLs (highest priority, same as web)
-        let urlPattern = try! NSRegularExpression(pattern: #"https?://[^\s<>\[\]()]+"#)
-        for match in urlPattern.matches(in: text, range: NSRange(location: 0, length: nsText.length)) {
+        for match in FacetPattern.url?.matches(in: text, range: NSRange(location: 0, length: nsText.length)) ?? [] {
             guard let range = Range(match.range, in: text) else { continue }
             let byteStart = byteOffset(for: range.lowerBound)
             let byteEnd = byteOffset(for: range.upperBound)
@@ -257,10 +271,7 @@ enum BlueskyPost {
         }
 
         // Mentions (same regex as web — resolve handle to DID via public Bluesky API)
-        let mentionPattern = try! NSRegularExpression(
-            pattern: #"@([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)*[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?"#
-        )
-        for match in mentionPattern.matches(in: text, range: NSRange(location: 0, length: nsText.length)) {
+        for match in FacetPattern.mention?.matches(in: text, range: NSRange(location: 0, length: nsText.length)) ?? [] {
             guard let range = Range(match.range, in: text) else { continue }
             let byteStart = byteOffset(for: range.lowerBound)
             let byteEnd = byteOffset(for: range.upperBound)
@@ -278,8 +289,7 @@ enum BlueskyPost {
         }
 
         // Hashtags (same regex as web)
-        let hashtagPattern = try! NSRegularExpression(pattern: #"#(\p{L}[\p{L}\p{N}_]*)"#)
-        for match in hashtagPattern.matches(in: text, range: NSRange(location: 0, length: nsText.length)) {
+        for match in FacetPattern.hashtag?.matches(in: text, range: NSRange(location: 0, length: nsText.length)) ?? [] {
             guard let fullRange = Range(match.range, in: text),
                   let tagRange = Range(match.range(at: 1), in: text) else { continue }
             let byteStart = byteOffset(for: fullRange.lowerBound)

@@ -406,8 +406,8 @@ private struct FeedTabContent: View {
                                 Task { await viewModel.loadMore(auth: auth.authContext()) }
                             }
                             // Prefetch first image of next 3 galleries
-                            let input = viewModel.galleries.map { g in
-                                (firstThumb: g.items?.first?.thumb, firstFullsize: g.items?.first?.fullsize)
+                            let input = viewModel.galleries.map { gallery in
+                                (firstThumb: gallery.items?.first?.thumb, firstFullsize: gallery.items?.first?.fullsize)
                             }
                             let plan = ImagePrefetchPlanning.feedPrefetchRequests(galleries: input, currentIndex: index)
                             feedPrefetcher.startPrefetching(with: plan.all)

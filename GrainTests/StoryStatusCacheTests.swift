@@ -4,9 +4,9 @@ import XCTest
 @MainActor
 final class StoryStatusCacheTests: XCTestCase {
     private static let iso8601: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime]
-        return f
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
     }()
 
     /// Creates an author whose latest story was created `offset` seconds from now.

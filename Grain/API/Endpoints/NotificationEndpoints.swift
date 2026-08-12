@@ -23,8 +23,12 @@ extension XRPCClient {
         auth: AuthContext? = nil
     ) async throws -> GetNotificationsResponse {
         var params = ["limit": String(limit)]
-        if let cursor { params["cursor"] = cursor }
-        if countOnly { params["countOnly"] = "true" }
+        if let cursor {
+            params["cursor"] = cursor
+        }
+        if countOnly {
+            params["countOnly"] = "true"
+        }
         return try await query("social.grain.unspecced.getNotifications", params: params, auth: auth, as: GetNotificationsResponse.self)
     }
 }

@@ -114,61 +114,41 @@ struct RichTextView: View {
 
     // MARK: - Regex fallback
 
+    private struct Match {
+        let range: Range<String.Index>
+        let segment: Segment
+    }
+
+    /// Collects non-overlapping matches of `pattern`, building each segment from
+    /// the matched substring. Ranges already claimed by an earlier pattern win,
+    /// so call order sets priority.
+    private func appendMatches(
+        of pattern: String,
+        in text: String,
+        to matches: inout [Match],
+        segment: (String) -> Segment
+    ) {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return }
+        let nsRange = NSRange(text.startIndex..., in: text)
+        for matchResult in regex.matches(in: text, range: nsRange) {
+            guard let range = Range(matchResult.range, in: text),
+                  !matches.contains(where: { $0.range.overlaps(range) })
+            else { continue }
+            matches.append(Match(range: range, segment: segment(String(text[range]))))
+        }
+    }
+
     private func segmentsFromRegex(text: String) -> [Segment] {
         let urlPattern = #"https?://[^\s<>\[\]()]+"#
         let bareDomainPattern = #"(?<![/@\w.])([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}(/[^\s<>\[\]()]*)?"#
         let mentionPattern = #"@([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?"#
         let hashtagPattern = #"#(\p{L}[\p{L}\p{N}_]*)"#
 
-        struct Match {
-            let range: Range<String.Index>
-            let segment: Segment
-        }
-
         var matches: [Match] = []
-
-        if let regex = try? NSRegularExpression(pattern: urlPattern) {
-            let nsRange = NSRange(text.startIndex..., in: text)
-            for matchResult in regex.matches(in: text, range: nsRange) {
-                if let range = Range(matchResult.range, in: text) {
-                    let str = String(text[range])
-                    matches.append(Match(range: range, segment: .link(str, url: str)))
-                }
-            }
-        }
-
-        if let regex = try? NSRegularExpression(pattern: bareDomainPattern) {
-            let nsRange = NSRange(text.startIndex..., in: text)
-            for matchResult in regex.matches(in: text, range: nsRange) {
-                if let range = Range(matchResult.range, in: text) {
-                    if matches.contains(where: { $0.range.overlaps(range) }) { continue }
-                    let str = String(text[range])
-                    matches.append(Match(range: range, segment: .link(str, url: "https://\(str)")))
-                }
-            }
-        }
-
-        if let regex = try? NSRegularExpression(pattern: mentionPattern) {
-            let nsRange = NSRange(text.startIndex..., in: text)
-            for matchResult in regex.matches(in: text, range: nsRange) {
-                if let range = Range(matchResult.range, in: text) {
-                    if matches.contains(where: { $0.range.overlaps(range) }) { continue }
-                    let str = String(text[range])
-                    matches.append(Match(range: range, segment: .mention(str, did: String(str.dropFirst()))))
-                }
-            }
-        }
-
-        if let regex = try? NSRegularExpression(pattern: hashtagPattern) {
-            let nsRange = NSRange(text.startIndex..., in: text)
-            for matchResult in regex.matches(in: text, range: nsRange) {
-                if let range = Range(matchResult.range, in: text) {
-                    if matches.contains(where: { $0.range.overlaps(range) }) { continue }
-                    let str = String(text[range])
-                    matches.append(Match(range: range, segment: .hashtag(str, tag: String(str.dropFirst()))))
-                }
-            }
-        }
+        appendMatches(of: urlPattern, in: text, to: &matches) { .link($0, url: $0) }
+        appendMatches(of: bareDomainPattern, in: text, to: &matches) { .link($0, url: "https://\($0)") }
+        appendMatches(of: mentionPattern, in: text, to: &matches) { .mention($0, did: String($0.dropFirst())) }
+        appendMatches(of: hashtagPattern, in: text, to: &matches) { .hashtag($0, tag: String($0.dropFirst())) }
 
         matches.sort { $0.range.lowerBound < $1.range.lowerBound }
 

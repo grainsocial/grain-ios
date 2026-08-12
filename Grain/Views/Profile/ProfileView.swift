@@ -64,7 +64,11 @@ struct ProfileView: View {
             }
         }
     }
+}
 
+// MARK: - Header & content
+
+extension ProfileView {
     @ViewBuilder
     private func avatarButton(profile: GrainProfileDetailed) -> some View {
         let hasStory = !viewModel.stories.isEmpty
@@ -523,7 +527,11 @@ struct ProfileView: View {
             }
         } // close ScrollViewReader
     }
+}
 
+// MARK: - Layout sections
+
+extension ProfileView {
     private func copyText(_ text: String) {
         UIPasteboard.general.string = text
         showCopiedToast = true
@@ -537,11 +545,11 @@ struct ProfileView: View {
     private var knownFollowersRow: some View {
         let followers = viewModel.knownFollowers
         let displayCount = max(followers.count, 0)
-        let names = followers.prefix(2).compactMap { f -> String? in
-            if let name = f.displayName, !name.isEmpty {
+        let names = followers.prefix(2).compactMap { follower -> String? in
+            if let name = follower.displayName, !name.isEmpty {
                 return name
             }
-            return f.handle
+            return follower.handle
         }
         let othersCount = displayCount - names.count
 
@@ -658,24 +666,24 @@ struct ProfileView: View {
                         .containerRelativeFrame(.horizontal)
                         .contentShape(Rectangle())
                         .clipped()
-                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { h in
-                            tabHeights[.grid] = h
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { newHeight in
+                            tabHeights[.grid] = newHeight
                         }
                         .id(ProfileViewMode.grid)
                     favoritesGrid
                         .containerRelativeFrame(.horizontal)
                         .contentShape(Rectangle())
                         .clipped()
-                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { h in
-                            tabHeights[.favorites] = h
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { newHeight in
+                            tabHeights[.favorites] = newHeight
                         }
                         .id(ProfileViewMode.favorites)
                     storyArchiveGrid
                         .containerRelativeFrame(.horizontal)
                         .contentShape(Rectangle())
                         .clipped()
-                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { h in
-                            tabHeights[.stories] = h
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { newHeight in
+                            tabHeights[.stories] = newHeight
                         }
                         .id(ProfileViewMode.stories)
                 }
@@ -710,8 +718,8 @@ struct ProfileView: View {
         let clamped = max(0, min(raw, CGFloat(modes.count - 1)))
         let lower = Int(clamped.rounded(.down))
         let upper = min(lower + 1, modes.count - 1)
-        let t = clamped - CGFloat(lower)
-        return max(heights[lower] * (1 - t) + heights[upper] * t, fallback)
+        let progress = clamped - CGFloat(lower)
+        return max(heights[lower] * (1 - progress) + heights[upper] * progress, fallback)
     }
 
     @ViewBuilder

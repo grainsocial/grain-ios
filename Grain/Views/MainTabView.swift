@@ -25,8 +25,8 @@ struct MainTabView: View {
     @Binding var pendingDeepLink: DeepLink?
 
     @MainActor static let badgeAppearanceConfigured: Bool = MainActor.assumeIsolated {
-        let _spid = launchSignposter.makeSignpostID()
-        let _state = launchSignposter.beginInterval("BadgeAppearanceSetup", id: _spid)
+        let spid = launchSignposter.makeSignpostID()
+        let badgeState = launchSignposter.beginInterval("BadgeAppearanceSetup", id: spid)
         let color = UIColor(named: "AccentColor")
         let textAttrs: [NSAttributedString.Key: Any] = [.foregroundColor: UIColor.white]
         let appearance = UITabBarAppearance()
@@ -41,7 +41,7 @@ struct MainTabView: View {
         apply(appearance.compactInlineLayoutAppearance)
         UITabBar.appearance().standardAppearance = appearance
         UITabBar.appearance().scrollEdgeAppearance = appearance
-        launchSignposter.endInterval("BadgeAppearanceSetup", _state)
+        launchSignposter.endInterval("BadgeAppearanceSetup", badgeState)
         return true
     }
 
@@ -100,9 +100,9 @@ struct MainTabView: View {
                 storyStatusCache: storyStatusCache,
                 viewedStories: viewedStories
             )
-            let c = auth.makeClient()
-            client = c
-            notificationsVM.updateClient(c)
+            let newClient = auth.makeClient()
+            client = newClient
+            notificationsVM.updateClient(newClient)
 
             // Start avatar fetch immediately — it doesn't need an auth context
             let avatarSpid = launchSignposter.makeSignpostID()
@@ -121,7 +121,7 @@ struct MainTabView: View {
             let labelsState = launchSignposter.beginInterval("LabelDefsFetch", id: labelsSpid)
             launchLogger.debug("[LabelDefsFetch] begin")
             async let notifFetch: Void = notificationsVM.fetchUnseenCount(auth: ctx)
-            async let labelsFetch: Void = labelDefsCache.loadIfNeeded(client: c, auth: ctx)
+            async let labelsFetch: Void = labelDefsCache.loadIfNeeded(client: newClient, auth: ctx)
 
             await avatarFetch
             launchSignposter.endInterval("AvatarFetch", avatarState)

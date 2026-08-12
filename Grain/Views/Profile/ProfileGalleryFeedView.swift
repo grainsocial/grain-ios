@@ -200,19 +200,19 @@ struct ProfileGalleryFeedView: View {
 
     @ViewBuilder
     private func galleryCard(gallery: Binding<GrainGallery>, index: Int) -> some View {
-        let g = gallery.wrappedValue
-        let isOwner = g.creator.did == auth.userDID
+        let item = gallery.wrappedValue
+        let isOwner = item.creator.did == auth.userDID
         GalleryCardView(
             gallery: gallery, client: client,
             onNavigate: {},
-            onCommentTap: { commentSheetUri = g.uri },
-            onFavoritesTap: { favoritesGalleryUri = FavoritesDestination(galleryUri: g.uri) },
+            onCommentTap: { commentSheetUri = item.uri },
+            onFavoritesTap: { favoritesGalleryUri = FavoritesDestination(galleryUri: item.uri) },
             onProfileTap: { did in selectedProfileDid = did },
             onHashtagTap: { tag in selectedHashtag = tag },
             onLocationTap: { h3, name in selectedLocation = LocationDestination(h3Index: h3, name: name) },
             onStoryTap: { author in cardStoryAuthor = author },
-            onReport: !isOwner ? { reportGallery = g } : nil,
-            onDelete: isOwner ? { showDeleteConfirmation = true; deleteGalleryUri = g.uri } : nil
+            onReport: !isOwner ? { reportGallery = item } : nil,
+            onDelete: isOwner ? { showDeleteConfirmation = true; deleteGalleryUri = item.uri } : nil
         )
         .onAppear {
             if index == items.count - 1 {

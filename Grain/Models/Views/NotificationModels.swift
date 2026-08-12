@@ -79,10 +79,8 @@ struct GroupedNotification: Identifiable, Equatable, Hashable {
         self.additional = additional
         var seen = Set<String>()
         var authors: [GrainProfile] = []
-        for notif in [notification] + additional {
-            if seen.insert(notif.author.did).inserted {
-                authors.append(notif.author)
-            }
+        for notif in [notification] + additional where seen.insert(notif.author.did).inserted {
+            authors.append(notif.author)
         }
         cachedAuthors = authors
     }
@@ -95,9 +93,9 @@ struct GroupedNotification: Identifiable, Equatable, Hashable {
     }
 
     private nonisolated(unsafe) static let dateFormatter: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return f
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
     }()
 
     @MainActor
@@ -120,16 +118,16 @@ struct GroupedNotification: Identifiable, Equatable, Hashable {
             var matched = false
 
             for i in groups.indices {
-                let g = groups[i]
-                let gts = parseDate(g.notification.createdAt)
+                let group = groups[i]
+                let groupTimestamp = parseDate(group.notification.createdAt)
 
-                guard abs(gts - ts) < twoDays,
-                      notif.reasonType == g.notification.reasonType,
-                      subjectKey(notif) == subjectKey(g.notification),
-                      notif.author.did != g.notification.author.did
+                guard abs(groupTimestamp - ts) < twoDays,
+                      notif.reasonType == group.notification.reasonType,
+                      subjectKey(notif) == subjectKey(group.notification),
+                      notif.author.did != group.notification.author.did
                 else { continue }
 
-                let alreadyHas = g.additional.contains { $0.author.did == notif.author.did }
+                let alreadyHas = group.additional.contains { $0.author.did == notif.author.did }
                 if !alreadyHas {
                     groups[i].addAuthor(notif)
                 }
@@ -160,16 +158,16 @@ struct GroupedNotification: Identifiable, Equatable, Hashable {
             var matched = false
 
             for i in groups.indices {
-                let g = groups[i]
-                let gts = parseDate(g.notification.createdAt)
+                let group = groups[i]
+                let groupTimestamp = parseDate(group.notification.createdAt)
 
-                guard abs(gts - ts) < twoDays,
-                      notif.reasonType == g.notification.reasonType,
-                      subjectKey(notif) == subjectKey(g.notification),
-                      notif.author.did != g.notification.author.did
+                guard abs(groupTimestamp - ts) < twoDays,
+                      notif.reasonType == group.notification.reasonType,
+                      subjectKey(notif) == subjectKey(group.notification),
+                      notif.author.did != group.notification.author.did
                 else { continue }
 
-                let alreadyHas = g.additional.contains { $0.author.did == notif.author.did }
+                let alreadyHas = group.additional.contains { $0.author.did == notif.author.did }
                 if !alreadyHas {
                     groups[i].addAuthor(notif)
                 }
@@ -184,7 +182,9 @@ struct GroupedNotification: Identifiable, Equatable, Hashable {
     }
 
     private static func subjectKey(_ notif: GrainNotification) -> String {
-        if notif.reasonType == .follow { return "__follow__" }
+        if notif.reasonType == .follow {
+            return "__follow__"
+        }
         return notif.galleryUri ?? notif.storyUri ?? notif.uri
     }
 }

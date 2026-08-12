@@ -277,7 +277,9 @@ struct EditProfileView: View {
         var high: CGFloat = 0.95
         var result = rendered.jpegData(compressionQuality: high) ?? Data()
 
-        if result.count <= maxBytes { return result }
+        if result.count <= maxBytes {
+            return result
+        }
 
         for _ in 0 ..< 8 {
             let mid = (low + high) / 2

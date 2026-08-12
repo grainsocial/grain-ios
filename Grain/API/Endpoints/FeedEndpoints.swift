@@ -98,11 +98,21 @@ extension XRPCClient {
         auth: AuthContext? = nil
     ) async throws -> GetFeedResponse {
         var params = ["feed": feed, "limit": String(limit)]
-        if let cursor { params["cursor"] = cursor }
-        if let actor { params["actor"] = actor }
-        if let camera { params["camera"] = camera }
-        if let location { params["location"] = location }
-        if let tag { params["tag"] = tag }
+        if let cursor {
+            params["cursor"] = cursor
+        }
+        if let actor {
+            params["actor"] = actor
+        }
+        if let camera {
+            params["camera"] = camera
+        }
+        if let location {
+            params["location"] = location
+        }
+        if let tag {
+            params["tag"] = tag
+        }
         return try await query("dev.hatk.getFeed", params: params, auth: auth, as: GetFeedResponse.self)
     }
 
@@ -121,7 +131,9 @@ extension XRPCClient {
         auth: AuthContext? = nil
     ) async throws -> GetCommentThreadResponse {
         var params = ["subject": subject, "limit": String(limit)]
-        if let cursor { params["cursor"] = cursor }
+        if let cursor {
+            params["cursor"] = cursor
+        }
         return try await query("social.grain.unspecced.getCommentThread", params: params, auth: auth, as: GetCommentThreadResponse.self)
     }
 
@@ -164,7 +176,9 @@ extension XRPCClient {
         auth: AuthContext? = nil
     ) async throws -> GetFeedResponse {
         var params = ["actor": actor, "limit": String(limit)]
-        if let cursor { params["cursor"] = cursor }
+        if let cursor {
+            params["cursor"] = cursor
+        }
         return try await query("social.grain.unspecced.getActorFavorites", params: params, auth: auth, as: GetFeedResponse.self)
     }
 
@@ -176,7 +190,9 @@ extension XRPCClient {
         auth: AuthContext? = nil
     ) async throws -> SearchGalleriesResponse {
         var params = ["q": queryString, "limit": String(limit), "fuzzy": String(fuzzy)]
-        if let cursor { params["cursor"] = cursor }
+        if let cursor {
+            params["cursor"] = cursor
+        }
         return try await query("social.grain.unspecced.searchGalleries", params: params, auth: auth, as: SearchGalleriesResponse.self)
     }
 }

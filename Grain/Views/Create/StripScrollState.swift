@@ -26,20 +26,20 @@ final class StripScrollState {
 
     // MARK: - Pure layout math
 
-    /// Centered offset for cell at `idx` within container width `W`.
-    static func offset(forIndex idx: Int, itemCount: Int, containerWidth W: CGFloat) -> CGFloat {
-        guard itemCount > 0, W > 0 else { return 0 }
+    /// Centered offset for cell at `idx` within container width `width`.
+    static func offset(forIndex idx: Int, itemCount: Int, containerWidth width: CGFloat) -> CGFloat {
+        guard itemCount > 0, width > 0 else { return 0 }
         let stride = thumbSize + spacing
         let halfCell = thumbSize / 2
-        let unclamped = W / 2 - halfCell - CGFloat(idx) * stride
-        return clamp(unclamped, itemCount: itemCount, containerWidth: W)
+        let unclamped = width / 2 - halfCell - CGFloat(idx) * stride
+        return clamp(unclamped, itemCount: itemCount, containerWidth: width)
     }
 
     /// Clamp offset so HStack can't scroll past its own bounds.
-    static func clamp(_ offset: CGFloat, itemCount: Int, containerWidth W: CGFloat) -> CGFloat {
-        guard itemCount > 0, W > 0 else { return 0 }
+    static func clamp(_ offset: CGFloat, itemCount: Int, containerWidth width: CGFloat) -> CGFloat {
+        guard itemCount > 0, width > 0 else { return 0 }
         let contentWidth = CGFloat(itemCount) * thumbSize + CGFloat(max(0, itemCount - 1)) * spacing
-        let minOffset = min(0, W - contentWidth)
+        let minOffset = min(0, width - contentWidth)
         return max(minOffset, min(0, offset))
     }
 
@@ -48,23 +48,23 @@ final class StripScrollState {
     func handleDragEnded(
         translation: CGFloat,
         predictedEnd: CGFloat,
-        containerWidth W: CGFloat,
+        containerWidth width: CGFloat,
         itemCount: Int
     ) {
         let originalBase = baseOffset
-        let committed = Self.clamp(originalBase + translation, itemCount: itemCount, containerWidth: W)
+        let committed = Self.clamp(originalBase + translation, itemCount: itemCount, containerWidth: width)
         baseOffset = committed
         dragTranslation = 0
 
-        let projected = Self.clamp(originalBase + predictedEnd, itemCount: itemCount, containerWidth: W)
+        let projected = Self.clamp(originalBase + predictedEnd, itemCount: itemCount, containerWidth: width)
         let nearest = (0 ..< itemCount).min(by: {
-            abs(Self.offset(forIndex: $0, itemCount: itemCount, containerWidth: W) - projected)
-                < abs(Self.offset(forIndex: $1, itemCount: itemCount, containerWidth: W) - projected)
+            abs(Self.offset(forIndex: $0, itemCount: itemCount, containerWidth: width) - projected)
+                < abs(Self.offset(forIndex: $1, itemCount: itemCount, containerWidth: width) - projected)
         }) ?? 0
 
         stripSignposter.emitEvent("StripDragEnded", "snap=\(nearest)")
         withAnimation(.snappy) {
-            baseOffset = Self.offset(forIndex: nearest, itemCount: itemCount, containerWidth: W)
+            baseOffset = Self.offset(forIndex: nearest, itemCount: itemCount, containerWidth: width)
         }
     }
 
@@ -81,10 +81,10 @@ final class StripScrollState {
     /// X-button fade opacity based on cell's screen position relative to the
     /// container edges. Fades over one xRadius of margin so the button vanishes
     /// exactly as it reaches the clip boundary.
-    func deleteOpacity(cellIndex idx: Int, containerWidth W: CGFloat) -> CGFloat {
+    func deleteOpacity(cellIndex idx: Int, containerWidth width: CGFloat) -> CGFloat {
         let cellLeft = currentOffset + CGFloat(idx) * (Self.thumbSize + Self.spacing)
         let offLeft = -cellLeft
-        let offRight = (cellLeft + Self.thumbSize) - W
+        let offRight = (cellLeft + Self.thumbSize) - width
         let xCenterX = cellLeft + Self.thumbSize
         let xRadius: CGFloat = 11
         let xPadding: CGFloat = 2
@@ -93,7 +93,7 @@ final class StripScrollState {
             let dist = xCenterX
             return dist >= xRadius + xPadding ? 1 : max(0, (dist - xPadding) / xRadius)
         } else if offRight > 0 {
-            let dist = W - cellLeft
+            let dist = width - cellLeft
             return dist >= xRadius + xPadding ? 1 : max(0, (dist - xPadding) / xRadius)
         }
         return 1

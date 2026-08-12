@@ -16,6 +16,28 @@ final class GrainTests: XCTestCase {
     }
 
     func testTokenStorageClear() {
+        // TokenStorage is Keychain-backed and the test host shares that
+        // Keychain with the installed app, so an unguarded clear() signs the
+        // simulator's app out. Snapshot the real session and restore it.
+        let saved = (
+            accessToken: TokenStorage.accessToken,
+            refreshToken: TokenStorage.refreshToken,
+            userDID: TokenStorage.userDID,
+            userHandle: TokenStorage.userHandle,
+            userAvatar: TokenStorage.userAvatar,
+            expiresAt: TokenStorage.tokenExpiresAt,
+            scope: TokenStorage.grantedScope
+        )
+        defer {
+            TokenStorage.accessToken = saved.accessToken
+            TokenStorage.refreshToken = saved.refreshToken
+            TokenStorage.userDID = saved.userDID
+            TokenStorage.userHandle = saved.userHandle
+            TokenStorage.userAvatar = saved.userAvatar
+            TokenStorage.tokenExpiresAt = saved.expiresAt
+            TokenStorage.grantedScope = saved.scope
+        }
+
         TokenStorage.clear()
         XCTAssertNil(TokenStorage.accessToken)
         XCTAssertNil(TokenStorage.refreshToken)

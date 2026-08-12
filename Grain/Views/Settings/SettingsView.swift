@@ -313,8 +313,12 @@ private struct UploadDefaultsView: View {
             if let authContext = await auth.authContext(),
                let prefs = try? await client.getPreferences(auth: authContext).preferences
             {
-                if let exif = prefs.includeExif { includeExif = exif }
-                if let location = prefs.includeLocation { includeLocation = location }
+                if let exif = prefs.includeExif {
+                    includeExif = exif
+                }
+                if let location = prefs.includeLocation {
+                    includeLocation = location
+                }
             }
             hasLoadedPrefs = true
         }

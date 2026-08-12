@@ -124,7 +124,9 @@ struct ReorderRecognizer: UIGestureRecognizerRepresentable {
             _: UIGestureRecognizer
         ) -> Bool {
             MainActor.assumeIsolated {
-                if isEnabled { onChange(.arming, .zero) }
+                if isEnabled {
+                    onChange(.arming, .zero)
+                }
                 return isEnabled
             }
         }

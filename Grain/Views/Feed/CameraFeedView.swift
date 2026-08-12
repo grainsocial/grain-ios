@@ -172,21 +172,21 @@ struct CameraFeedView: View {
 
     @ViewBuilder
     private func galleryCard(gallery: Binding<GrainGallery>) -> some View {
-        let g = gallery.wrappedValue
-        let isOwner = g.creator.did == auth.userDID
+        let item = gallery.wrappedValue
+        let isOwner = item.creator.did == auth.userDID
         let reportAction: (() -> Void)? = !isOwner ? {
-            reportGallery = g
+            reportGallery = item
         } : nil
         let deleteAction: (() -> Void)? = isOwner ? {
             showDeleteConfirmation = true
-            deleteGalleryUri = g.uri
+            deleteGalleryUri = item.uri
         } : nil
         GalleryCardView(
             gallery: gallery,
             client: client,
-            onNavigate: { selectedUri = g.uri },
-            onCommentTap: { commentSheetUri = g.uri },
-            onFavoritesTap: { favoritesGalleryUri = FavoritesDestination(galleryUri: g.uri) },
+            onNavigate: { selectedUri = item.uri },
+            onCommentTap: { commentSheetUri = item.uri },
+            onFavoritesTap: { favoritesGalleryUri = FavoritesDestination(galleryUri: item.uri) },
             onProfileTap: { did in selectedProfileDid = did },
             onHashtagTap: { tag in selectedHashtag = tag },
             onLocationTap: { h3, name in selectedLocation = LocationDestination(h3Index: h3, name: name) },
@@ -195,7 +195,7 @@ struct CameraFeedView: View {
             onDelete: deleteAction
         )
         .onAppear {
-            if g.id == galleries.last?.id {
+            if item.id == galleries.last?.id {
                 Task { await loadMore() }
             }
         }

@@ -54,12 +54,16 @@ struct AnyCodable: Codable, Sendable {
     }
 
     var dictValue: [String: AnyCodable]? {
-        if case let .dict(dictVal) = storage { return dictVal }
+        if case let .dict(dictVal) = storage {
+            return dictVal
+        }
         return nil
     }
 
     var stringValue: String? {
-        if case let .string(s) = storage { return s }
+        if case let .string(value) = storage {
+            return value
+        }
         return nil
     }
 

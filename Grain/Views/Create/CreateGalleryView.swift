@@ -21,14 +21,14 @@ private actor LoadThrottle {
     func acquire(spid: OSSignpostID) async {
         if active < maxConcurrent {
             active += 1
-            let a = active
-            createSignposter.emitEvent("ThrottleAcquired", id: spid, "active=\(a),waiters=0")
+            let activeCount = active
+            createSignposter.emitEvent("ThrottleAcquired", id: spid, "active=\(activeCount),waiters=0")
         } else {
-            let a = active, w = waiters.count
-            let waitState = createSignposter.beginInterval("ThrottleWait", id: spid, "active=\(a),waiters=\(w)")
+            let activeCount = active, waiterCount = waiters.count
+            let waitState = createSignposter.beginInterval("ThrottleWait", id: spid, "active=\(activeCount),waiters=\(waiterCount)")
             await withCheckedContinuation { self.waiters.append($0) }
-            let a2 = active
-            createSignposter.endInterval("ThrottleWait", waitState, "active=\(a2)")
+            let activeAfterWait = active
+            createSignposter.endInterval("ThrottleWait", waitState, "active=\(activeAfterWait)")
         }
     }
 
@@ -36,12 +36,12 @@ private actor LoadThrottle {
         if let next = waiters.first {
             waiters.removeFirst()
             next.resume()
-            let a = active, w = waiters.count
-            createSignposter.emitEvent("ThrottleHandoff", id: spid, "active=\(a),waiters=\(w)")
+            let activeCount = active, waiterCount = waiters.count
+            createSignposter.emitEvent("ThrottleHandoff", id: spid, "active=\(activeCount),waiters=\(waiterCount)")
         } else {
             active -= 1
-            let a = active
-            createSignposter.emitEvent("ThrottleReleased", id: spid, "active=\(a)")
+            let activeCount = active
+            createSignposter.emitEvent("ThrottleReleased", id: spid, "active=\(activeCount)")
         }
     }
 }
@@ -166,7 +166,9 @@ struct CreateGalleryView: View {
                 let exif = metadata.flatMap { makeExifSummary(from: $0) }
                 let item = PhotoItem(thumbnail: thumb, carouselPreview: carousel, source: .camera(image, metadata: metadata), exifSummary: exif)
                 photoItems.append(item)
-                if selectedPhotoID == nil { selectedPhotoID = item.id }
+                if selectedPhotoID == nil {
+                    selectedPhotoID = item.id
+                }
             }
             .ignoresSafeArea()
         }
@@ -174,8 +176,12 @@ struct CreateGalleryView: View {
             if let authContext = await auth.authContext(),
                let prefs = try? await client.getPreferences(auth: authContext).preferences
             {
-                if let exif = prefs.includeExif { sendExif = exif }
-                if let location = prefs.includeLocation { includeLocation = location }
+                if let exif = prefs.includeExif {
+                    sendExif = exif
+                }
+                if let location = prefs.includeLocation {
+                    includeLocation = location
+                }
             }
         }
         .navigationTitle("New Gallery")
@@ -344,9 +350,11 @@ struct CreateGalleryView: View {
             }
         }
     }
+}
 
-    // MARK: - Photo Loading
+// MARK: - Photo loading & submission
 
+extension CreateGalleryView {
     private func loadPickerPhotos() async {
         // Build set of picker item IDs currently in selectedPhotos
         let selectedIDs = Set(selectedPhotos.compactMap(\.itemIdentifier))
@@ -399,7 +407,9 @@ struct CreateGalleryView: View {
                 }
             }
             for await (index, item) in group {
-                if let item { loaded.append((index, item)) }
+                if let item {
+                    loaded.append((index, item))
+                }
             }
         }
         createSignposter.endInterval("LoadPickerBatch", batchState, "loaded=\(loaded.count)")
@@ -407,12 +417,12 @@ struct CreateGalleryView: View {
         // Dedup: with .continuousAndOrdered the picker fires onChange per-item,
         // so a previous load may have already added some of these.
         let alreadyLoaded = Set(photoItems.compactMap { item -> String? in
-            guard case let .picker(p) = item.source else { return nil }
-            return p.itemIdentifier
+            guard case let .picker(pickerItem) = item.source else { return nil }
+            return pickerItem.itemIdentifier
         })
         let deduped = loaded.sorted(by: { $0.index < $1.index }).map(\.item).filter { item in
-            guard case let .picker(p) = item.source else { return true }
-            return !(p.itemIdentifier.map { alreadyLoaded.contains($0) } ?? false)
+            guard case let .picker(pickerItem) = item.source else { return true }
+            return !(pickerItem.itemIdentifier.map { alreadyLoaded.contains($0) } ?? false)
         }
         photoItems += deduped
     }
@@ -479,7 +489,9 @@ struct CreateGalleryView: View {
                 "title": AnyCodable(title),
                 "createdAt": AnyCodable(now),
             ]
-            if !description.isEmpty { galleryRecord["description"] = AnyCodable(description) }
+            if !description.isEmpty {
+                galleryRecord["description"] = AnyCodable(description)
+            }
             if !selectedLabels.isEmpty {
                 let labelValues = selectedLabels.map { ["val": AnyCodable($0)] as [String: AnyCodable] }
                 galleryRecord["labels"] = AnyCodable([
@@ -587,9 +599,9 @@ struct PhotoItem: Identifiable {
     /// Thumbnail's natural width-to-height ratio. Computed once from `thumbnail.size`
     /// and used everywhere a cell needs aspect geometry — single source of truth.
     var naturalAspect: CGFloat {
-        let h = thumbnail.size.height
-        guard h > 0 else { return 1 }
-        return thumbnail.size.width / h
+        let height = thumbnail.size.height
+        guard height > 0 else { return 1 }
+        return thumbnail.size.width / height
     }
 
     static func makeThumbnail(from image: UIImage, maxSize: CGFloat = 150) -> UIImage {
@@ -825,10 +837,14 @@ private func buildExifSummary(exifDict: [String: Any]?, tiffDict: [String: Any]?
     }
     if let focal = exifDict?[kCGImagePropertyExifFocalLenIn35mmFilm as String] {
         let mm = (focal as? Int) ?? Int((focal as? Double) ?? 0)
-        if mm > 0 { summary.focalLength = "\(mm)mm" }
+        if mm > 0 {
+            summary.focalLength = "\(mm)mm"
+        }
     }
     let parts = [summary.shutterSpeed, summary.iso, summary.focalLength, summary.aperture].compactMap(\.self)
-    if !parts.isEmpty { summary.exposure = parts.joined(separator: "  ") }
+    if !parts.isEmpty {
+        summary.exposure = parts.joined(separator: "  ")
+    }
 
     guard summary.camera != nil || summary.lens != nil || summary.exposure != nil else { return nil }
     return summary
@@ -932,8 +948,8 @@ private struct SheetGestureDisabler: UIViewRepresentable {
             // Walk the responder chain from our UIView up to the first
             // UIViewController whose presentationController is the sheet.
             var responder: UIResponder? = uiView
-            while let r = responder {
-                if let vc = r as? UIViewController,
+            while let current = responder {
+                if let vc = current as? UIViewController,
                    vc.presentationController is UISheetPresentationController,
                    let presentedView = vc.presentationController?.presentedView
                 {
@@ -942,7 +958,7 @@ private struct SheetGestureDisabler: UIViewRepresentable {
                     }
                     return
                 }
-                responder = r.next
+                responder = current.next
             }
         }
     }

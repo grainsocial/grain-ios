@@ -56,7 +56,11 @@ extension View {
     /// Conditionally apply a view modifier without duplicating the entire view tree.
     @ViewBuilder
     func `if`(_ condition: Bool, transform: (Self) -> some View) -> some View {
-        if condition { transform(self) } else { self }
+        if condition {
+            transform(self)
+        } else {
+            self
+        }
     }
 }
 

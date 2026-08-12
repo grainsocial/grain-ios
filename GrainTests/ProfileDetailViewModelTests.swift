@@ -5,14 +5,21 @@ import XCTest
 final class ProfileDetailViewModelTests: XCTestCase {
     private var client: XRPCClient!
     private var vm: ProfileDetailViewModel!
+    /// `TokenStorage.userDID` is Keychain-backed and the test host shares that
+    /// Keychain with the installed app, so writing it here would leave the
+    /// simulator's signed-in account pointing at a bogus DID. Stash the real
+    /// value and put it back.
+    private var savedUserDID: String?
 
     override func setUp() {
         super.setUp()
+        savedUserDID = TokenStorage.userDID
         client = XRPCClient(baseURL: URL(string: "https://test.local")!, session: MockURLProtocol.mockSession())
         vm = ProfileDetailViewModel(client: client)
     }
 
     override func tearDown() {
+        TokenStorage.userDID = savedUserDID
         MockURLProtocol.handler = nil
         super.tearDown()
     }

@@ -238,7 +238,9 @@ struct StoryViewer: View {
                 .environment(auth)
         }
         .onChange(of: reportTarget?.uri) {
-            if reportTarget == nil { timer.start() }
+            if reportTarget == nil {
+                timer.start()
+            }
         }
         .onChange(of: currentStory?.uri) { _, _ in
             hearts.removeAll()
@@ -249,7 +251,9 @@ struct StoryViewer: View {
             // load stories once per StoryViewer instance.
             guard !hasLoadedInitialStories else { return }
             hasLoadedInitialStories = true
-            if isPreview, prefetchedStories.isEmpty { return }
+            if isPreview, prefetchedStories.isEmpty {
+                return
+            }
             let startAuthor = authors[currentAuthorIndex]
             let isOwn = startAuthor.profile.did == auth.userDID
             let hasUnreads = !viewedStories.hasViewedAll(authorDid: startAuthor.profile.did, latestAt: startAuthor.latestAt)
@@ -261,7 +265,11 @@ struct StoryViewer: View {
             await loadStoriesForCurrentAuthor()
         }
     }
+}
 
+// MARK: - Story content
+
+extension StoryViewer {
     /// Mirrors the logic in presentStories so pendingTransition.storyIndex matches what will be committed.
     private func resolvedStoryIndex(for stories: [GrainStory], resumeIndex: Int? = nil) -> Int {
         if let resume = resumeIndex {
@@ -620,9 +628,11 @@ struct StoryViewer: View {
         }
         .coordinateSpace(.named("storyHearts"))
     }
+}
 
-    // MARK: - Navigation
+// MARK: - Navigation & playback
 
+extension StoryViewer {
     private func close() {
         timer.stop()
         fadeDismissHandle.fadeDismiss()
@@ -639,13 +649,17 @@ struct StoryViewer: View {
     private func startTimerIfSafe() {
         guard imageLoaded, !isCommentSheetOpen else { return }
         let action = storyLabelResult.action
-        if action == .none || action == .badge { timer.start() }
+        if action == .none || action == .badge {
+            timer.start()
+        }
     }
 
     private func resumeTimerIfSafe() {
         guard imageLoaded, !isCommentSheetOpen else { return }
         let action = storyLabelResult.action
-        if action == .none || action == .badge { timer.resume() }
+        if action == .none || action == .badge {
+            timer.resume()
+        }
     }
 
     private func isFullsizeCached(_ story: GrainStory?) -> Bool {
@@ -657,7 +671,9 @@ struct StoryViewer: View {
     /// URI changes; otherwise returns the previously-recorded result so
     /// view-body re-evals don't swap the image branch mid-render.
     private func cachedFullsizeImage(for story: GrainStory, blocked: Bool) -> UIImage? {
-        if blocked { return nil }
+        if blocked {
+            return nil
+        }
         if fullsizeMemo.uri == story.uri {
             return fullsizeMemo.image
         }
@@ -774,7 +790,9 @@ struct StoryViewer: View {
                 var i = currentAuthorIndex - 1
                 var found: Int?
                 while i >= 0 {
-                    if authors[i].profile.did != auth.userDID { found = i; break }
+                    if authors[i].profile.did != auth.userDID {
+                        found = i; break
+                    }
                     i -= 1
                 }
                 targetIdx = found
@@ -866,8 +884,12 @@ struct StoryViewer: View {
         var i = index + step
         while i >= 0, i < authors.count {
             let author = authors[i]
-            if author.profile.did == auth.userDID { i += step; continue }
-            if !unreadOnly || authorHasUnreads(author) { return i }
+            if author.profile.did == auth.userDID {
+                i += step; continue
+            }
+            if !unreadOnly || authorHasUnreads(author) {
+                return i
+            }
             i += step
         }
         return nil
@@ -927,7 +949,9 @@ struct StoryViewer: View {
             targetIndex = (unreadOnly && isOwn) ? 0 : viewedStories.firstUnviewedIndex(in: fetched)
         }
         let targetStory = fetched.indices.contains(targetIndex) ? fetched[targetIndex] : nil
-        if !isFullsizeCached(targetStory) { imageLoaded = false }
+        if !isFullsizeCached(targetStory) {
+            imageLoaded = false
+        }
         stories = fetched
         currentStoryIndex = targetIndex
         labelRevealed = false
@@ -1014,8 +1038,12 @@ struct StoryViewer: View {
     }
 
     private func storyLocationText(_ story: GrainStory) -> String? {
-        if let display = story.locationDisplay, !display.isEmpty { return display }
-        if let name = story.location?.name, !name.isEmpty { return name }
+        if let display = story.locationDisplay, !display.isEmpty {
+            return display
+        }
+        if let name = story.location?.name, !name.isEmpty {
+            return name
+        }
         return story.address?.locality ?? story.address?.country
     }
 
@@ -1085,7 +1113,9 @@ struct StoryViewer: View {
             // Heart — favorite/unfavorite
             if interactive {
                 Button {
-                    if !favState { heartBeatTrigger &+= 1 }
+                    if !favState {
+                        heartBeatTrigger &+= 1
+                    }
                     triggerFavoriteToggle()
                 } label: {
                     heartIcon(isFavorited: favState)
@@ -1095,7 +1125,9 @@ struct StoryViewer: View {
             } else {
                 heartIcon(isFavorited: favState)
                     .onChange(of: favState) { oldValue, newValue in
-                        if oldValue != true, newValue == true { heartBeatTrigger &+= 1 }
+                        if oldValue != true, newValue == true {
+                            heartBeatTrigger &+= 1
+                        }
                     }
             }
         }

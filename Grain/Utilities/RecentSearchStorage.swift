@@ -35,7 +35,9 @@ final class RecentSearchStorage {
     func addProfile(did: String, displayName: String?, handle: String?, avatar: String?) {
         profiles.removeAll { $0.did == did }
         profiles.insert(RecentProfileSearch(did: did, displayName: displayName, handle: handle, avatar: avatar), at: 0)
-        if profiles.count > Self.maxProfiles { profiles = Array(profiles.prefix(Self.maxProfiles)) }
+        if profiles.count > Self.maxProfiles {
+            profiles = Array(profiles.prefix(Self.maxProfiles))
+        }
         save()
     }
 
@@ -44,7 +46,9 @@ final class RecentSearchStorage {
         guard !trimmed.isEmpty else { return }
         textSearches.removeAll { $0.query.lowercased() == trimmed.lowercased() }
         textSearches.insert(RecentTextSearch(query: trimmed), at: 0)
-        if textSearches.count > Self.maxText { textSearches = Array(textSearches.prefix(Self.maxText)) }
+        if textSearches.count > Self.maxText {
+            textSearches = Array(textSearches.prefix(Self.maxText))
+        }
         save()
     }
 

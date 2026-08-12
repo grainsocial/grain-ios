@@ -7,7 +7,9 @@ func formatAperture(_ value: Double) -> String {
     while str.hasSuffix("0") {
         str.removeLast()
     }
-    if str.hasSuffix(".") { str.removeLast() }
+    if str.hasSuffix(".") {
+        str.removeLast()
+    }
     return "f/" + str
 }
 
@@ -22,8 +24,12 @@ func formatShutterSpeed(seconds value: Double) -> String {
     }
     // Slow shutter: one decimal, trim trailing zero
     var str = String(format: "%.1f", value)
-    if str.hasSuffix("0") { str.removeLast() }
-    if str.hasSuffix(".") { str.removeLast() }
+    if str.hasSuffix("0") {
+        str.removeLast()
+    }
+    if str.hasSuffix(".") {
+        str.removeLast()
+    }
     return str + "s"
 }
 
@@ -73,7 +79,9 @@ struct GrainExif: Codable, Sendable {
     }
 
     var lensName: String? {
-        if let lensModel, !lensModel.isEmpty { return lensModel }
+        if let lensModel, !lensModel.isEmpty {
+            return lensModel
+        }
         let parts = [lensMake, lensModel].compactMap(\.self).filter { !$0.isEmpty }
         return parts.isEmpty ? nil : parts.joined(separator: " ")
     }
@@ -96,7 +104,9 @@ struct GrainExif: Codable, Sendable {
     var formattedExposureTime: String? {
         guard let exposureTime else { return nil }
         var cleaned = exposureTime.trimmingCharacters(in: .whitespaces)
-        if cleaned.hasSuffix("s") { cleaned.removeLast() }
+        if cleaned.hasSuffix("s") {
+            cleaned.removeLast()
+        }
         cleaned = cleaned.trimmingCharacters(in: .whitespaces)
 
         if cleaned.hasPrefix("1/") {
@@ -116,7 +126,9 @@ struct GrainExif: Codable, Sendable {
     var formattedFocalLength: String? {
         guard let focalLengthIn35mmFormat else { return nil }
         var cleaned = focalLengthIn35mmFormat.trimmingCharacters(in: .whitespaces)
-        if cleaned.hasSuffix("mm") { cleaned.removeLast(2) }
+        if cleaned.hasSuffix("mm") {
+            cleaned.removeLast(2)
+        }
         cleaned = cleaned.trimmingCharacters(in: .whitespaces)
         if let value = Double(cleaned) {
             return formatFocalLength(mm: value)

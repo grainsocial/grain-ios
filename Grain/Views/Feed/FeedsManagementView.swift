@@ -80,9 +80,9 @@ struct FeedsManagementView: View {
             async let camerasReq = client.getCameras(auth: auth.authContext())
             async let locationsReq = client.getLocations(auth: auth.authContext())
             do {
-                let (c, l) = try await (camerasReq, locationsReq)
-                cameras = c.cameras ?? []
-                locations = l.locations ?? []
+                let (cameraList, locationList) = try await (camerasReq, locationsReq)
+                cameras = cameraList.cameras ?? []
+                locations = locationList.locations ?? []
             } catch {}
             isLoadingDiscovery = false
         }

@@ -187,7 +187,9 @@ final class AuthManager {
                 url: authURL,
                 callback: .customScheme("grain")
             ) { url, error in
-                if let error { continuation.resume(throwing: error); return }
+                if let error {
+                    continuation.resume(throwing: error); return
+                }
                 guard let url else { continuation.resume(throwing: XRPCError.invalidURL); return }
                 continuation.resume(returning: url)
             }
@@ -370,10 +372,18 @@ final class AuthManager {
         // Guard each @Observable assignment: the macro's setter always fires the
         // observation registrar even when the value is unchanged, so token refreshes
         // would otherwise invalidate every observer (including GrainApp.body).
-        if !isAuthenticated { isAuthenticated = true }
-        if userDID != response.sub { userDID = response.sub }
-        if userHandle != response.handle { userHandle = response.handle }
-        if reauthReason != nil { reauthReason = nil }
+        if !isAuthenticated {
+            isAuthenticated = true
+        }
+        if userDID != response.sub {
+            userDID = response.sub
+        }
+        if userHandle != response.handle {
+            userHandle = response.handle
+        }
+        if reauthReason != nil {
+            reauthReason = nil
+        }
     }
 
     func fetchAvatarIfNeeded() async {

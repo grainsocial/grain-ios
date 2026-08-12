@@ -29,11 +29,11 @@ final class MentionAutocompleteState {
         }
         activeQuery = query
         searchTask?.cancel()
-        let q = query
+        let pendingQuery = query
         searchTask = Task {
             try? await Task.sleep(for: .milliseconds(200))
             guard !Task.isCancelled else { return }
-            await search(query: q)
+            await search(query: pendingQuery)
         }
     }
 
@@ -58,7 +58,9 @@ final class MentionAutocompleteState {
         // Find the last @ that's either at the start or preceded by whitespace
         guard let atIndex = text.lastIndex(of: "@") else { return nil }
         let beforeAt = text[text.startIndex ..< atIndex]
-        if !beforeAt.isEmpty, !beforeAt.last!.isWhitespace { return nil }
+        if !beforeAt.isEmpty, !beforeAt.last!.isWhitespace {
+            return nil
+        }
         let after = String(text[text.index(after: atIndex)...])
         // Must not contain spaces (still typing the handle)
         guard !after.contains(" ") else { return nil }

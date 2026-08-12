@@ -327,7 +327,11 @@ struct GalleryCardView: View {
                 .presentationDetents([.height(200)])
         }
     }
+}
 
+// MARK: - Card sections
+
+extension GalleryCardView {
     @ViewBuilder
     private func photoCarousel(photos: [GrainPhoto], lr: LabelResolution) -> some View {
         let hasPortrait = photos.contains { $0.aspectRatio.ratio < 1 }

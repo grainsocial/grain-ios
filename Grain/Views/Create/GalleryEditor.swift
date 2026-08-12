@@ -287,17 +287,23 @@ struct CellGeometry: Equatable {
     var photoSize: CGSize {
         switch mode {
         case .preview:
-            photoAspect >= 1
-                ? CGSize(width: maskSide * photoAspect, height: maskSide)
-                : CGSize(width: maskSide, height: maskSide / photoAspect)
+            if photoAspect >= 1 {
+                CGSize(width: maskSide * photoAspect, height: maskSide)
+            } else {
+                CGSize(width: maskSide, height: maskSide / photoAspect)
+            }
         case .reorder:
-            photoAspect >= 1
-                ? CGSize(width: maskSide, height: maskSide / photoAspect)
-                : CGSize(width: maskSide * photoAspect, height: maskSide)
+            if photoAspect >= 1 {
+                CGSize(width: maskSide, height: maskSide / photoAspect)
+            } else {
+                CGSize(width: maskSide * photoAspect, height: maskSide)
+            }
         case .captions:
-            photoAspect >= 1
-                ? CGSize(width: maskSide * photoAspect, height: maskSide)
-                : CGSize(width: maskSide, height: maskSide / photoAspect)
+            if photoAspect >= 1 {
+                CGSize(width: maskSide * photoAspect, height: maskSide)
+            } else {
+                CGSize(width: maskSide, height: maskSide / photoAspect)
+            }
         }
     }
 
@@ -456,10 +462,10 @@ struct GalleryEditor: View {
                 StripPanRecognizer(
                     isEnabled: mode == .preview,
                     onChanged: { stripState.dragTranslation = $0 },
-                    onEnded: { t, p in
+                    onEnded: { translation, predictedEnd in
                         stripState.handleDragEnded(
-                            translation: t,
-                            predictedEnd: p,
+                            translation: translation,
+                            predictedEnd: predictedEnd,
                             containerWidth: gridContainerWidth,
                             itemCount: items.count
                         )
@@ -475,9 +481,9 @@ struct GalleryEditor: View {
             }
             .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { newWidth in
                 guard newWidth > 0 else { return }
-                var t = Transaction()
-                t.animation = nil
-                withTransaction(t) { gridContainerWidth = newWidth }
+                var transaction = Transaction()
+                transaction.animation = nil
+                withTransaction(transaction) { gridContainerWidth = newWidth }
             }
             .onChange(of: gridContainerWidth) { _, newWidth in
                 guard newWidth > 0, !isAnimatingMode else { return }
@@ -503,8 +509,8 @@ struct GalleryEditor: View {
             }
         } header: {
             Picker("Mode", selection: modeBinding) {
-                ForEach(EditorMode.allCases, id: \.self) { m in
-                    Text(m.label).tag(m)
+                ForEach(EditorMode.allCases, id: \.self) { editorMode in
+                    Text(editorMode.label).tag(editorMode)
                 }
             }
             .pickerStyle(.segmented)

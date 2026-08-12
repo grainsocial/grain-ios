@@ -153,9 +153,11 @@ enum PreviewData {
             aspectRatio: AspectRatio(width: 4, height: 3)
         ),
     ]
+}
 
-    // MARK: - Galleries
+// MARK: - Galleries
 
+extension PreviewData {
     static let gallery1 = GrainGallery(
         uri: "at://did:plc:prevuser1/social.grain.gallery/r1",
         cid: "cid",

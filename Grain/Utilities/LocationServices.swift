@@ -30,9 +30,15 @@ struct NominatimResult {
         let city = addr?["city"] as? String ?? addr?["town"] as? String ?? addr?["village"] as? String
 
         var locationParts: [String] = []
-        if let city { locationParts.append(city) }
-        if let state = addr?["state"] as? String { locationParts.append(state) }
-        if let country = addr?["country"] as? String { locationParts.append(country) }
+        if let city {
+            locationParts.append(city)
+        }
+        if let state = addr?["state"] as? String {
+            locationParts.append(state)
+        }
+        if let country = addr?["country"] as? String {
+            locationParts.append(country)
+        }
 
         if let placeName = json["name"] as? String, !placeName.isEmpty {
             name = placeName
@@ -54,8 +60,12 @@ struct NominatimResult {
 
         if let countryCode = (addr?["country_code"] as? String)?.uppercased() {
             var addressFields: [String: AnyCodable] = ["country": AnyCodable(countryCode)]
-            if let city { addressFields["locality"] = AnyCodable(city) }
-            if let state = addr?["state"] as? String { addressFields["region"] = AnyCodable(state) }
+            if let city {
+                addressFields["locality"] = AnyCodable(city)
+            }
+            if let state = addr?["state"] as? String {
+                addressFields["region"] = AnyCodable(state)
+            }
             if let road = addr?["road"] as? String {
                 if let houseNumber = addr?["house_number"] as? String {
                     addressFields["street"] = AnyCodable("\(houseNumber) \(road)")
@@ -63,7 +73,9 @@ struct NominatimResult {
                     addressFields["street"] = AnyCodable(road)
                 }
             }
-            if let postcode = addr?["postcode"] as? String { addressFields["postalCode"] = AnyCodable(postcode) }
+            if let postcode = addr?["postcode"] as? String {
+                addressFields["postalCode"] = AnyCodable(postcode)
+            }
             address = addressFields
         } else {
             address = nil
