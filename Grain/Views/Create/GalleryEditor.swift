@@ -272,7 +272,7 @@ enum EditorMode: Equatable, CaseIterable {
         switch self {
         case .preview: "Preview"
         case .reorder: "Reorder"
-        case .captions: "Alt Text"
+        case .captions: "Alt text"
         }
     }
 }

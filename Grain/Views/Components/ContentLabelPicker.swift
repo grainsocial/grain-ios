@@ -40,7 +40,7 @@ struct ContentLabelPicker: View {
                     }
                 }
             } label: {
-                Text("Content Warning")
+                Text("Content warning")
                     .foregroundStyle(.primary)
             }
         }

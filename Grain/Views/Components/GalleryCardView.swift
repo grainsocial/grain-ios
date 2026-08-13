@@ -757,7 +757,7 @@ private struct GalleryActionsSheet: View {
                     dismiss()
                     onDelete()
                 } label: {
-                    Label("Delete Gallery", systemImage: "trash")
+                    Label("Delete gallery", systemImage: "trash")
                         .foregroundStyle(.red)
                 }
             }

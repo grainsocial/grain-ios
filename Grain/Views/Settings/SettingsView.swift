@@ -53,7 +53,7 @@ struct SettingsView: View {
             }
 
             Section {
-                Button("Sign Out", role: .destructive) {
+                Button("Sign out", role: .destructive) {
                     auth.logout()
                     dismiss()
                 }
@@ -142,7 +142,7 @@ private struct AccountDetailView: View {
                             Button {
                                 UIPasteboard.general.string = "@\(handle)"
                             } label: {
-                                Label("Copy Handle", systemImage: "doc.on.doc")
+                                Label("Copy handle", systemImage: "doc.on.doc")
                             }
                         }
                 }
@@ -186,7 +186,7 @@ private struct AccountDetailView: View {
                             Text("Deleting…")
                         }
                     } else {
-                        Text("Delete Account")
+                        Text("Delete account")
                     }
                 }
                 .disabled(isDeleting)
@@ -203,7 +203,7 @@ private struct AccountDetailView: View {
         .navigationTitle("Account")
         .tint(.primary)
         .alert("Delete your Grain account?", isPresented: $showDeleteConfirm) {
-            Button("Delete Account", role: .destructive) { Task { await performDelete() } }
+            Button("Delete account", role: .destructive) { Task { await performDelete() } }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This removes all your Grain galleries, stories, photos, favorites, comments, follows, and blocks. Your atproto identity is separate and is not affected. This cannot be undone.")

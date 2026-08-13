@@ -138,12 +138,12 @@ extension ProfileView {
                 .contextMenu {
                     if profile.avatar != nil {
                         Button { openAvatarOverlay() } label: {
-                            Label("View Profile Photo", systemImage: "person.crop.circle")
+                            Label("View profile photo", systemImage: "person.crop.circle")
                         }
                         Divider()
                     }
                     Button { copyText("@\(profile.handle)") } label: {
-                        Label("Copy Handle", systemImage: "doc.on.doc")
+                        Label("Copy handle", systemImage: "doc.on.doc")
                     }
                     Button { copyText(did) } label: {
                         Label("Copy DID", systemImage: "number")
@@ -262,7 +262,7 @@ extension ProfileView {
                                     Button {
                                         showEditProfile = true
                                     } label: {
-                                        Text("Edit Profile")
+                                        Text("Edit profile")
                                             .font(.subheadline.weight(.semibold))
                                             .frame(maxWidth: .infinity)
                                     }
@@ -305,7 +305,7 @@ extension ProfileView {
                 } else if viewModel.error != nil {
                     VStack(spacing: 16) {
                         ContentUnavailableView(
-                            "Profile Not Found",
+                            "Profile not found",
                             systemImage: "person.slash",
                             description: Text("This user doesn't have a Grain profile yet.")
                         )
@@ -355,12 +355,12 @@ extension ProfileView {
                         Menu {
                             if let profileURL = URL(string: "https://grain.social/profile/\(profile.handle)") {
                                 ShareLink(item: profileURL) {
-                                    Label("Share Profile", systemImage: "square.and.arrow.up")
+                                    Label("Share profile", systemImage: "square.and.arrow.up")
                                 }
                                 Button {
                                     UIPasteboard.general.string = profile.handle
                                 } label: {
-                                    Label("Copy Username", systemImage: "at")
+                                    Label("Copy username", systemImage: "at")
                                 }
                                 Divider()
                             }
@@ -1012,7 +1012,7 @@ extension ProfileView {
             Button {
                 Task { await viewModel.toggleFollow(auth: auth.authContext()) }
             } label: {
-                Text("Follow")
+                Text(profile.viewer?.followedBy != nil ? "Follow back" : "Follow")
                     .font(.subheadline.weight(.semibold))
                     .frame(maxWidth: .infinity)
             }

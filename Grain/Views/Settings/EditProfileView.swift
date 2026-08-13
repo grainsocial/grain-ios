@@ -61,7 +61,7 @@ struct EditProfileView: View {
                         }
 
                         if newAvatarImage != nil || (!removeAvatar && existingAvatarURL != nil) {
-                            Button("Remove Photo", role: .destructive) {
+                            Button("Remove photo", role: .destructive) {
                                 newAvatarData = nil
                                 newAvatarImage = nil
                                 selectedPhoto = nil
@@ -78,10 +78,10 @@ struct EditProfileView: View {
             // Fields
             Section {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Display Name")
+                    Text("Display name")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    TextField("Display Name", text: $displayName)
+                    TextField("Display name", text: $displayName)
                         .textInputAutocapitalization(.words)
                     Text("\(displayName.count)/\(maxDisplayName)")
                         .font(.caption2)
@@ -116,7 +116,7 @@ struct EditProfileView: View {
                 mentionState.complete(handle: suggestion.handle, in: &bio)
             }
         }
-        .navigationTitle("Edit Profile")
+        .navigationTitle("Edit profile")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {

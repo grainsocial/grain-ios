@@ -3,7 +3,7 @@ import SwiftUI
 extension View {
     /// Long-press context menu for profile avatars/rows.
     /// Omit `onViewProfile` when already on the profile page.
-    /// Pass `hasStory: true` and a non-nil `onViewStory` to include "View Story".
+    /// Pass `hasStory: true` and a non-nil `onViewStory` to include "View story".
     func profileContextMenu(
         handle: String?,
         hasStory: Bool,
@@ -76,28 +76,28 @@ private func profileMenuItems(
 ) -> some View {
     if hasStory, let onViewStory {
         Button(action: onViewStory) {
-            Label("View Story", systemImage: "play.circle")
+            Label("View story", systemImage: "play.circle")
         }
     }
     if let onAddStory {
         Button(action: onAddStory) {
-            Label("New Story", systemImage: "plus.circle")
+            Label("New story", systemImage: "plus.circle")
         }
     }
     if let onViewProfile {
         Button(action: onViewProfile) {
-            Label("View Profile", systemImage: "person.circle")
+            Label("View profile", systemImage: "person.circle")
         }
     }
     if let onViewPhoto {
         Button(action: onViewPhoto) {
-            Label("View Profile Photo", systemImage: "person.crop.circle.fill")
+            Label("View profile photo", systemImage: "person.crop.circle.fill")
         }
     }
     if showSharingActions, let handle {
         Divider()
         ShareLink(item: URL(string: "https://grain.social/profile/\(handle)") ?? URL(string: "https://grain.social")!) {
-            Label("Share Profile", systemImage: "square.and.arrow.up")
+            Label("Share profile", systemImage: "square.and.arrow.up")
         }
     }
 }

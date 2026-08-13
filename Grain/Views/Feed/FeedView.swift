@@ -208,7 +208,7 @@ struct FeedView: View {
             Button {
                 showFeedsManagement = true
             } label: {
-                Label("My Feeds", systemImage: "list.bullet")
+                Label("My feeds", systemImage: "list.bullet")
             }
         } label: {
             HStack(spacing: 4) {
@@ -499,7 +499,7 @@ private struct FeedTabContent: View {
         .sheet(item: $reportGallery) { gallery in
             ReportView(client: client, subjectUri: gallery.uri, subjectCid: gallery.cid)
         }
-        .alert("Delete Gallery?", isPresented: $showDeleteConfirmation) {
+        .alert("Delete gallery?", isPresented: $showDeleteConfirmation) {
             Button("Delete", role: .destructive) {
                 if let uri = deleteGalleryUri {
                     Task {

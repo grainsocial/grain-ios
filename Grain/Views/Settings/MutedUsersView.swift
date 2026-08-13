@@ -15,7 +15,7 @@ struct MutedUsersView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if items.isEmpty {
                 ContentUnavailableView(
-                    "No Muted Users",
+                    "No muted users",
                     systemImage: "speaker.slash",
                     description: Text("You haven't muted anyone.")
                 )
@@ -56,7 +56,7 @@ struct MutedUsersView: View {
                 }
             }
         }
-        .navigationTitle("Muted Users")
+        .navigationTitle("Muted users")
         .task {
             await loadMutes()
         }

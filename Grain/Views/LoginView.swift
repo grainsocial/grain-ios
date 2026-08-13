@@ -212,7 +212,7 @@ struct LoginView: View {
                                         ProgressView()
                                             .tint(.black)
                                     } else {
-                                        Text("Sign In")
+                                        Text("Sign in")
                                             .font(.body.weight(.semibold))
                                     }
                                 }
@@ -228,7 +228,7 @@ struct LoginView: View {
                             Button {
                                 Task { await createAccount() }
                             } label: {
-                                Text("Create Account")
+                                Text("Create account")
                                     .font(.body.weight(.semibold))
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 14)

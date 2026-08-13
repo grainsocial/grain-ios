@@ -63,7 +63,7 @@ struct HashtagFeedView: View {
                     Button {
                         Task { await togglePin() }
                     } label: {
-                        Label(isPinned ? "Unpin Feed" : "Pin Feed",
+                        Label(isPinned ? "Unpin feed" : "Pin feed",
                               systemImage: isPinned ? "pin.slash" : "pin")
                     }
                 } label: {
@@ -141,7 +141,7 @@ struct HashtagFeedView: View {
         .sheet(item: $reportGallery) { gallery in
             ReportView(client: client, subjectUri: gallery.uri, subjectCid: gallery.cid)
         }
-        .alert("Delete Gallery?", isPresented: $showDeleteConfirmation) {
+        .alert("Delete gallery?", isPresented: $showDeleteConfirmation) {
             Button("Delete", role: .destructive) {
                 if let uri = deleteGalleryUri {
                     Task {

@@ -32,7 +32,7 @@ struct FeedsManagementView: View {
                     Task { await prefsViewModel.reorderFeeds(feeds, auth: auth.authContext()) }
                 }
             } header: {
-                Text("Pinned Feeds")
+                Text("Pinned feeds")
             }
 
             if !unpinnedDefaults.isEmpty {
@@ -41,7 +41,7 @@ struct FeedsManagementView: View {
                         feedRow(feed: feed, showPin: false)
                     }
                 } header: {
-                    Text("Available Feeds")
+                    Text("Available feeds")
                 }
             }
 
@@ -65,7 +65,7 @@ struct FeedsManagementView: View {
                 }
             }
         }
-        .navigationTitle("My Feeds")
+        .navigationTitle("My feeds")
         .navigationBarTitleDisplayMode(.inline)
         .environment(\.editMode, .constant(.active))
         .navigationDestination(item: $selectedCamera) { camera in

@@ -50,9 +50,9 @@ struct FollowListView: View {
 
     private var emptyTitle: String {
         switch mode {
-        case .followers, .knownFollowers: "No Followers"
-        case .following: "No Following"
-        case .galleryFavorites: "No Favorites"
+        case .followers, .knownFollowers: "No followers"
+        case .following: "No following"
+        case .galleryFavorites: "No favorites"
         }
     }
 

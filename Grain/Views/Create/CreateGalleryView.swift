@@ -184,7 +184,7 @@ struct CreateGalleryView: View {
                 }
             }
         }
-        .navigationTitle("New Gallery")
+        .navigationTitle("New gallery")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
@@ -217,7 +217,7 @@ struct CreateGalleryView: View {
         .interactiveDismissDisabled(hasChanges)
         .alert("Discard gallery?", isPresented: $showDiscardAlert) {
             Button("Discard", role: .destructive) { dismiss() }
-            Button("Keep Editing", role: .cancel) {}
+            Button("Keep editing", role: .cancel) {}
         }
         .environment(imageZoomState)
         .modifier(ImageZoomOverlay(zoomState: imageZoomState))
@@ -234,13 +234,13 @@ struct CreateGalleryView: View {
                 matching: .images,
                 photoLibrary: .shared()
             ) {
-                Label("Select Photos", systemImage: "photo.on.rectangle.angled")
+                Label("Select photos", systemImage: "photo.on.rectangle.angled")
             }
 
             Button {
                 showCamera = true
             } label: {
-                Label("Take Photo", systemImage: "camera")
+                Label("Take photo", systemImage: "camera")
             }
         }
     }
@@ -310,7 +310,7 @@ struct CreateGalleryView: View {
             if !photoItems.isEmpty {
                 let filled = photoItems.count(where: { !$0.alt.trimmingCharacters(in: .whitespaces).isEmpty })
                 HStack {
-                    Label("Alt Text", systemImage: "text.below.photo")
+                    Label("Alt text", systemImage: "text.below.photo")
                     Spacer()
                     Text("\(filled)/\(photoItems.count)")
                         .foregroundStyle(.secondary)
@@ -919,7 +919,7 @@ private struct CreateGalleryViewPreview: View {
                 )
             }
         }
-        .navigationTitle("New Gallery")
+        .navigationTitle("New gallery")
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("Cancel") {} }
             ToolbarItem(placement: .topBarTrailing) { Button("Post") {}.bold() }

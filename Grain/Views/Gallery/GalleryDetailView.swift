@@ -102,7 +102,7 @@ struct GalleryDetailView: View {
             FollowListView(client: client, mode: .galleryFavorites(dest.galleryUri))
         }
         .toolbarTitleDisplayMode(.inline)
-        .alert("Delete Gallery?", isPresented: $showDeleteConfirmation) {
+        .alert("Delete gallery?", isPresented: $showDeleteConfirmation) {
             Button("Delete", role: .destructive) {
                 Task { await deleteGallery() }
             }

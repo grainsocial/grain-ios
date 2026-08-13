@@ -198,7 +198,7 @@ struct SearchView: View {
             .sheet(item: $reportGallery) { gallery in
                 ReportView(client: client, subjectUri: gallery.uri, subjectCid: gallery.cid)
             }
-            .alert("Delete Gallery?", isPresented: $showDeleteConfirmation) {
+            .alert("Delete gallery?", isPresented: $showDeleteConfirmation) {
                 Button("Delete", role: .destructive) {
                     if let uri = deleteGalleryUri {
                         Task {

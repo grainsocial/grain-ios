@@ -20,7 +20,7 @@ struct ReportView: View {
             Group {
                 if isSubmitted {
                     ContentUnavailableView(
-                        "Report Submitted",
+                        "Report submitted",
                         systemImage: "checkmark.circle",
                         description: Text("Thank you. Your report has been submitted for review.")
                     )
@@ -55,7 +55,7 @@ struct ReportView: View {
                     }
                 }
             }
-            .navigationTitle(isSubmitted ? "" : "Report Content")
+            .navigationTitle(isSubmitted ? "" : "Report content")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

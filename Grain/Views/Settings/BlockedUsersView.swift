@@ -15,7 +15,7 @@ struct BlockedUsersView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if items.isEmpty {
                 ContentUnavailableView(
-                    "No Blocked Users",
+                    "No blocked users",
                     systemImage: "nosign",
                     description: Text("You haven't blocked anyone.")
                 )
@@ -56,7 +56,7 @@ struct BlockedUsersView: View {
                 }
             }
         }
-        .navigationTitle("Blocked Users")
+        .navigationTitle("Blocked users")
         .task {
             await loadBlocks()
         }

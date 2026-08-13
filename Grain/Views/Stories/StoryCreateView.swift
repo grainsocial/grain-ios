@@ -33,13 +33,13 @@ struct StoryCreateView: View {
                     }
 
                     PhotosPicker(selection: $selectedPhoto, matching: .images) {
-                        Label("Choose from Library", systemImage: "photo.on.rectangle")
+                        Label("Choose from library", systemImage: "photo.on.rectangle")
                     }
 
                     Button {
                         showCamera = true
                     } label: {
-                        Label("Take Photo", systemImage: "camera")
+                        Label("Take photo", systemImage: "camera")
                     }
                 }
 
@@ -84,7 +84,7 @@ struct StoryCreateView: View {
                 }
                 .ignoresSafeArea()
             }
-            .navigationTitle("New Story")
+            .navigationTitle("New story")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
