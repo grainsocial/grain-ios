@@ -44,6 +44,7 @@ struct GrainApp: App {
     @State private var storyStatusCache = StoryStatusCache()
     @State private var viewedStoryStorage = ViewedStoryStorage()
     @State private var labelDefsCache = LabelDefinitionsCache()
+    @State private var uploadCenter = GalleryUploadCenter()
     @State private var pendingDeepLink: DeepLink?
     @AppStorage("appearance") private var appearance: String = "auto"
 
@@ -68,6 +69,7 @@ struct GrainApp: App {
                         .environment(storyStatusCache)
                         .environment(viewedStoryStorage)
                         .environment(labelDefsCache)
+                        .environment(uploadCenter)
                         .tint(Color.accentColor)
                         .onAppear {
                             appSignposter.emitEvent("WindowOnAppear")

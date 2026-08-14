@@ -13,6 +13,7 @@ struct MainTabView: View {
     @Environment(LabelDefinitionsCache.self) private var labelDefsCache
     @Environment(StoryStatusCache.self) private var storyStatusCache
     @Environment(ViewedStoryStorage.self) private var viewedStories
+    @Environment(GalleryUploadCenter.self) private var uploadCenter
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedTab: AppTab = .feed
     @State private var commentPresenter = StoryCommentPresenter()
@@ -86,6 +87,20 @@ struct MainTabView: View {
                 }
                 .tint(Color.accentColor)
                 .environment(commentPresenter)
+                .safeAreaInset(edge: .bottom) {
+                    PendingGalleryBar(
+                        stage: uploadCenter.stage,
+                        pendingCount: uploadCenter.pending.count,
+                        onRetry: { Task { await uploadCenter.resumePending(client: client, auth: auth) } },
+                        onDiscard: {
+                            for draft in uploadCenter.pending {
+                                uploadCenter.discard(draft.id)
+                            }
+                            uploadCenter.clearFailure()
+                        }
+                    )
+                    .animation(.smooth, value: uploadCenter.pending.count)
+                }
             } else {
                 Color.clear
             }
@@ -103,6 +118,17 @@ struct MainTabView: View {
             let newClient = auth.makeClient()
             client = newClient
             notificationsVM.updateClient(newClient)
+
+            // Changing this ID remounts FeedView wholesale, which would take
+            // the create sheet — and whatever gallery is half-composed inside
+            // it — down with it. A background publish can wait for the sheet.
+            uploadCenter.onPublished = {
+                guard !showCreate else { return }
+                feedRefreshID = UUID()
+            }
+            // Pick up any gallery a previous session left half-published. Off
+            // the launch path — it can take as long as it takes.
+            Task { await uploadCenter.resumePending(client: newClient, auth: auth) }
 
             // Start avatar fetch immediately — it doesn't need an auth context
             let avatarSpid = launchSignposter.makeSignpostID()
@@ -155,6 +181,9 @@ struct MainTabView: View {
                     await notificationsVM.fetchUnseenCount(auth: auth.authContext())
                     if let client {
                         await labelDefsCache.loadIfNeeded(client: client, auth: auth.authContext())
+                        // Coming back to the app is the most likely moment for
+                        // the connection to have recovered.
+                        await uploadCenter.resumePending(client: client, auth: auth)
                     }
                 }
             } else if scenePhase == .background {

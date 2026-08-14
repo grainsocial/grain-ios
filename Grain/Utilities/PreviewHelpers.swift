@@ -30,5 +30,6 @@ extension View {
             .environment(StoryStatusCache())
             .environment(ViewedStoryStorage())
             .environment(LabelDefinitionsCache())
+            .environment(GalleryUploadCenter())
     }
 }

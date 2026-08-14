@@ -25,11 +25,17 @@ struct BlueskyPostOptions {
 enum BlueskyPost {
     /// Create a cross-post to Bluesky with images, location, and description.
     /// Mirrors the web client's `createBskyPost()` in `bsky-post.ts`.
+    ///
+    /// Pass `rkey` when the caller might run this more than once — a resumed
+    /// gallery publish, say. With a record key of our own the write becomes an
+    /// overwrite instead of a second post on the user's timeline.
     static func create(
         options: BlueskyPostOptions,
         client: XRPCClient,
         repo: String,
-        auth: AuthContext
+        auth: AuthContext,
+        rkey: String? = nil,
+        createdAt: String = DateFormatting.nowISO()
     ) async throws {
         logger.info("Creating Bluesky cross-post for \(options.url)")
         logger.info("  images: \(options.images.count), location: \(options.location?.name ?? "none"), description: \(options.description ?? "none")")
@@ -73,7 +79,7 @@ enum BlueskyPost {
         var record: [String: AnyCodable] = [
             "text": AnyCodable(postText),
             "tags": AnyCodable(["grainsocial"] as [String]),
-            "createdAt": AnyCodable(DateFormatting.nowISO()),
+            "createdAt": AnyCodable(createdAt),
         ]
 
         if !facets.isEmpty {
@@ -113,14 +119,26 @@ enum BlueskyPost {
             logger.info("  record JSON: \(jsonStr)")
         }
 
-        // 6. Create the record
-        logger.info("  calling dev.hatk.createRecord with collection=app.bsky.feed.post, repo=\(repo)")
-        let result = try await client.createRecord(
-            collection: "app.bsky.feed.post",
-            repo: repo,
-            record: AnyCodable(record),
-            auth: auth
-        )
+        // 6. Write the record
+        let result: CreateRecordResponse
+        if let rkey {
+            logger.info("  calling dev.hatk.putRecord with collection=app.bsky.feed.post, repo=\(repo), rkey=\(rkey)")
+            result = try await client.putRecord(
+                collection: "app.bsky.feed.post",
+                rkey: rkey,
+                record: AnyCodable(record),
+                repo: repo,
+                auth: auth
+            )
+        } else {
+            logger.info("  calling dev.hatk.createRecord with collection=app.bsky.feed.post, repo=\(repo)")
+            result = try await client.createRecord(
+                collection: "app.bsky.feed.post",
+                repo: repo,
+                record: AnyCodable(record),
+                auth: auth
+            )
+        }
 
         logger.info("Bluesky cross-post created: uri=\(result.uri ?? "nil"), cid=\(result.cid ?? "nil")")
     }
