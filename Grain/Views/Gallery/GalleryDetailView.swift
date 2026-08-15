@@ -163,9 +163,8 @@ struct GalleryDetailView: View {
 
     private func deleteGallery() async {
         guard let authContext = await auth.authContext() else { return }
-        let rkey = galleryUri.split(separator: "/").last.map(String.init) ?? ""
         do {
-            try await client.deleteGallery(rkey: rkey, auth: authContext)
+            try await GalleryService.delete(galleryUri: galleryUri, client: client, auth: authContext)
             deletedGalleryUri = galleryUri
             dismiss()
         } catch {}

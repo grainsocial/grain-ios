@@ -504,8 +504,7 @@ private struct FeedTabContent: View {
                 if let uri = deleteGalleryUri {
                     Task {
                         guard let authContext = await auth.authContext() else { return }
-                        let rkey = uri.split(separator: "/").last.map(String.init) ?? ""
-                        try? await client.deleteGallery(rkey: rkey, auth: authContext)
+                        try? await GalleryService.delete(galleryUri: uri, client: client, auth: authContext)
                         viewModel.galleries.removeAll { $0.uri == uri }
                     }
                     deleteGalleryUri = nil
