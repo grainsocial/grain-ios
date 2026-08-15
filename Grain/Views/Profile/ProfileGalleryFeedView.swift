@@ -185,7 +185,7 @@ struct ProfileGalleryFeedView: View {
                         Task {
                             guard let authContext = await auth.authContext() else { return }
                             let rkey = uri.split(separator: "/").last.map(String.init) ?? ""
-                            try? await client.deleteRecord(collection: "social.grain.gallery", rkey: rkey, auth: authContext)
+                            try? await client.deleteGallery(rkey: rkey, auth: authContext)
                             removeAfterDelete(uri: uri)
                         }
                         deleteGalleryUri = nil
