@@ -9,6 +9,10 @@ enum XRPCError: Error, LocalizedError {
     case decodingError(Error)
     case unauthorized
     case dpopNonceRequired(nonce: String)
+    /// The PDS rejected the authorization — usually the user tapping "Deny".
+    case authorizationDenied
+    /// Any other OAuth error handed back on the callback URL.
+    case authorizationFailed(code: String, description: String?)
 
     var errorDescription: String? {
         switch self {
@@ -17,6 +21,8 @@ enum XRPCError: Error, LocalizedError {
         case let .decodingError(error): "Decoding error: \(error.localizedDescription)"
         case .unauthorized: "Unauthorized"
         case .dpopNonceRequired: "DPoP nonce required"
+        case .authorizationDenied: "Sign-in canceled"
+        case let .authorizationFailed(code, description): description ?? "Sign-in failed (\(code))"
         }
     }
 }

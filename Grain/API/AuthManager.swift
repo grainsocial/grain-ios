@@ -199,9 +199,20 @@ final class AuthManager {
         }
 
         // Step 3: Exchange code for tokens
-        guard let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false),
-              let code = components.queryItems?.first(where: { $0.name == "code" })?.value
-        else {
+        guard let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false) else {
+            throw XRPCError.invalidURL
+        }
+
+        // hatk sends `error` instead of `code` when the PDS rejects the request,
+        // most often because the user tapped "Deny" on the sign-in screen.
+        if let errorCode = components.queryItems?.first(where: { $0.name == "error" })?.value {
+            let description = components.queryItems?.first(where: { $0.name == "error_description" })?.value
+            throw errorCode == "access_denied"
+                ? XRPCError.authorizationDenied
+                : XRPCError.authorizationFailed(code: errorCode, description: description)
+        }
+
+        guard let code = components.queryItems?.first(where: { $0.name == "code" })?.value else {
             throw XRPCError.invalidURL
         }
 
