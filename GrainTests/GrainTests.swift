@@ -15,34 +15,33 @@ final class GrainTests: XCTestCase {
         XCTAssertFalse(encoded.contains("="))
     }
 
-    func testTokenStorageClear() {
+    func testTokenStorageRemoveAccount() {
         // TokenStorage is Keychain-backed and the test host shares that
-        // Keychain with the installed app, so an unguarded clear() signs the
-        // simulator's app out. Snapshot the real session and restore it.
-        let saved = (
-            accessToken: TokenStorage.accessToken,
-            refreshToken: TokenStorage.refreshToken,
-            userDID: TokenStorage.userDID,
-            userHandle: TokenStorage.userHandle,
-            userAvatar: TokenStorage.userAvatar,
-            expiresAt: TokenStorage.tokenExpiresAt,
-            scope: TokenStorage.grantedScope
+        // Keychain with the installed app. Credentials are per-DID, so a
+        // synthetic DID keeps the simulator's real session out of it.
+        let did = "did:plc:tokenstorageremovetest"
+        TokenStorage.storeTokens(
+            did: did,
+            accessToken: "access",
+            refreshToken: "refresh",
+            handle: "remove-me.test",
+            expiresAt: Date().addingTimeInterval(3600),
+            scope: "atproto"
         )
-        defer {
-            TokenStorage.accessToken = saved.accessToken
-            TokenStorage.refreshToken = saved.refreshToken
-            TokenStorage.userDID = saved.userDID
-            TokenStorage.userHandle = saved.userHandle
-            TokenStorage.userAvatar = saved.userAvatar
-            TokenStorage.tokenExpiresAt = saved.expiresAt
-            TokenStorage.grantedScope = saved.scope
-        }
+        TokenStorage.upsertAccount(StoredAccount(did: did, handle: "remove-me.test", avatar: nil))
+        defer { TokenStorage.removeAccount(did) }
 
-        TokenStorage.clear()
-        XCTAssertNil(TokenStorage.accessToken)
-        XCTAssertNil(TokenStorage.refreshToken)
-        XCTAssertNil(TokenStorage.userDID)
-        XCTAssertTrue(TokenStorage.isExpired)
+        XCTAssertTrue(TokenStorage.hasCredentials(for: did))
+        XCTAssertEqual(TokenStorage.handle(for: did), "remove-me.test")
+        XCTAssertTrue(TokenStorage.accounts.contains { $0.did == did })
+
+        TokenStorage.removeAccount(did)
+
+        XCTAssertNil(TokenStorage.accessToken(for: did))
+        XCTAssertNil(TokenStorage.refreshToken(for: did))
+        XCTAssertNil(TokenStorage.tokenExpiresAt(for: did))
+        XCTAssertFalse(TokenStorage.hasCredentials(for: did))
+        XCTAssertFalse(TokenStorage.accounts.contains { $0.did == did })
     }
 
     func testNotificationReasonParsing() {

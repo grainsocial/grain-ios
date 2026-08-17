@@ -4,17 +4,19 @@ import XCTest
 @MainActor
 final class ViewedStoryStorageTests: XCTestCase {
     private var storage: ViewedStoryStorage!
+    /// Watch history is stored per account, and the test host shares
+    /// UserDefaults with the app on the simulator — so pin these to a DID
+    /// nobody is signed in as.
+    private let testDID = "did:plc:viewedstoragetests"
 
     override func setUp() {
         super.setUp()
-        UserDefaults.standard.removeObject(forKey: "viewedStoryUris")
-        UserDefaults.standard.removeObject(forKey: "viewedStoryAuthors")
-        storage = ViewedStoryStorage()
+        AccountScopedStorage.purge(did: testDID)
+        storage = ViewedStoryStorage(did: testDID)
     }
 
     override func tearDown() {
-        UserDefaults.standard.removeObject(forKey: "viewedStoryUris")
-        UserDefaults.standard.removeObject(forKey: "viewedStoryAuthors")
+        AccountScopedStorage.purge(did: testDID)
         storage = nil
         super.tearDown()
     }

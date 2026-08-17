@@ -1,3 +1,4 @@
+import AuthenticationServices
 import Nuke
 import SafariServices
 import SwiftUI
@@ -8,6 +9,9 @@ struct SettingsView: View {
     let client: XRPCClient
     @State private var cacheSizeText = "Calculating..."
     @State private var safariURL: URL?
+    @State private var showAddAccount = false
+    @State private var switchingDID: String?
+    @State private var switchError: String?
 
     @AppStorage("appearance") private var appearance: String = "auto"
 
@@ -21,6 +25,43 @@ struct SettingsView: View {
 
     var body: some View {
         List {
+            Section {
+                ForEach(auth.accounts) { account in
+                    AccountRow(
+                        account: account,
+                        isActive: account.did == auth.userDID,
+                        isSwitching: switchingDID == account.did
+                    ) {
+                        Task { await switchTo(account) }
+                    }
+                    // Full swipe is off: signing out is destructive enough to
+                    // deserve a deliberate tap. The explicit tint is load-
+                    // bearing — the list's `.tint(.primary)` would otherwise
+                    // override the destructive role and paint the button white
+                    // in dark mode.
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button(role: .destructive) {
+                            Task { await auth.signOut(did: account.did) }
+                        } label: {
+                            Label("Sign out", systemImage: "rectangle.portrait.and.arrow.right")
+                        }
+                        .tint(.red)
+                    }
+                }
+                Button {
+                    showAddAccount = true
+                } label: {
+                    Label("Add another account", systemImage: "plus")
+                }
+                .disabled(switchingDID != nil)
+            } header: {
+                Text("Accounts")
+            } footer: {
+                if let switchError {
+                    Text(switchError).foregroundStyle(.red)
+                }
+            }
+
             Section {
                 NavigationLink {
                     AppearanceSettingsView()
@@ -54,8 +95,10 @@ struct SettingsView: View {
 
             Section {
                 Button("Sign out", role: .destructive) {
-                    auth.logout()
-                    dismiss()
+                    Task {
+                        await auth.logout()
+                        dismiss()
+                    }
                 }
             }
 
@@ -81,8 +124,27 @@ struct SettingsView: View {
             SafariView(url: url)
                 .ignoresSafeArea()
         }
+        .sheet(isPresented: $showAddAccount) {
+            AddAccountView()
+                .environment(auth)
+        }
         .navigationTitle("Settings")
         .tint(.primary)
+    }
+
+    /// Switching rebuilds the app around the new account, so this view goes
+    /// away with it — dismissing keeps Settings from flashing back on top.
+    private func switchTo(_ account: StoredAccount) async {
+        guard account.did != auth.userDID, switchingDID == nil else { return }
+        switchingDID = account.did
+        switchError = nil
+        do {
+            try await auth.switchTo(did: account.did)
+            dismiss()
+        } catch {
+            switchError = error.localizedDescription
+        }
+        switchingDID = nil
     }
 
     private func updateCacheSize() {
@@ -121,6 +183,112 @@ struct SettingsView: View {
 extension URL: @retroactive Identifiable {
     public var id: String {
         absoluteString
+    }
+}
+
+private struct AccountRow: View {
+    let account: StoredAccount
+    let isActive: Bool
+    let isSwitching: Bool
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 12) {
+                AvatarView(url: account.avatar, size: 36)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(account.handle.map { "@\($0)" } ?? account.did)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    if isActive {
+                        Text("Signed in")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+                if isSwitching {
+                    ProgressView()
+                } else if isActive {
+                    Image(systemName: "checkmark")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(Color.accentColor)
+                }
+            }
+        }
+        .disabled(isActive)
+    }
+}
+
+/// Sign in to an additional account without disturbing the current one.
+private struct AddAccountView: View {
+    @Environment(AuthManager.self) private var auth
+    @Environment(\.dismiss) private var dismiss
+    @State private var handle = ""
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+    @FocusState private var isInputFocused: Bool
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    TextField("e.g. user.bsky.social", text: $handle)
+                        .textContentType(.username)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                        .submitLabel(.go)
+                        .focused($isInputFocused)
+                        .onSubmit { Task { await add() } }
+                } header: {
+                    Text("Handle")
+                } footer: {
+                    if let errorMessage {
+                        Text(errorMessage).foregroundStyle(.red)
+                    } else {
+                        Text("Grain switches to this account once you sign in. Your other accounts stay signed in.")
+                    }
+                }
+
+                Section {
+                    Button {
+                        Task { await add() }
+                    } label: {
+                        HStack {
+                            if isLoading {
+                                ProgressView()
+                            }
+                            Text("Sign in")
+                        }
+                    }
+                    .disabled(handle.trimmingCharacters(in: .whitespaces).isEmpty || isLoading)
+                }
+            }
+            .navigationTitle("Add account")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+            .onAppear { isInputFocused = true }
+        }
+    }
+
+    private func add() async {
+        let trimmed = handle.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty, !isLoading else { return }
+        isLoading = true
+        errorMessage = nil
+        do {
+            try await auth.login(handle: trimmed)
+            dismiss()
+        } catch XRPCError.authorizationDenied, ASWebAuthenticationSessionError.canceledLogin {
+            // Backing out of the sign-in sheet isn't a failure worth reporting.
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        isLoading = false
     }
 }
 
@@ -216,7 +384,7 @@ private struct AccountDetailView: View {
         deleteError = nil
         do {
             try await client.deleteAccount(auth: authContext)
-            auth.logout()
+            await auth.logout()
             dismiss()
         } catch {
             deleteError = error.localizedDescription

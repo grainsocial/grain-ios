@@ -127,7 +127,9 @@ struct MainTabView: View {
                 feedRefreshID = UUID()
             }
             // Pick up any gallery a previous session left half-published. Off
-            // the launch path — it can take as long as it takes.
+            // the launch path — it can take as long as it takes. Scoped to the
+            // signed-in account: drafts belong to the repo that composed them.
+            uploadCenter.accountChanged(to: auth.userDID)
             Task { await uploadCenter.resumePending(client: newClient, auth: auth) }
 
             // Start avatar fetch immediately — it doesn't need an auth context

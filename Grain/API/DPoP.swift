@@ -3,6 +3,10 @@ import Foundation
 import Security
 
 /// DPoP (Demonstration of Proof-of-Possession) proof generator using ES256.
+///
+/// Keys are stored per-DID: an access token is bound to the thumbprint of the
+/// key that requested it, so each signed-in account needs its own and signing
+/// out of one must not disturb the others.
 final class DPoP: Sendable {
     private let privateKey: P256.Signing.PrivateKey
     let publicJWK: [String: String]
@@ -79,46 +83,76 @@ final class DPoP: Sendable {
 
 extension DPoP {
     private static let keychainService = "social.grain.dpop"
-    private static let keychainAccount = "dpop-private-key"
+    private static let legacyKeychainAccount = "dpop-private-key"
 
-    /// Load existing key from Keychain or generate a new one.
-    static func loadOrCreate() throws -> DPoP {
-        if let existingKey = try loadFromKeychain() {
+    private static func account(for did: String) -> String {
+        "dpop-private-key::\(did)"
+    }
+
+    /// Load the account's key from Keychain, or generate and store a new one.
+    static func loadOrCreate(for did: String) throws -> DPoP {
+        if let existingKey = loadKey(account: account(for: did)) {
             return DPoP(privateKey: existingKey)
         }
         let newKey = P256.Signing.PrivateKey()
-        try saveToKeychain(newKey)
+        try saveToKeychain(newKey, account: account(for: did))
         return DPoP(privateKey: newKey)
     }
 
-    /// Remove the stored key (for logout).
-    static func clearKey() throws {
+    /// A key held only in memory. Sign-in generates one before the DID is
+    /// known, then calls `persist(for:)` once the token response names it.
+    static func createEphemeral() -> DPoP {
+        DPoP(privateKey: P256.Signing.PrivateKey())
+    }
+
+    /// Store this instance's key under `did`, replacing any existing key.
+    func persist(for did: String) throws {
+        try DPoP.clearKey(for: did)
+        try DPoP.saveToKeychain(privateKey, account: DPoP.account(for: did))
+    }
+
+    /// Remove one account's stored key (for sign-out).
+    static func clearKey(for did: String) throws {
+        delete(account: account(for: did))
+    }
+
+    /// Move a pre-multi-account key under its DID. The tokens minted with it
+    /// are bound to its thumbprint, so it has to survive the move intact.
+    static func migrateLegacyKey(to did: String) {
+        guard let legacyKey = loadKey(account: legacyKeychainAccount) else { return }
+        if loadKey(account: account(for: did)) == nil {
+            try? saveToKeychain(legacyKey, account: account(for: did))
+        }
+        delete(account: legacyKeychainAccount)
+    }
+
+    private static func delete(account: String) {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: keychainAccount,
+            kSecAttrAccount as String: account,
         ]
         SecItemDelete(query as CFDictionary)
     }
 
-    private static func loadFromKeychain() throws -> P256.Signing.PrivateKey? {
+    private static func loadKey(account: String) -> P256.Signing.PrivateKey? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: keychainAccount,
+            kSecAttrAccount as String: account,
             kSecReturnData as String: true,
         ]
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
         guard status == errSecSuccess, let data = result as? Data else { return nil }
-        return try P256.Signing.PrivateKey(rawRepresentation: data)
+        return try? P256.Signing.PrivateKey(rawRepresentation: data)
     }
 
-    private static func saveToKeychain(_ key: P256.Signing.PrivateKey) throws {
+    private static func saveToKeychain(_ key: P256.Signing.PrivateKey, account: String) throws {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: keychainAccount,
+            kSecAttrAccount as String: account,
             kSecValueData as String: key.rawRepresentation,
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
         ]

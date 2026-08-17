@@ -88,6 +88,12 @@ final class GalleryUploadCenter {
     /// the sheet for a frame before it closed for good.
     var onPublished: (@MainActor () -> Void)?
 
+    /// DID of the signed-in account. Drafts on disk name the repo they publish
+    /// to, so this filters out galleries composed under a different account —
+    /// resuming one of those would write to a repo we no longer hold a token
+    /// for. Nil means "don't filter", which is what tests and previews want.
+    var ownerDID: String?
+
     private let store: GalleryDraftStore
     private var inFlight: Task<Bool, Never>?
 
@@ -95,10 +101,26 @@ final class GalleryUploadCenter {
         self.store = store
     }
 
+    /// Re-point the uploader at another account. A draft belonging to the
+    /// account being left stays on disk — it reappears when that account comes
+    /// back — but it's taken off screen so the resume banner and its retry
+    /// button can't act on it with the wrong credentials.
+    func accountChanged(to did: String?) {
+        guard did != ownerDID else { return }
+        ownerDID = did
+        if let draft = activeDraft, draft.repo != did {
+            activeDraft = nil
+            stage = .idle
+        }
+        refreshPending()
+    }
+
     /// Re-read what's on disk. Cheap — the JSON is a few kilobytes.
     func refreshPending() {
         let activeID = activeDraft?.id
-        pending = store.loadAll().filter { $0.id != activeID }
+        pending = store.loadAll().filter { draft in
+            draft.id != activeID && (ownerDID == nil || draft.repo == ownerDID)
+        }
     }
 
     func discard(_ draftID: UUID) {

@@ -5,6 +5,9 @@ import Foundation
 /// Allows `FeedViewModel.init()` to pre-populate `galleries` before the first
 /// SwiftUI body evaluation, so the feed renders with real content immediately
 /// while the background network refresh runs.
+///
+/// Entries are filed under the account that fetched them — a feed is personal,
+/// and switching accounts must not flash the previous one's galleries.
 final class FeedCache: @unchecked Sendable {
     static let shared = FeedCache()
 
@@ -32,11 +35,37 @@ final class FeedCache: @unchecked Sendable {
         try? data.write(to: fileURL(for: key), options: .atomic)
     }
 
-    private func fileURL(for key: String) -> URL {
-        let safe = key
+    /// Drop every entry belonging to `did` (that account was signed out).
+    func purge(did: String) {
+        let suffix = "\(Self.accountSeparator)\(Self.sanitize(did)).json"
+        guard let entries = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) else { return }
+        for entry in entries where entry.lastPathComponent.hasSuffix(suffix) {
+            try? FileManager.default.removeItem(at: entry)
+        }
+    }
+
+    /// Re-file entries written before the cache was account-scoped under `did`,
+    /// the account that must have written them.
+    func adoptLegacyEntries(did: String) {
+        guard let entries = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) else { return }
+        for entry in entries where !entry.lastPathComponent.contains(Self.accountSeparator) {
+            let key = entry.deletingPathExtension().lastPathComponent
+            try? FileManager.default.moveItem(at: entry, to: fileURL(for: key, did: did))
+        }
+    }
+
+    private static let accountSeparator = "--acct-"
+
+    private static func sanitize(_ value: String) -> String {
+        value
             .replacingOccurrences(of: "/", with: "-")
             .replacingOccurrences(of: ":", with: "-")
             .replacingOccurrences(of: " ", with: "_")
-        return directory.appendingPathComponent("\(safe).json")
+    }
+
+    private func fileURL(for key: String, did: String? = AccountScopedStorage.activeAccountID) -> URL {
+        let safe = Self.sanitize(key)
+        guard let did else { return directory.appendingPathComponent("\(safe).json") }
+        return directory.appendingPathComponent("\(safe)\(Self.accountSeparator)\(Self.sanitize(did)).json")
     }
 }

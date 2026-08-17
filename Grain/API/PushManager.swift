@@ -55,25 +55,26 @@ final class PushManager: NSObject {
         logger.error("APNs registration failed: \(error)")
     }
 
-    /// Unregister the current token on logout.
-    /// Must be called while auth context is still valid (before token storage is cleared).
-    func unregisterToken() {
-        guard let token = currentToken,
-              let authManager else { return }
-        let client = authManager.makeClient()
+    /// Unregister the current token when an account stops being active — on
+    /// sign-out, or on a switch to another account.
+    ///
+    /// Takes the outgoing account's auth context explicitly and uses a client
+    /// with no refresh hook: by the time this resolves, the app may already be
+    /// acting as somebody else, and unregistering *their* device token is
+    /// exactly the bug this avoids.
+    func unregisterToken(auth: AuthContext?) async {
+        guard let token = currentToken, let auth else { return }
         currentToken = nil
-        Task {
-            guard let auth = await authManager.authContext() else { return }
-            do {
-                try await client.procedure(
-                    "dev.hatk.push.unregisterToken",
-                    input: UnregisterTokenInput(token: token),
-                    auth: auth
-                )
-                logger.info("Push token unregistered from server")
-            } catch {
-                logger.error("Failed to unregister push token: \(error)")
-            }
+        let client = XRPCClient(baseURL: AuthManager.serverURL)
+        do {
+            try await client.procedure(
+                "dev.hatk.push.unregisterToken",
+                input: UnregisterTokenInput(token: token),
+                auth: auth
+            )
+            logger.info("Push token unregistered from server")
+        } catch {
+            logger.error("Failed to unregister push token: \(error)")
         }
     }
 

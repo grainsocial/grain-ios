@@ -7,6 +7,10 @@ private let logger = Logger(subsystem: "social.grain.grain", category: "Auth")
 private let authSignposter = OSSignposter(subsystem: "social.grain.grain", category: "Auth")
 
 /// Manages OAuth + DPoP authentication flow against the hatk server.
+///
+/// Several accounts can be signed in at once. Their credentials live side by
+/// side in the Keychain, keyed by DID; this class tracks which one is active
+/// and swaps the app over to another on request.
 @Observable
 @MainActor
 final class AuthManager {
@@ -15,6 +19,8 @@ final class AuthManager {
     var userHandle: String?
     var userAvatar: String?
     var avatarImage: UIImage?
+    /// Every account signed in on this device, active one included.
+    var accounts: [StoredAccount] = []
     /// Set when a launch-time scope migration forced the user to sign out.
     /// LoginView reads this to display an explanation above the sign-in form.
     var reauthReason: String?
@@ -23,6 +29,8 @@ final class AuthManager {
     private var codeVerifier: String?
     private var client: XRPCClient?
     private var refreshTask: Task<Void, Error>?
+    /// The OAuth flow currently on screen, if any. At most one at a time.
+    private var loginTask: Task<Void, Error>?
 
     #if PRODUCTION_API || !targetEnvironment(simulator)
         nonisolated static let serverURL = URL(string: "https://grain.social")!
@@ -62,25 +70,32 @@ final class AuthManager {
         let spid = authSignposter.makeSignpostID()
         let state = authSignposter.beginInterval("SessionRestore", id: spid)
         logger.debug("[SessionRestore] begin")
+
+        // Installs that predate multi-account keep one unsuffixed credential
+        // set; fold it into the account list before reading anything back.
+        if let migrated = TokenStorage.migrateLegacyAccountIfNeeded() {
+            DPoP.migrateLegacyKey(to: migrated)
+            AccountScopedStorage.migrateLegacyState(to: migrated)
+        }
+        accounts = TokenStorage.accounts
+        AccountScopedStorage.activeAccountID = TokenStorage.activeDID
+
         // Restore session from Keychain — allow expired tokens since we can refresh
-        if TokenStorage.accessToken != nil,
-           let did = TokenStorage.userDID,
-           TokenStorage.refreshToken != nil
-        {
+        if let did = TokenStorage.activeDID, TokenStorage.hasCredentials(for: did) {
             isAuthenticated = true
             userDID = did
-            userHandle = TokenStorage.userHandle
-            userAvatar = TokenStorage.userAvatar
+            userHandle = TokenStorage.handle(for: did)
+            userAvatar = TokenStorage.avatar(for: did)
             authSignposter.emitEvent("KeychainRead", id: spid, "authenticated=true")
             logger.debug("[KeychainRead] authenticated=true")
             let dpopSpid = authSignposter.makeSignpostID()
             let dpopState = authSignposter.beginInterval("DPoPLoad", id: dpopSpid)
             logger.debug("[DPoPLoad] begin")
-            dpop = try? DPoP.loadOrCreate()
+            dpop = try? DPoP.loadOrCreate(for: did)
             authSignposter.endInterval("DPoPLoad", dpopState)
             logger.debug("[DPoPLoad] end")
 
-            runScopeMigrationIfNeeded()
+            runScopeMigrationIfNeeded(did: did)
         } else {
             authSignposter.emitEvent("KeychainRead", id: spid, "authenticated=false")
             logger.debug("[KeychainRead] authenticated=false")
@@ -95,10 +110,10 @@ final class AuthManager {
     /// with a fresh grant. The UserDefaults flag guarantees this fires at
     /// most once per install per version — even if the re-login somehow
     /// still returns an insufficient grant, we don't loop.
-    private func runScopeMigrationIfNeeded() {
+    private func runScopeMigrationIfNeeded(did: String) {
         guard !UserDefaults.standard.bool(forKey: Self.scopeMigrationKey) else { return }
 
-        let stored = TokenStorage.grantedScope.map { Set($0.split(separator: " ").map(String.init)) } ?? []
+        let stored = TokenStorage.grantedScope(for: did).map { Set($0.split(separator: " ").map(String.init)) } ?? []
         let missing = Self.requiredScopes.filter { !stored.contains($0) }
         guard !missing.isEmpty else {
             // Nothing to do — stored token already covers every required scope.
@@ -108,14 +123,42 @@ final class AuthManager {
 
         logger.info("[ScopeMigration] forcing re-auth; missing=\(missing.joined(separator: ","), privacy: .public)")
         UserDefaults.standard.set(true, forKey: Self.scopeMigrationKey)
-        logout()
+        // A scope bump applies to every grant, so drop them all rather than
+        // leaving stale accounts in the switcher that can't be switched to.
+        for account in TokenStorage.accounts {
+            forget(did: account.did)
+        }
+        applySignedOutState()
         reauthReason = "Grain has been updated. Please sign in again to enable new features."
     }
 
-    /// Start the OAuth login flow. Set `createAccount` to show the sign-up page.
+    /// Start the OAuth login flow, making the resulting account active. Set
+    /// `createAccount` to show the sign-up page.
+    ///
+    /// Safe to call while another account is signed in: the new grant is kept
+    /// in memory until the token exchange succeeds, so cancelling or failing
+    /// leaves the current account exactly as it was.
+    ///
+    /// Concurrent calls join the flow already running rather than starting a
+    /// rival one. Every sign-in screen has more than one way to submit — a
+    /// button, the keyboard's Go key, tapping a suggestion — and the PAR round
+    /// trip happens before the web sheet appears, so a second trigger during
+    /// that gap would otherwise stack a second sheet onto the PDS.
     func login(handle: String = "", createAccount: Bool = false) async throws {
-        let dpop = try DPoP.loadOrCreate()
-        self.dpop = dpop
+        if let existing = loginTask {
+            return try await existing.value
+        }
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.loginTask = nil }
+            try await performLogin(handle: handle, createAccount: createAccount)
+        }
+        loginTask = task
+        try await task.value
+    }
+
+    private func performLogin(handle: String, createAccount: Bool) async throws {
+        let dpop = DPoP.createEphemeral()
 
         let client = XRPCClient(baseURL: Self.serverURL)
         self.client = client
@@ -222,26 +265,34 @@ final class AuthManager {
 
     /// Refresh the access token only if it expires within 60 seconds.
     func refreshIfNeeded() async throws {
-        guard let expiresAt = TokenStorage.tokenExpiresAt, expiresAt.timeIntervalSinceNow < 60 else { return }
+        guard let did = userDID,
+              let expiresAt = TokenStorage.tokenExpiresAt(for: did),
+              expiresAt.timeIntervalSinceNow < 60 else { return }
         try await refresh()
     }
 
-    /// Refresh the access token using the refresh token. Coalesces concurrent calls.
+    /// Refresh the active account's access token. Coalesces concurrent calls.
     func refresh() async throws {
         if let existing = refreshTask {
             return try await existing.value
         }
+        guard let did = userDID else { throw XRPCError.unauthorized }
         let task = Task { @MainActor [weak self] in
             guard let self else { throw XRPCError.unauthorized }
             defer { self.refreshTask = nil }
-            try await performRefresh()
+            try await performRefresh(did: did)
         }
         refreshTask = task
         try await task.value
     }
 
-    private func performRefresh() async throws {
-        guard let dpop, let refreshToken = TokenStorage.refreshToken else {
+    /// `did` is captured when the refresh starts: the user may switch accounts
+    /// while it's in flight, and the result belongs to the account that asked
+    /// for it, not to whoever is active when it lands.
+    private func performRefresh(did: String) async throws {
+        guard let dpop = try? DPoP.loadOrCreate(for: did),
+              let refreshToken = TokenStorage.refreshToken(for: did)
+        else {
             throw XRPCError.unauthorized
         }
 
@@ -288,38 +339,32 @@ final class AuthManager {
                 || lower.contains("expired")
             let isTerminal = (400 ... 499).contains(httpResponse.statusCode) || bodyClaimsTerminal
             if isTerminal {
-                logout()
+                // The grant is gone — drop this account. If it's the one on
+                // screen, fall through to whichever account is left.
+                forget(did: did)
+                if userDID == did {
+                    activateNextAccountOrSignOut()
+                }
             }
             throw XRPCError.unauthorized
         }
 
         let tokenResponse = try JSONDecoder().decode(TokenResponse.self, from: data)
-        storeTokens(tokenResponse)
-    }
-
-    /// Callback invoked before credentials are cleared on logout.
-    var onLogout: (() -> Void)?
-
-    /// Log out and clear all stored credentials.
-    func logout() {
-        onLogout?()
-        TokenStorage.clear()
-        try? DPoP.clearKey()
-        isAuthenticated = false
-        userDID = nil
-        userHandle = nil
-        dpop = nil
+        store(tokenResponse, for: did, dpop: nil, makeActive: false)
     }
 
     /// Build an AuthContext for making authenticated requests.
     /// Proactively refreshes if the token expires within 60 seconds.
     func authContext() async -> AuthContext? {
-        guard let dpop else { return nil }
-        if let expiresAt = TokenStorage.tokenExpiresAt, expiresAt.timeIntervalSinceNow < 60 {
+        guard dpop != nil, let did = userDID else { return nil }
+        if let expiresAt = TokenStorage.tokenExpiresAt(for: did), expiresAt.timeIntervalSinceNow < 60 {
             try? await refresh()
         }
-        guard let token = TokenStorage.accessToken else { return nil }
-        return AuthContext(accessToken: token, dpop: dpop)
+        // Re-read after the await: the active account may have changed.
+        guard let currentDpop = dpop,
+              let currentDID = userDID,
+              let token = TokenStorage.accessToken(for: currentDID) else { return nil }
+        return AuthContext(accessToken: token, dpop: currentDpop)
     }
 
     /// Create an XRPCClient with automatic token refresh on 401.
@@ -329,6 +374,15 @@ final class AuthManager {
             return await self?.authContext()
         }
     }
+
+    // MARK: - Account switching
+
+    /// Called with the outgoing account's auth context, while it's still valid,
+    /// before that account stops being active. Push registration unwinds here.
+    var onAccountWillDeactivate: ((AuthContext?) async -> Void)?
+    /// Called with the new active DID once it has taken over, or nil when the
+    /// last account signed out. Per-account caches re-point themselves here.
+    var onAccountDidActivate: ((String?) -> Void)?
 
     // MARK: - Private
 
@@ -362,23 +416,35 @@ final class AuthManager {
             retryRequest.setValue(retryProof, forHTTPHeaderField: "DPoP")
             let (retryData, _) = try await URLSession.shared.data(for: retryRequest)
             let tokenResponse = try JSONDecoder().decode(TokenResponse.self, from: retryData)
-            storeTokens(tokenResponse)
+            store(tokenResponse, for: tokenResponse.sub, dpop: dpop, makeActive: true)
             return
         }
 
         let tokenResponse = try JSONDecoder().decode(TokenResponse.self, from: data)
-        storeTokens(tokenResponse)
+        store(tokenResponse, for: tokenResponse.sub, dpop: dpop, makeActive: true)
     }
 
-    private func storeTokens(_ response: TokenResponse) {
-        TokenStorage.accessToken = response.accessToken
-        TokenStorage.refreshToken = response.refreshToken
-        TokenStorage.userDID = response.sub
-        TokenStorage.userHandle = response.handle
-        TokenStorage.tokenExpiresAt = Date().addingTimeInterval(TimeInterval(response.expiresIn))
-        if let scope = response.scope {
-            TokenStorage.grantedScope = scope
+    /// Persist a token response under `did`. Pass the `dpop` the tokens were
+    /// minted with on a fresh sign-in so it's saved alongside them; refreshes
+    /// reuse the account's stored key and pass nil.
+    private func store(_ response: TokenResponse, for did: String, dpop: DPoP?, makeActive: Bool) {
+        if let dpop {
+            try? dpop.persist(for: did)
         }
+        TokenStorage.storeTokens(
+            did: did,
+            accessToken: response.accessToken,
+            refreshToken: response.refreshToken,
+            handle: response.handle,
+            expiresAt: Date().addingTimeInterval(TimeInterval(response.expiresIn)),
+            scope: response.scope
+        )
+        TokenStorage.upsertAccount(StoredAccount(did: did, handle: response.handle, avatar: nil))
+        accounts = TokenStorage.accounts
+
+        guard makeActive else { return }
+        setActiveDID(did)
+        self.dpop = dpop ?? (try? DPoP.loadOrCreate(for: did))
 
         // Guard each @Observable assignment: the macro's setter always fires the
         // observation registrar even when the value is unchanged, so token refreshes
@@ -386,15 +452,19 @@ final class AuthManager {
         if !isAuthenticated {
             isAuthenticated = true
         }
-        if userDID != response.sub {
-            userDID = response.sub
+        if userDID != did {
+            userDID = did
+            userAvatar = TokenStorage.avatar(for: did)
+            avatarImage = nil
         }
-        if userHandle != response.handle {
-            userHandle = response.handle
+        let storedHandle = TokenStorage.handle(for: did)
+        if userHandle != storedHandle {
+            userHandle = storedHandle
         }
         if reauthReason != nil {
             reauthReason = nil
         }
+        onAccountDidActivate?(did)
     }
 
     func fetchAvatarIfNeeded() async {
@@ -415,9 +485,14 @@ final class AuthManager {
         let client = XRPCClient(baseURL: Self.serverURL)
         do {
             let profile = try await client.getActorProfile(actor: did)
+            // Keep the switcher's row for this account current, not just the
+            // active-account fields.
+            TokenStorage.upsertAccount(StoredAccount(did: did, handle: profile.handle, avatar: profile.avatar))
+            accounts = TokenStorage.accounts
+            guard did == userDID else { return }
             if userAvatar != profile.avatar {
                 userAvatar = profile.avatar
-                TokenStorage.userAvatar = profile.avatar
+                TokenStorage.setAvatar(profile.avatar, for: did)
             }
         } catch {
             logger.error("Avatar fetch failed: \(error)")
@@ -446,6 +521,144 @@ final class AuthManager {
     private func generateCodeChallenge(verifier: String) -> String {
         let hash = SHA256.hash(data: Data(verifier.utf8))
         return Data(hash).base64URLEncoded()
+    }
+}
+
+// MARK: - Account switching
+
+/// Split out of the class body so the switching logic reads as its own unit —
+/// and stays out of `AuthManager`'s already-long body.
+@MainActor
+extension AuthManager {
+    enum AccountError: LocalizedError {
+        /// The account is in the list but its credentials are gone — the only
+        /// way back in is a fresh sign-in.
+        case signInRequired(handle: String?)
+
+        var errorDescription: String? {
+            switch self {
+            case let .signInRequired(handle):
+                "Sign in again to use \(handle.map { "@\($0)" } ?? "this account")."
+            }
+        }
+    }
+
+    /// Make an already-signed-in account the active one.
+    func switchTo(did: String) async throws {
+        guard did != userDID else { return }
+        guard TokenStorage.hasCredentials(for: did), let newDpop = try? DPoP.loadOrCreate(for: did) else {
+            throw AccountError.signInRequired(handle: accounts.first { $0.did == did }?.handle)
+        }
+
+        await deactivateCurrentAccount()
+
+        // Renew the incoming account's token *before* handing the app over. A
+        // dead grant then surfaces as an error on the switcher rather than as a
+        // wall of empty views, and everything after this point is synchronous:
+        // flipping `userDID` tears down the view tree that's awaiting this call,
+        // so an await past here can be cancelled mid-switch.
+        if let expiresAt = TokenStorage.tokenExpiresAt(for: did), expiresAt.timeIntervalSinceNow < 60 {
+            do {
+                try await performRefresh(did: did)
+            } catch {
+                logger.error("[Switch] refresh failed for \(did, privacy: .public): \(error)")
+                // performRefresh drops the account when the grant is terminally
+                // gone; anything else (offline, 5xx) is worth switching through,
+                // since the 401 path retries.
+                if !TokenStorage.hasCredentials(for: did) {
+                    throw AccountError.signInRequired(handle: accounts.first { $0.did == did }?.handle)
+                }
+            }
+        }
+
+        setActiveDID(did)
+        refreshTask = nil
+        dpop = newDpop
+        userDID = did
+        userHandle = TokenStorage.handle(for: did)
+        userAvatar = TokenStorage.avatar(for: did)
+        avatarImage = nil
+        accounts = TokenStorage.accounts
+        isAuthenticated = true
+
+        onAccountDidActivate?(did)
+        Task { await fetchAndStoreAvatar() }
+    }
+
+    /// Sign out of one account. Signing out of the active account falls back to
+    /// another signed-in account when there is one, so the switcher never
+    /// bounces a multi-account user out to the login screen unnecessarily.
+    func signOut(did: String) async {
+        if did == userDID {
+            await deactivateCurrentAccount()
+            forget(did: did)
+            activateNextAccountOrSignOut()
+        } else {
+            forget(did: did)
+        }
+    }
+
+    /// Sign out of the account currently on screen.
+    func logout() async {
+        guard let did = userDID else { return }
+        await signOut(did: did)
+    }
+
+    /// Let the outgoing account clean up server-side state (push tokens) while
+    /// its credentials still work.
+    private func deactivateCurrentAccount() async {
+        guard userDID != nil, let hook = onAccountWillDeactivate else { return }
+        await hook(authContext())
+    }
+
+    /// Erase one account's credentials, keys, and cached content. Purely local
+    /// — no observable state changes, no server calls.
+    private func forget(did: String) {
+        TokenStorage.removeAccount(did)
+        try? DPoP.clearKey(for: did)
+        AccountScopedStorage.purge(did: did)
+        accounts = TokenStorage.accounts
+    }
+
+    /// Move to whichever account is left, or drop to the signed-out state.
+    private func activateNextAccountOrSignOut() {
+        refreshTask = nil
+        guard let next = TokenStorage.accounts.first(where: { TokenStorage.hasCredentials(for: $0.did) }),
+              let nextDpop = try? DPoP.loadOrCreate(for: next.did)
+        else {
+            applySignedOutState()
+            return
+        }
+
+        setActiveDID(next.did)
+        dpop = nextDpop
+        userDID = next.did
+        userHandle = TokenStorage.handle(for: next.did)
+        userAvatar = TokenStorage.avatar(for: next.did)
+        avatarImage = nil
+        isAuthenticated = true
+        onAccountDidActivate?(next.did)
+        Task { await fetchAndStoreAvatar() }
+    }
+
+    /// The Keychain holds the authoritative active DID; UserDefaults carries a
+    /// copy for code that can't afford a Keychain read. Always move both.
+    private func setActiveDID(_ did: String?) {
+        TokenStorage.activeDID = did
+        AccountScopedStorage.activeAccountID = did
+    }
+
+    private func applySignedOutState() {
+        setActiveDID(nil)
+        refreshTask = nil
+        isAuthenticated = false
+        userDID = nil
+        userHandle = nil
+        userAvatar = nil
+        avatarImage = nil
+        dpop = nil
+        accounts = TokenStorage.accounts
+        onAccountDidActivate?(nil)
     }
 }
 

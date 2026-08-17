@@ -14,8 +14,31 @@ final class ViewedStoryStorage {
     private static let authorKey = "viewedStoryAuthors"
 
     private var saveTask: Task<Void, Never>?
+    /// Account these entries belong to. What you've watched is per-account.
+    private var did: String?
 
-    init() {
+    private var urisKey: String {
+        AccountScopedStorage.key(Self.urisKey, did: did)
+    }
+
+    private var authorKey: String {
+        AccountScopedStorage.key(Self.authorKey, did: did)
+    }
+
+    init(did: String? = AccountScopedStorage.activeAccountID) {
+        self.did = did
+        load()
+    }
+
+    /// Point the store at another account, flushing pending writes for the one
+    /// being left behind.
+    func switchAccount(did newDID: String?) {
+        guard newDID != did else { return }
+        saveTask?.cancel()
+        save()
+        did = newDID
+        viewedUris = []
+        authorLastViewed = [:]
         load()
     }
 
@@ -98,12 +121,12 @@ final class ViewedStoryStorage {
             storageSignposter.endInterval("ViewedStorageLoad", state)
             storageLogger.debug("[ViewedStorageLoad] end uris=\(self.viewedUris.count) authors=\(self.authorLastViewed.count)")
         }
-        if let data = UserDefaults.standard.data(forKey: Self.urisKey),
+        if let data = UserDefaults.standard.data(forKey: urisKey),
            let decoded = try? JSONDecoder().decode(Set<String>.self, from: data)
         {
             viewedUris = decoded
         }
-        if let data = UserDefaults.standard.data(forKey: Self.authorKey),
+        if let data = UserDefaults.standard.data(forKey: authorKey),
            let decoded = try? JSONDecoder().decode([String: String].self, from: data)
         {
             authorLastViewed = decoded
@@ -121,10 +144,10 @@ final class ViewedStoryStorage {
 
     private func save() {
         if let data = try? JSONEncoder().encode(viewedUris) {
-            UserDefaults.standard.set(data, forKey: Self.urisKey)
+            UserDefaults.standard.set(data, forKey: urisKey)
         }
         if let data = try? JSONEncoder().encode(authorLastViewed) {
-            UserDefaults.standard.set(data, forKey: Self.authorKey)
+            UserDefaults.standard.set(data, forKey: authorKey)
         }
     }
 }

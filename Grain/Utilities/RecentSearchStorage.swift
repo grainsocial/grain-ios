@@ -28,7 +28,13 @@ final class RecentSearchStorage {
     private static let maxProfiles = 10
     private static let maxText = 10
 
-    init() {
+    /// Search history is per-account, so the keys carry the owning DID.
+    private let profilesKey: String
+    private let textKey: String
+
+    init(did: String? = AccountScopedStorage.activeAccountID) {
+        profilesKey = AccountScopedStorage.key(Self.profilesKey, did: did)
+        textKey = AccountScopedStorage.key(Self.textKey, did: did)
         load()
     }
 
@@ -69,12 +75,12 @@ final class RecentSearchStorage {
     }
 
     private func load() {
-        if let data = UserDefaults.standard.data(forKey: Self.profilesKey),
+        if let data = UserDefaults.standard.data(forKey: profilesKey),
            let decoded = try? JSONDecoder().decode([RecentProfileSearch].self, from: data)
         {
             profiles = decoded
         }
-        if let data = UserDefaults.standard.data(forKey: Self.textKey),
+        if let data = UserDefaults.standard.data(forKey: textKey),
            let decoded = try? JSONDecoder().decode([RecentTextSearch].self, from: data)
         {
             textSearches = decoded
@@ -83,10 +89,10 @@ final class RecentSearchStorage {
 
     private func save() {
         if let data = try? JSONEncoder().encode(profiles) {
-            UserDefaults.standard.set(data, forKey: Self.profilesKey)
+            UserDefaults.standard.set(data, forKey: profilesKey)
         }
         if let data = try? JSONEncoder().encode(textSearches) {
-            UserDefaults.standard.set(data, forKey: Self.textKey)
+            UserDefaults.standard.set(data, forKey: textKey)
         }
     }
 }

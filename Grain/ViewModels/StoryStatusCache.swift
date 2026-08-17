@@ -69,4 +69,10 @@ final class StoryStatusCache {
         let now = Date()
         entries = entries.filter { $0.value.expiresAt > now }
     }
+
+    /// Drop everything. The set of authors with live stories depends on who you
+    /// follow, so it doesn't carry across an account switch.
+    func clear() {
+        entries = [:]
+    }
 }

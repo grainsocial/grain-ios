@@ -63,7 +63,11 @@ struct GrainApp: App {
             let _ = appSignposter.emitEvent("AuthGateResolved")
             Group {
                 if isAuthed {
+                    // Keyed on the account: switching rebuilds the whole tree so
+                    // no view model, scroll position, or half-loaded feed
+                    // carries over from the account being left.
                     MainTabView(pendingDeepLink: $pendingDeepLink)
+                        .id(authManager.userDID)
                         .environment(authManager)
                         .environment(pushManager)
                         .environment(storyStatusCache)
@@ -82,15 +86,29 @@ struct GrainApp: App {
                             appDelegate.onNotificationTap = { deepLink in
                                 pendingDeepLink = deepLink
                             }
-                            authManager.onLogout = { [pushManager] in
-                                pushManager.unregisterToken()
-                            }
                             pushManager.registerIfNeeded()
                         }
                 } else {
                     LoginView()
                         .environment(authManager)
                         .tint(Color.accentColor)
+                }
+            }
+            .onAppear {
+                // Account-switch plumbing, wired outside the auth gate so it's
+                // in place for the first sign-in as well as later switches.
+                authManager.onAccountWillDeactivate = { [pushManager] auth in
+                    await pushManager.unregisterToken(auth: auth)
+                }
+                authManager.onAccountDidActivate = { [pushManager, storyStatusCache, viewedStoryStorage, uploadCenter] did in
+                    viewedStoryStorage.switchAccount(did: did)
+                    storyStatusCache.clear()
+                    uploadCenter.accountChanged(to: did)
+                    // Nil means the last account signed out — don't ask a
+                    // logged-out user for notification permission.
+                    if did != nil {
+                        pushManager.registerIfNeeded()
+                    }
                 }
             }
             .onOpenURL { url in
