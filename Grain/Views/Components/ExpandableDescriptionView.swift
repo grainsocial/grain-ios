@@ -1,4 +1,3 @@
-import NaturalLanguage
 import SwiftUI
 import Translation
 
@@ -76,13 +75,12 @@ struct ExpandableDescriptionView: View {
             }
         }
         .translationPresentation(isPresented: $showTranslation, text: text)
-        .onAppear {
-            let recognizer = NLLanguageRecognizer()
-            recognizer.processString(text)
-            if let detected = recognizer.dominantLanguage?.rawValue {
-                let preferred = Locale.preferredLanguages.first ?? "en"
-                isForeignLanguage = !preferred.hasPrefix(detected)
-            }
+        // `.task` rather than `.onAppear`: detection is off the main actor now,
+        // so it must not block the card appearing. Cancelling on disappear is
+        // free — a card scrolled past before detection finishes just re-runs on
+        // re-entry and hits the cache.
+        .task {
+            isForeignLanguage = await LanguageDetector.shared.isForeign(text)
         }
     }
 }

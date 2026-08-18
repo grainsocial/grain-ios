@@ -1,18 +1,43 @@
 import Foundation
 
 enum DateFormatting {
-    /// Produce an ISO 8601 string with fractional seconds (matches JS `toISOString()`).
-    static func nowISO(date: Date = Date()) -> String {
+    /// Formatters are expensive to build — each stands up an underlying
+    /// CFDateFormatter/ICU instance — and these used to be allocated per call,
+    /// with `parse` building *two* for any timestamp lacking fractional seconds.
+    /// Profiling a feed scroll measured that at 184ms across 1039 calls: 65% of
+    /// all gallery card body-evaluation time.
+    ///
+    /// `nonisolated(unsafe)` because Foundation's formatters aren't marked
+    /// `Sendable`, though they are documented as thread-safe for formatting and
+    /// parsing so long as their configuration isn't mutated afterwards. These are
+    /// configured once here and only ever read. `StoryStatusCache` caches its own
+    /// the same way, and avoids the annotation only by being `@MainActor`.
+    private nonisolated(unsafe) static let iso8601WithFractionalSeconds: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter.string(from: date)
+        return formatter
+    }()
+
+    private nonisolated(unsafe) static let iso8601: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
+    private nonisolated(unsafe) static let monthDay: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d"
+        return formatter
+    }()
+
+    /// Produce an ISO 8601 string with fractional seconds (matches JS `toISOString()`).
+    static func nowISO(date: Date = Date()) -> String {
+        iso8601WithFractionalSeconds.string(from: date)
     }
 
     /// Parse an ISO 8601 string with or without fractional seconds.
     static func parse(_ string: String) -> Date? {
-        let frac = ISO8601DateFormatter()
-        frac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return frac.date(from: string) ?? ISO8601DateFormatter().date(from: string)
+        iso8601WithFractionalSeconds.date(from: string) ?? iso8601.date(from: string)
     }
 
     /// Relative time string like "2h", "3d", "1w", or "Mar 5".
@@ -39,8 +64,6 @@ enum DateFormatting {
         if interval < 2_592_000 {
             return "\(Int(interval / 604_800))w"
         }
-        let df = DateFormatter()
-        df.dateFormat = "MMM d"
-        return df.string(from: date)
+        return monthDay.string(from: date)
     }
 }

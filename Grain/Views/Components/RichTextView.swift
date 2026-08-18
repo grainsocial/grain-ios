@@ -1,4 +1,44 @@
+import os
 import SwiftUI
+
+/// Compiled once rather than per call. Building an `NSRegularExpression` is not
+/// cheap, and the regex fallback below compiles four of them — previously on
+/// every single body evaluation.
+private enum LinkPatterns {
+    static let url = try? NSRegularExpression(pattern: #"https?://[^\s<>\[\]()]+"#)
+    static let bareDomain = try? NSRegularExpression(
+        pattern: #"(?<![/@\w.])([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}(/[^\s<>\[\]()]*)?"#
+    )
+    static let mention = try? NSRegularExpression(
+        pattern: #"@([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?"#
+    )
+    static let hashtag = try? NSRegularExpression(pattern: #"#(\p{L}[\p{L}\p{N}_]*)"#)
+}
+
+/// Memoizes regex segmentation, which is pure with respect to `text`.
+///
+/// Worth caching because the same string gets segmented repeatedly:
+/// `ExpandableDescriptionView` renders it up to three times to measure
+/// truncation, and cards re-parse from scratch every time they re-enter the
+/// lazy stack. Profiling measured 430 parses across only ~108 description cards.
+private enum SegmentCache {
+    private static let store = OSAllocatedUnfairLock(initialState: [String: [Segment]]())
+    private static let limit = 500
+
+    static func segments(for text: String, build: (String) -> [Segment]) -> [Segment] {
+        if let cached = store.withLock({ $0[text] }) {
+            return cached
+        }
+        let built = build(text)
+        store.withLock { cache in
+            if cache.count >= limit {
+                cache.removeAll(keepingCapacity: true)
+            }
+            cache[text] = built
+        }
+        return built
+    }
+}
 
 /// Renders text with tappable links, mentions, and hashtags.
 /// Uses facets if provided, otherwise falls back to regex parsing.
@@ -11,10 +51,13 @@ struct RichTextView: View {
     var onHashtagTap: ((String) -> Void)?
 
     private var attributedString: AttributedString {
+        // Only the regex path is cached — it's the expensive one, and it depends
+        // on nothing but `text`. Facet segmentation is already cheap and would
+        // need the facets in the cache key.
         let segments: [Segment] = if let facets, !facets.isEmpty {
             segmentsFromFacets(text: text, facets: facets)
         } else {
-            segmentsFromRegex(text: text)
+            SegmentCache.segments(for: text) { segmentsFromRegex(text: $0) }
         }
 
         var result = AttributedString()
@@ -123,12 +166,12 @@ struct RichTextView: View {
     /// the matched substring. Ranges already claimed by an earlier pattern win,
     /// so call order sets priority.
     private func appendMatches(
-        of pattern: String,
+        of regex: NSRegularExpression?,
         in text: String,
         to matches: inout [Match],
         segment: (String) -> Segment
     ) {
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return }
+        guard let regex else { return }
         let nsRange = NSRange(text.startIndex..., in: text)
         for matchResult in regex.matches(in: text, range: nsRange) {
             guard let range = Range(matchResult.range, in: text),
@@ -139,16 +182,11 @@ struct RichTextView: View {
     }
 
     private func segmentsFromRegex(text: String) -> [Segment] {
-        let urlPattern = #"https?://[^\s<>\[\]()]+"#
-        let bareDomainPattern = #"(?<![/@\w.])([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}(/[^\s<>\[\]()]*)?"#
-        let mentionPattern = #"@([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?"#
-        let hashtagPattern = #"#(\p{L}[\p{L}\p{N}_]*)"#
-
         var matches: [Match] = []
-        appendMatches(of: urlPattern, in: text, to: &matches) { .link($0, url: $0) }
-        appendMatches(of: bareDomainPattern, in: text, to: &matches) { .link($0, url: "https://\($0)") }
-        appendMatches(of: mentionPattern, in: text, to: &matches) { .mention($0, did: String($0.dropFirst())) }
-        appendMatches(of: hashtagPattern, in: text, to: &matches) { .hashtag($0, tag: String($0.dropFirst())) }
+        appendMatches(of: LinkPatterns.url, in: text, to: &matches) { .link($0, url: $0) }
+        appendMatches(of: LinkPatterns.bareDomain, in: text, to: &matches) { .link($0, url: "https://\($0)") }
+        appendMatches(of: LinkPatterns.mention, in: text, to: &matches) { .mention($0, did: String($0.dropFirst())) }
+        appendMatches(of: LinkPatterns.hashtag, in: text, to: &matches) { .hashtag($0, tag: String($0.dropFirst())) }
 
         matches.sort { $0.range.lowerBound < $1.range.lowerBound }
 
