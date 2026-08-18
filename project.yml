@@ -45,7 +45,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: ${BUNDLE_ID}
         PRODUCT_MODULE_NAME: Grain
         TARGETED_DEVICE_FAMILY: "1"
-        MARKETING_VERSION: "7"
+        MARKETING_VERSION: "8"
         CURRENT_PROJECT_VERSION: "59"
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_ASSET_PATHS: "\"$(SRCROOT)/Grain/Preview Content\""

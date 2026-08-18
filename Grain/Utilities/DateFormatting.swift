@@ -7,11 +7,13 @@ enum DateFormatting {
     /// Profiling a feed scroll measured that at 184ms across 1039 calls: 65% of
     /// all gallery card body-evaluation time.
     ///
-    /// `nonisolated(unsafe)` because Foundation's formatters aren't marked
-    /// `Sendable`, though they are documented as thread-safe for formatting and
-    /// parsing so long as their configuration isn't mutated afterwards. These are
-    /// configured once here and only ever read. `StoryStatusCache` caches its own
-    /// the same way, and avoids the annotation only by being `@MainActor`.
+    /// The two `ISO8601DateFormatter`s need `nonisolated(unsafe)` because that
+    /// type isn't marked `Sendable`, though it is documented as thread-safe for
+    /// formatting and parsing so long as its configuration isn't mutated
+    /// afterwards — and these are configured once here and only ever read.
+    /// (`DateFormatter` below *is* `Sendable`, so it needs no annotation.)
+    /// `StoryStatusCache` caches its own formatters the same way, avoiding the
+    /// annotation only by being `@MainActor`.
     private nonisolated(unsafe) static let iso8601WithFractionalSeconds: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -24,7 +26,7 @@ enum DateFormatting {
         return formatter
     }()
 
-    private nonisolated(unsafe) static let monthDay: DateFormatter = {
+    private static let monthDay: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMM d"
         return formatter
