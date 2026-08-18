@@ -989,12 +989,9 @@ extension ProfileView {
     }
 
     private func storyDateLabel(_ iso: String) -> String {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        guard let date = formatter.date(from: iso) ?? ISO8601DateFormatter().date(from: iso) else { return "" }
-        let display = DateFormatter()
-        display.dateFormat = "MMM d"
-        return display.string(from: date)
+        // Was building three formatters per call — once per story archive cell,
+        // on every body evaluation. `DateFormatting` shares its formatters.
+        DateFormatting.monthDayLabel(iso)
     }
 
     @ViewBuilder

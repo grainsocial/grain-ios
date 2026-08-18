@@ -10,6 +10,29 @@ struct ProfileGallerySelection: Hashable {
     let source: ProfileGalleryFeedSource
 }
 
+/// Owns the reads of `isLoading` / `hasMore` so they don't land in the body
+/// holding the `LazyVStack`. Reading them up there made every page fetch
+/// re-evaluate every instantiated card body — the same problem measured in the
+/// main feed, where scoping it this way halved body evaluations per card.
+private struct ProfileFeedLoadingFooter: View {
+    let viewModel: ProfileDetailViewModel
+    let source: ProfileGalleryFeedSource
+
+    private var hasMore: Bool {
+        switch source {
+        case .galleries: viewModel.hasMoreGalleries
+        case .favorites: viewModel.hasMoreFavorites
+        }
+    }
+
+    var body: some View {
+        if viewModel.isLoading, hasMore {
+            ProgressView()
+                .padding()
+        }
+    }
+}
+
 struct ProfileGalleryFeedView: View {
     @Environment(AuthManager.self) private var auth
     @Bindable var viewModel: ProfileDetailViewModel
@@ -58,13 +81,6 @@ struct ProfileGalleryFeedView: View {
         }
     }
 
-    private var hasMore: Bool {
-        switch source {
-        case .galleries: viewModel.hasMoreGalleries
-        case .favorites: viewModel.hasMoreFavorites
-        }
-    }
-
     private func loadMore() async {
         switch source {
         case .galleries:
@@ -105,10 +121,7 @@ struct ProfileGalleryFeedView: View {
                             .id(gallery.uri)
                     }
 
-                    if viewModel.isLoading, hasMore {
-                        ProgressView()
-                            .padding()
-                    }
+                    ProfileFeedLoadingFooter(viewModel: viewModel, source: source)
                 }
             }
             .opacity(didScroll ? 1 : 0)

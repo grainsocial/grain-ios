@@ -42,6 +42,13 @@ enum DateFormatting {
         iso8601WithFractionalSeconds.date(from: string) ?? iso8601.date(from: string)
     }
 
+    /// Absolute "MMM d" label, for callers that always want a date rather than
+    /// `relativeTime`'s "2h"/"3d" shorthand for recent timestamps.
+    static func monthDayLabel(_ dateString: String) -> String {
+        guard let date = parse(dateString) else { return "" }
+        return monthDay.string(from: date)
+    }
+
     /// Relative time string like "2h", "3d", "1w", or "Mar 5".
     static func relativeTime(_ dateString: String) -> String {
         guard let date = parse(dateString) else { return "" }
