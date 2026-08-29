@@ -140,7 +140,9 @@ final class AccountSwitchingTests: XCTestCase {
             location: nil,
             includeExif: false,
             postToBluesky: false,
-            createdAt: "2026-08-16T00:00:00Z",
+            // Relative, not a literal: the store sweeps drafts older than a
+            // week, so a hardcoded date turns this into a time bomb.
+            createdAt: DateFormatting.nowISO(),
             galleryRkey: TID.next(),
             blueskyRkey: TID.next(),
             photos: []
