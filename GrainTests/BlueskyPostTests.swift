@@ -186,4 +186,54 @@ final class BlueskyPostTests: XCTestCase {
 
         XCTAssertTrue(text.contains("📍 Eiffel Tower, FR"))
     }
+
+    /// A long title+description used to truncate to exactly 301 graphemes —
+    /// one over the lexicon cap — and the PDS silently rejected the cross-post.
+    func testBuildPostText_LongDescription_FitsGraphemeLimit() {
+        let text = BlueskyPost.buildPostText(
+            url: url,
+            title: "Autumn walk",
+            location: (
+                name: "Kansas City",
+                address: [
+                    "locality": AnyCodable("Kansas City"),
+                    "region": AnyCodable("Missouri"),
+                    "country": AnyCodable("US"),
+                ]
+            ),
+            description: String(repeating: "a", count: 600)
+        )
+
+        XCTAssertEqual(text.count, 300)
+        XCTAssertLessThanOrEqual(text.utf8.count, 3000)
+        XCTAssertTrue(text.hasSuffix("#GrainSocial \(url)"))
+        XCTAssertTrue(text.contains("…"))
+    }
+
+    /// Multi-byte content is capped by graphemes, not by bytes.
+    func testBuildPostText_LongEmojiDescription_FitsBothLimits() {
+        let text = BlueskyPost.buildPostText(
+            url: url,
+            title: nil,
+            location: nil,
+            description: String(repeating: "🌄", count: 400)
+        )
+
+        XCTAssertLessThanOrEqual(text.count, 300)
+        XCTAssertLessThanOrEqual(text.utf8.count, 3000)
+    }
+
+    /// A URL long enough to eat the whole budget drops the content rather than
+    /// emitting a lone ellipsis that still overflows.
+    func testBuildPostText_SuffixFillsBudget_DropsContent() {
+        let longURL = "https://grain.social/" + String(repeating: "x", count: 400)
+        let text = BlueskyPost.buildPostText(
+            url: longURL,
+            title: "Autumn walk",
+            location: nil,
+            description: "A lovely evening"
+        )
+
+        XCTAssertEqual(text, "\n#GrainSocial \(longURL)")
+    }
 }

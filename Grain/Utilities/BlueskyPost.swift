@@ -207,9 +207,12 @@ enum BlueskyPost {
         suffixLines.append("#GrainSocial \(url)")
         let suffix = suffixLines.joined(separator: "\n")
 
-        // Lexicon constraints: maxGraphemes=300, maxLength=3000 bytes
-        let overheadGraphemes = suffix.count
-        let overheadBytes = suffix.utf8.count
+        // Lexicon constraints: maxGraphemes=300, maxLength=3000 bytes.
+        // The budget has to pay for the newline that joins the content to the
+        // suffix as well as the suffix itself — without it a truncated post
+        // lands on exactly 301 graphemes and the PDS rejects the record.
+        let overheadGraphemes = suffix.count + 1
+        let overheadBytes = suffix.utf8.count + 1
         let maxContentGraphemes = 300 - overheadGraphemes
         let maxContentBytes = 3000 - overheadBytes
 
@@ -226,13 +229,18 @@ enum BlueskyPost {
             content = descText
         }
 
-        // Truncate to fit
+        // Truncate to fit. A budget too small to hold even the ellipsis means
+        // the suffix alone fills the post, so the content is dropped entirely.
         if !content.isEmpty {
-            if content.count > maxContentGraphemes {
-                content = String(content.prefix(max(0, maxContentGraphemes - 1))) + "…"
-            }
-            while content.utf8.count > maxContentBytes, !content.isEmpty {
-                content = String(content.dropLast(2)) + "…"
+            if maxContentGraphemes < 1 || maxContentBytes < 3 {
+                content = ""
+            } else {
+                if content.count > maxContentGraphemes {
+                    content = String(content.prefix(maxContentGraphemes - 1)) + "…"
+                }
+                while content.utf8.count > maxContentBytes, content.count > 1 {
+                    content = String(content.dropLast(2)) + "…"
+                }
             }
         }
 
