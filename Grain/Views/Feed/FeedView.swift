@@ -309,6 +309,22 @@ struct FeedView: View {
     }
 }
 
+/// Pulled out of `FeedTabContent` so that `isLoading` is read here instead of in
+/// the body holding the `LazyVStack`. Reading it up there made every page fetch
+/// toggle it twice and re-evaluate every instantiated card body — measured at
+/// 6.4 body evaluations per card appearance during a scroll. `@Observable`
+/// scopes the dependency to whichever body actually touches the property.
+private struct FeedLoadingFooter: View {
+    let viewModel: FeedViewModel
+
+    var body: some View {
+        if viewModel.isLoading {
+            ProgressView()
+                .padding()
+        }
+    }
+}
+
 private struct FeedTabContent: View {
     @Environment(AuthManager.self) private var auth
     @Environment(\.scenePhase) private var scenePhase
@@ -420,10 +436,7 @@ private struct FeedTabContent: View {
                     }
                 }
 
-                if viewModel.isLoading {
-                    ProgressView()
-                        .padding()
-                }
+                FeedLoadingFooter(viewModel: viewModel)
             }
         }
         .environment(zoomState)

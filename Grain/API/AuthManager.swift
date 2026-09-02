@@ -56,7 +56,11 @@ final class AuthManager {
         "repo:social.grain.favorite",
         "repo:social.grain.comment",
         "repo:social.grain.story",
-        "repo:app.bsky.feed.post?action=create",
+        // Both actions: the cross-post uses putRecord so a resumed publish
+        // overwrites its own post rather than posting twice, and the PDS
+        // asserts create *and* update for that call. Must match the string
+        // the server requests verbatim — the migration check compares exactly.
+        "repo:app.bsky.feed.post?action=create&action=update",
     ]
 
     /// Version-tagged UserDefaults key marking that a one-shot scope
@@ -64,7 +68,7 @@ final class AuthManager {
     /// when a re-login still yields a token without the newly added scopes.
     /// To force another migration (e.g. after adding a scope), bump the
     /// suffix: `scopeMigrationDone_v2`, `_v3`, etc.
-    private static let scopeMigrationKey = "scopeMigrationDone_v1"
+    private static let scopeMigrationKey = "scopeMigrationDone_v2"
 
     init() {
         let spid = authSignposter.makeSignpostID()
@@ -437,7 +441,18 @@ final class AuthManager {
             refreshToken: response.refreshToken,
             handle: response.handle,
             expiresAt: Date().addingTimeInterval(TimeInterval(response.expiresIn)),
-            scope: response.scope
+            // The server puts the granted scope in the access token's claims but
+            // omits it from the token response body, so `response.scope` is nil
+            // in practice. On a fresh sign-in fall back to what we asked for:
+            // the PDS either grants the requested scope or fails the
+            // authorization outright, and storing nil would leave the migration
+            // check above reading every scope as missing — signing out each new
+            // account after its first session.
+            //
+            // Only on a fresh sign-in. A refresh carries the scope of the grant
+            // it renews, which for an install that predates a scope bump is the
+            // narrower set; claiming otherwise would hide the next migration.
+            scope: response.scope ?? (dpop != nil ? Self.requiredScopes.joined(separator: " ") : nil)
         )
         TokenStorage.upsertAccount(StoredAccount(did: did, handle: response.handle, avatar: nil))
         accounts = TokenStorage.accounts
