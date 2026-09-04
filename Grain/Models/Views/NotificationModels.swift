@@ -105,80 +105,54 @@ struct GroupedNotification: Identifiable, Equatable, Hashable {
 
     @MainActor
     static func group(_ notifications: [GrainNotification]) -> [GroupedNotification] {
-        let twoDays: TimeInterval = 48 * 60 * 60
         var groups: [GroupedNotification] = []
-
-        for notif in notifications {
-            guard notif.reasonType.isGroupable else {
-                groups.append(GroupedNotification(notification: notif, additional: []))
-                continue
-            }
-
-            let ts = parseDate(notif.createdAt)
-            var matched = false
-
-            for i in groups.indices {
-                let group = groups[i]
-                let groupTimestamp = parseDate(group.notification.createdAt)
-
-                guard abs(groupTimestamp - ts) < twoDays,
-                      notif.reasonType == group.notification.reasonType,
-                      subjectKey(notif) == subjectKey(group.notification),
-                      notif.author.did != group.notification.author.did
-                else { continue }
-
-                let alreadyHas = group.additional.contains { $0.author.did == notif.author.did }
-                if !alreadyHas {
-                    groups[i].addAuthor(notif)
-                }
-                matched = true
-                break
-            }
-
-            if !matched {
-                groups.append(GroupedNotification(notification: notif, additional: []))
-            }
-        }
-
+        mergeNewPage(notifications, into: &groups)
         return groups
     }
 
     /// Merge a new page into existing groups without regrouping the entire list.
     @MainActor
     static func mergeNewPage(_ newNotifs: [GrainNotification], into groups: inout [GroupedNotification]) {
-        let twoDays: TimeInterval = 48 * 60 * 60
-
         for notif in newNotifs {
-            guard notif.reasonType.isGroupable else {
-                groups.append(GroupedNotification(notification: notif, additional: []))
+            if notif.reasonType.isGroupable, absorb(notif, into: &groups) {
                 continue
             }
-
-            let ts = parseDate(notif.createdAt)
-            var matched = false
-
-            for i in groups.indices {
-                let group = groups[i]
-                let groupTimestamp = parseDate(group.notification.createdAt)
-
-                guard abs(groupTimestamp - ts) < twoDays,
-                      notif.reasonType == group.notification.reasonType,
-                      subjectKey(notif) == subjectKey(group.notification),
-                      notif.author.did != group.notification.author.did
-                else { continue }
-
-                let alreadyHas = group.additional.contains { $0.author.did == notif.author.did }
-                if !alreadyHas {
-                    groups[i].addAuthor(notif)
-                }
-                matched = true
-                break
-            }
-
-            if !matched {
-                groups.append(GroupedNotification(notification: notif, additional: []))
-            }
+            groups.append(GroupedNotification(notification: notif, additional: []))
         }
+    }
+
+    /// How far apart two notifications can be and still read as one event.
+    private static let groupingWindow: TimeInterval = 48 * 60 * 60
+
+    /// Fold `notif` into the first group it belongs to, returning false when no
+    /// group will take it and it needs a row of its own.
+    ///
+    /// Somebody already on the row — whether as its head or in its facepile —
+    /// is absorbed without being counted twice, rather than being turned away
+    /// into a duplicate row. That second case is what an unfavorite followed by
+    /// a refavorite looks like coming back from the appview.
+    @MainActor
+    private static func absorb(_ notif: GrainNotification, into groups: inout [GroupedNotification]) -> Bool {
+        let timestamp = parseDate(notif.createdAt)
+        let subject = subjectKey(notif)
+
+        for i in groups.indices {
+            let group = groups[i]
+
+            guard abs(parseDate(group.notification.createdAt) - timestamp) < groupingWindow,
+                  notif.reasonType == group.notification.reasonType,
+                  subjectKey(group.notification) == subject
+            else { continue }
+
+            let alreadyOnTheRow = notif.author.did == group.notification.author.did
+                || group.additional.contains { $0.author.did == notif.author.did }
+            if !alreadyOnTheRow {
+                groups[i].addAuthor(notif)
+            }
+            return true
+        }
+
+        return false
     }
 
     private static func subjectKey(_ notif: GrainNotification) -> String {
