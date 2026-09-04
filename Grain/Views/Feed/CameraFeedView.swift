@@ -177,24 +177,12 @@ struct CameraFeedView: View {
             showDeleteConfirmation = true
             deleteGalleryUri = item.uri
         } : nil
-        GalleryCardView(
-            gallery: gallery,
-            client: client,
-            onNavigate: { router.push(.gallery(uri: item.uri)) },
-            onCommentTap: { commentSheetUri = item.uri },
-            onFavoritesTap: { router.push(.galleryFavorites(uri: item.uri)) },
-            onProfileTap: { did in router.push(.profile(did: did)) },
-            onHashtagTap: { tag in router.push(.hashtag(tag)) },
-            onLocationTap: { h3, name in router.push(.location(h3Index: h3, name: name)) },
-            onStoryTap: { author in cardStoryAuthor = author },
-            onReport: reportAction,
-            onDelete: deleteAction
-        )
-        .onAppear {
-            if item.id == galleries.last?.id {
-                Task { await loadMore() }
+        GalleryCardView(gallery: gallery, client: client, onCommentTap: { commentSheetUri = item.uri }, onStoryTap: { author in cardStoryAuthor = author }, onReport: reportAction, onDelete: deleteAction)
+            .onAppear {
+                if item.id == galleries.last?.id {
+                    Task { await loadMore() }
+                }
             }
-        }
     }
 
     private func loadInitial() async {

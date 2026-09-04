@@ -50,18 +50,8 @@ struct SearchView: View {
                                         showDeleteConfirmation = true
                                         deleteGalleryUri = gallery.uri
                                     } : nil
-                                    GalleryCardView(gallery: $gallery, client: client, onNavigate: {
-                                        router.push(.gallery(uri: gallery.uri))
-                                    }, onCommentTap: {
+                                    GalleryCardView(gallery: $gallery, client: client, onCommentTap: {
                                         commentSheetUri = gallery.uri
-                                    }, onFavoritesTap: {
-                                        router.push(.galleryFavorites(uri: gallery.uri))
-                                    }, onProfileTap: { did in
-                                        router.push(.profile(did: did))
-                                    }, onHashtagTap: { tag in
-                                        router.push(.hashtag(tag))
-                                    }, onLocationTap: { h3, name in
-                                        router.push(.location(h3Index: h3, name: name))
                                     }, onStoryTap: { author in
                                         cardStoryAuthor = author
                                     }, onReport: reportAction, onDelete: deleteAction)

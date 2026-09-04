@@ -180,23 +180,12 @@ struct HashtagFeedView: View {
     private func galleryCard(gallery: Binding<GrainGallery>, index: Int) -> some View {
         let item = gallery.wrappedValue
         let isOwner = item.creator.did == auth.userDID
-        GalleryCardView(
-            gallery: gallery, client: client,
-            onNavigate: { router.push(.gallery(uri: item.uri)) },
-            onCommentTap: { commentSheetUri = item.uri },
-            onFavoritesTap: { router.push(.galleryFavorites(uri: item.uri)) },
-            onProfileTap: { did in router.push(.profile(did: did)) },
-            onHashtagTap: { tag in router.push(.hashtag(tag)) },
-            onLocationTap: { h3, name in router.push(.location(h3Index: h3, name: name)) },
-            onStoryTap: { author in cardStoryAuthor = author },
-            onReport: !isOwner ? { reportGallery = item } : nil,
-            onDelete: isOwner ? { showDeleteConfirmation = true; deleteGalleryUri = item.uri } : nil
-        )
-        .onAppear {
-            if index == galleries.count - 1 {
-                Task { await loadMore() }
+        GalleryCardView(gallery: gallery, client: client, onCommentTap: { commentSheetUri = item.uri }, onStoryTap: { author in cardStoryAuthor = author }, onReport: !isOwner ? { reportGallery = item } : nil, onDelete: isOwner ? { showDeleteConfirmation = true; deleteGalleryUri = item.uri } : nil)
+            .onAppear {
+                if index == galleries.count - 1 {
+                    Task { await loadMore() }
+                }
             }
-        }
     }
 
     private func loadMore() async {

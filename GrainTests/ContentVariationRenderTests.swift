@@ -100,12 +100,7 @@ final class ContentVariationRenderTests: GrainTestCase {
             GalleryCardView(
                 gallery: Binding(get: { bound }, set: { bound = $0 }),
                 client: env.client,
-                onNavigate: {},
                 onCommentTap: {},
-                onFavoritesTap: {},
-                onProfileTap: { _ in },
-                onHashtagTap: { _ in },
-                onLocationTap: { _, _ in },
                 onStoryTap: { _ in },
                 onReport: {},
                 onDelete: {}

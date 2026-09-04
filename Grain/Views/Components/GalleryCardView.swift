@@ -199,15 +199,18 @@ struct GalleryCardView: View {
     @Environment(LabelDefinitionsCache.self) private var labelDefsCache
     @Binding var gallery: GrainGallery
     let client: XRPCClient
-    var onNavigate: () -> Void = {}
+    @Environment(Router.self) private var router
     var onCommentTap: (() -> Void)?
-    var onFavoritesTap: (() -> Void)?
-    var onProfileTap: ((String) -> Void)?
-    var onHashtagTap: ((String) -> Void)?
-    var onLocationTap: ((String, String) -> Void)?
     var onStoryTap: ((GrainStoryAuthor) -> Void)?
     var onReport: (() -> Void)?
     var onDelete: (() -> Void)?
+
+    /// Whether the location line navigates.
+    ///
+    /// False on `LocationFeedView`, where the destination is the screen you are
+    /// already on. This used to be expressed by omitting `onLocationTap`, which
+    /// left the reason implicit in the absence of an argument.
+    var showsLocationLink = true
     @State private var isFavoriting = false
     @State private var showCardActions = false
     @State private var likeParticleBursts: [UUID] = []
@@ -269,11 +272,11 @@ struct GalleryCardView: View {
                 if let author = storyStatusCache.author(for: gallery.creator.did) {
                     onStoryTap?(author)
                 } else {
-                    onProfileTap?(gallery.creator.did)
+                    router.push(.profile(did: gallery.creator.did))
                 }
             }
             .onLongPressGesture {
-                onProfileTap?(gallery.creator.did)
+                router.push(.profile(did: gallery.creator.did))
             }
 
             VStack(alignment: .leading, spacing: 3) {
@@ -298,7 +301,8 @@ struct GalleryCardView: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .onTapGesture {
-                            onLocationTap?(location.value, locationName)
+                            guard showsLocationLink else { return }
+                            router.push(.location(h3Index: location.value, name: locationName))
                         }
                 }
             }
@@ -321,7 +325,7 @@ struct GalleryCardView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .contentShape(Rectangle())
-        .onTapGesture { onProfileTap?(gallery.creator.did) }
+        .onTapGesture { router.push(.profile(did: gallery.creator.did)) }
         .sheet(isPresented: $showCardActions) {
             GalleryActionsSheet(onReport: onReport, onDelete: onDelete)
                 .presentationDetents([.height(200)])
@@ -508,8 +512,8 @@ extension GalleryCardView {
                     .accessibilityHidden(true)
                 }
 
-                if let onFavoritesTap, (gallery.favCount ?? 0) > 0 {
-                    Button(action: onFavoritesTap) {
+                if (gallery.favCount ?? 0) > 0 {
+                    Button { router.push(.galleryFavorites(uri: gallery.uri)) } label: {
                         favCountLabel
                     }
                     .accessibilityLabel("\(gallery.favCount ?? 0) favorites")
@@ -521,7 +525,7 @@ extension GalleryCardView {
             .foregroundStyle(isFavorited ? AnyShapeStyle(Color.heart) : AnyShapeStyle(.secondary))
 
             Button {
-                (onCommentTap ?? onNavigate)()
+                onCommentTap?()
             } label: {
                 HStack(spacing: 5) {
                     Image(systemName: "bubble")
@@ -606,9 +610,9 @@ extension GalleryCardView {
             .padding(.horizontal, 12)
             .padding(.top, 6)
             .contentShape(Rectangle())
-            .onTapGesture { onFavoritesTap?() }
+            .onTapGesture { router.push(.galleryFavorites(uri: gallery.uri)) }
             .accessibilityElement(children: .combine)
-            .accessibilityAddTraits(onFavoritesTap != nil ? .isButton : [])
+            .accessibilityAddTraits(.isButton)
         }
     }
 
@@ -643,8 +647,8 @@ extension GalleryCardView {
             if let description = gallery.description, !description.isEmpty {
                 ExpandableDescriptionView(
                     text: description,
-                    onMentionTap: onProfileTap,
-                    onHashtagTap: onHashtagTap
+                    onMentionTap: { router.push(.profile(did: $0)) },
+                    onHashtagTap: { router.push(.hashtag($0)) }
                 )
             }
 

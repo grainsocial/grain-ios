@@ -215,23 +215,12 @@ struct ProfileGalleryFeedView: View {
     private func galleryCard(gallery: Binding<GrainGallery>, index: Int) -> some View {
         let item = gallery.wrappedValue
         let isOwner = item.creator.did == auth.userDID
-        GalleryCardView(
-            gallery: gallery, client: client,
-            onNavigate: {},
-            onCommentTap: { commentSheetUri = item.uri },
-            onFavoritesTap: { router.push(.galleryFavorites(uri: item.uri)) },
-            onProfileTap: { did in router.push(.profile(did: did)) },
-            onHashtagTap: { tag in router.push(.hashtag(tag)) },
-            onLocationTap: { h3, name in router.push(.location(h3Index: h3, name: name)) },
-            onStoryTap: { author in cardStoryAuthor = author },
-            onReport: !isOwner ? { reportGallery = item } : nil,
-            onDelete: isOwner ? { showDeleteConfirmation = true; deleteGalleryUri = item.uri } : nil
-        )
-        .onAppear {
-            if index == items.count - 1 {
-                Task { await loadMore() }
+        GalleryCardView(gallery: gallery, client: client, onCommentTap: { commentSheetUri = item.uri }, onStoryTap: { author in cardStoryAuthor = author }, onReport: !isOwner ? { reportGallery = item } : nil, onDelete: isOwner ? { showDeleteConfirmation = true; deleteGalleryUri = item.uri } : nil)
+            .onAppear {
+                if index == items.count - 1 {
+                    Task { await loadMore() }
+                }
             }
-        }
     }
 }
 

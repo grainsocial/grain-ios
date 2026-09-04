@@ -28,36 +28,14 @@ struct GalleryDetailView: View {
         ScrollView {
             if viewModel.gallery != nil {
                 VStack(spacing: 0) {
-                    GalleryCardView(
-                        gallery: Binding(
-                            get: { viewModel.gallery! },
-                            set: { viewModel.gallery = $0 }
-                        ),
-                        client: client,
-                        onNavigate: {
-                            showCommentSheet = true
-                        },
-                        onCommentTap: {
-                            showCommentSheet = true
-                        },
-                        onFavoritesTap: {
-                            router.push(.galleryFavorites(uri: galleryUri))
-                        },
-                        onProfileTap: { did in
-                            router.push(.profile(did: did))
-                        },
-                        onHashtagTap: { tag in
-                            router.push(.hashtag(tag))
-                        },
-                        onLocationTap: { h3, name in
-                            router.push(.location(h3Index: h3, name: name))
-                        },
-                        onStoryTap: { author in
-                            cardStoryAuthor = author
-                        },
-                        onReport: viewModel.gallery?.creator.did != auth.userDID ? { showReportSheet = true } : nil,
-                        onDelete: viewModel.gallery?.creator.did == auth.userDID ? { showDeleteConfirmation = true } : nil
-                    )
+                    GalleryCardView(gallery: Binding(
+                        get: { viewModel.gallery! },
+                        set: { viewModel.gallery = $0 }
+                    ), client: client, onCommentTap: {
+                        showCommentSheet = true
+                    }, onStoryTap: { author in
+                        cardStoryAuthor = author
+                    }, onReport: viewModel.gallery?.creator.did != auth.userDID ? { showReportSheet = true } : nil, onDelete: viewModel.gallery?.creator.did == auth.userDID ? { showDeleteConfirmation = true } : nil)
 
                     // View comments button
                     Button {
