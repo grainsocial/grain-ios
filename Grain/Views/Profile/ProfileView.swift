@@ -39,9 +39,13 @@ struct ProfileView: View {
         viewModel.profile?.did ?? actor
     }
 
-    init(client: XRPCClient, did: String, isRoot: Bool = false) {
+    /// `viewMode` opens the profile on a given tab rather than always on the
+    /// grid, which is also how the favorites and stories tabs become reachable
+    /// without a tap.
+    init(client: XRPCClient, did: String, isRoot: Bool = false, viewMode: ProfileViewMode = .grid) {
         self.client = client
         _viewModel = State(initialValue: ProfileDetailViewModel(client: client))
+        _viewMode = State(initialValue: viewMode)
         actor = did
         self.isRoot = isRoot
     }
@@ -497,6 +501,15 @@ extension ProfileView {
                 }
                 if viewModel.profile == nil {
                     await viewModel.load(did: actor, viewer: auth.userDID, auth: auth.authContext())
+                }
+                // The archive and favorites otherwise only load on a tab change
+                // or a pull-to-refresh, so a profile opened straight onto one of
+                // those tabs would sit on "No stories yet" indefinitely. Mirrors
+                // what `refreshable` above already does.
+                if viewMode == .stories {
+                    await viewModel.loadStoryArchive(did: actor, auth: auth.authContext())
+                } else if viewMode == .favorites {
+                    await viewModel.loadFavorites(did: actor, auth: auth.authContext())
                 }
             }
             .onChange(of: deletedGalleryUri) { _, uri in
@@ -1168,7 +1181,7 @@ private struct FavoriteThumbProbe {
 
 // MARK: - Profile Grid Thumbnail (sync cache read to avoid flash)
 
-private struct ProfileGridThumbnail: View {
+struct ProfileGridThumbnail: View {
     let urlString: String
     @State private var asyncImage: UIImage?
 
@@ -1210,7 +1223,7 @@ private struct ProfileGridThumbnail: View {
     }
 }
 
-private struct CopiedCheckmarkToast: View {
+struct CopiedCheckmarkToast: View {
     @State private var checkScale = 0.3
 
     var body: some View {
