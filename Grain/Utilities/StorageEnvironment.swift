@@ -49,14 +49,22 @@ enum StorageEnvironment {
     }
 
     /// Async counterpart of `withNamespace(_:perform:)`.
-    static func withNamespace<T>(_ name: String, perform body: () async throws -> T) async rethrows -> T {
+    ///
+    /// Takes the caller's isolation so `body` isn't sent across an actor
+    /// boundary — a `@MainActor` test can pass a closure that touches
+    /// `@MainActor` state without it having to be `Sendable`.
+    static func withNamespace<T>(
+        _ name: String,
+        isolation: isolated (any Actor)? = #isolation,
+        perform body: () async throws -> T
+    ) async rethrows -> T {
         defer { UserDefaults.standard.removePersistentDomain(forName: name) }
-        return try await $credentialService.withValue("\(name).oauth") {
-            try await $dpopService.withValue("\(name).dpop") {
-                try await $defaultsSuiteName.withValue(name) {
+        return try await $credentialService.withValue("\(name).oauth", operation: {
+            try await $dpopService.withValue("\(name).dpop", operation: {
+                try await $defaultsSuiteName.withValue(name, operation: {
                     try await body()
-                }
-            }
-        }
+                }, isolation: isolation)
+            }, isolation: isolation)
+        }, isolation: isolation)
     }
 }
