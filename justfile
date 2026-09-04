@@ -10,13 +10,16 @@ team_id := env_var_or_default("APPLE_TEAM_ID", "YN68LN9T7Z")
 # Bundle identifier (override with BUNDLE_ID env var)
 bundle_id := env_var_or_default("BUNDLE_ID", "social.grain.grain")
 
+# Product/app name (override with BUNDLE_NAME env var)
+bundle_name := env_var_or_default("BUNDLE_NAME", "Grain")
+
 # Default: list available recipes
 default:
     just --list
 
 # Regenerate Xcode project from project.yml
 generate:
-    APPLE_TEAM_ID={{team_id}} BUNDLE_ID={{bundle_id}} xcodegen generate
+    APPLE_TEAM_ID={{team_id}} BUNDLE_ID={{bundle_id}} BUNDLE_NAME={{bundle_name}} xcodegen generate
     git config core.hooksPath .githooks
 
 # Worktree-local DerivedData path (avoids collisions with other worktrees)
@@ -37,7 +40,7 @@ sim-local: build-local
     SIM=${SIM_UDID:-booted}
     xcrun simctl boot "$SIM" 2>/dev/null || true
     xcrun simctl bootstatus "$SIM" -b >/dev/null
-    APP_PATH=$(find "{{derived_data}}/Build/Products/Debug-iphonesimulator" -name "${BUNDLE_NAME:-Grain}.app" -type d | head -1)
+    APP_PATH=$(find "{{derived_data}}/Build/Products/Debug-iphonesimulator" -name "{{bundle_name}}.app" -type d | head -1)
     xcrun simctl install "$SIM" "$APP_PATH"
     xcrun simctl launch "$SIM" {{bundle_id}}
     xcrun simctl spawn "$SIM" log config --subsystem {{bundle_id}} --mode level:debug
@@ -51,7 +54,7 @@ sim:
     xcrun simctl boot "$SIM" 2>/dev/null || true
     xcrun simctl bootstatus "$SIM" -b >/dev/null
     set -o pipefail && xcodebuild build -scheme Grain -destination 'generic/platform=iOS Simulator' -derivedDataPath "{{derived_data}}" PRODUCT_BUNDLE_IDENTIFIER={{bundle_id}} {{sim_sign}} 2>&1 | xcbeautify
-    APP_PATH=$(find "{{derived_data}}/Build/Products/Debug-iphonesimulator" -name "${BUNDLE_NAME:-Grain}.app" -type d | head -1)
+    APP_PATH=$(find "{{derived_data}}/Build/Products/Debug-iphonesimulator" -name "{{bundle_name}}.app" -type d | head -1)
     xcrun simctl install "$SIM" "$APP_PATH"
     xcrun simctl launch "$SIM" {{bundle_id}}
     xcrun simctl spawn "$SIM" log config --subsystem {{bundle_id}} --mode level:debug
@@ -80,7 +83,19 @@ sim-local-fresh:
 
 # Run tests
 test:
-    set -o pipefail && xcodebuild test -scheme Grain -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max' PRODUCT_BUNDLE_IDENTIFIER={{bundle_id}} 2>&1 | xcbeautify
+    set -o pipefail && xcodebuild test -scheme Grain -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max' -enableCodeCoverage YES PRODUCT_BUNDLE_IDENTIFIER={{bundle_id}} 2>&1 | xcbeautify
+
+# Run tests with coverage and print a per-file report for the app target
+coverage:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    result="{{derived_data}}/Coverage.xcresult"
+    rm -rf "$result"
+    set -o pipefail && xcodebuild test -scheme Grain -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max' -derivedDataPath "{{derived_data}}" -resultBundlePath "$result" -enableCodeCoverage YES PRODUCT_BUNDLE_IDENTIFIER={{bundle_id}} {{sim_sign}} 2>&1 | xcbeautify
+    echo
+    xcrun xccov view --report --only-targets "$result"
+    echo
+    xcrun xccov view --report --files-for-target {{bundle_name}}.app "$result"
 
 # Check formatting (list unformatted files)
 format:
@@ -107,7 +122,7 @@ device device_id:
     set -euo pipefail
     echo "Building for device {{device_id}}..."
     set -o pipefail && xcodebuild build -scheme Grain -destination 'platform=iOS,id={{device_id}}' -derivedDataPath "{{derived_data}}" PRODUCT_BUNDLE_IDENTIFIER={{bundle_id}} DEVELOPMENT_TEAM={{team_id}} -allowProvisioningUpdates 2>&1 | xcbeautify
-    APP_PATH=$(find "{{derived_data}}/Build/Products/Debug-iphoneos" -name "${BUNDLE_NAME:-Grain}.app" -type d | head -1)
+    APP_PATH=$(find "{{derived_data}}/Build/Products/Debug-iphoneos" -name "{{bundle_name}}.app" -type d | head -1)
     echo "Installing $APP_PATH..."
     xcrun devicectl device install app --device {{device_id}} "$APP_PATH"
     xcrun devicectl device process execute --device {{device_id}} /usr/bin/log -- config --subsystem {{bundle_id}} --mode level:debug 2>/dev/null || true
@@ -123,8 +138,8 @@ release:
     echo "Preparing build $next (current: $current)"
     sed -i '' "s/CURRENT_PROJECT_VERSION: \"$current\"/CURRENT_PROJECT_VERSION: \"$next\"/" project.yml
     # Restore on any failure so the next attempt reuses the same number
-    trap 'sed -i "" "s/CURRENT_PROJECT_VERSION: \"$next\"/CURRENT_PROJECT_VERSION: \"$current\"/" project.yml; BUNDLE_ID={{bundle_id}} xcodegen generate >/dev/null 2>&1 || true' ERR
-    BUNDLE_ID={{bundle_id}} xcodegen generate
+    trap 'sed -i "" "s/CURRENT_PROJECT_VERSION: \"$next\"/CURRENT_PROJECT_VERSION: \"$current\"/" project.yml; BUNDLE_ID={{bundle_id}} BUNDLE_NAME={{bundle_name}} xcodegen generate >/dev/null 2>&1 || true' ERR
+    BUNDLE_ID={{bundle_id}} BUNDLE_NAME={{bundle_name}} xcodegen generate
     echo "Archiving..."
     set -o pipefail && xcodebuild archive -scheme Grain -destination 'generic/platform=iOS' -archivePath /tmp/Grain.xcarchive CODE_SIGN_STYLE=Automatic DEVELOPMENT_TEAM={{team_id}} PRODUCT_BUNDLE_IDENTIFIER={{bundle_id}} -allowProvisioningUpdates 2>&1 | xcbeautify
     echo "Uploading to App Store Connect..."

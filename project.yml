@@ -107,7 +107,7 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         PRODUCT_NAME: GrainTests
         PRODUCT_MODULE_NAME: GrainTests
-        TEST_HOST: $(BUILT_PRODUCTS_DIR)/$(BUNDLE_NAME).app/$(BUNDLE_NAME)
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/${BUNDLE_NAME}.app/${BUNDLE_NAME}
         BUNDLE_LOADER: $(TEST_HOST)
     dependencies:
       - target: Grain
@@ -126,6 +126,9 @@ schemes:
       config: Debug
     test:
       config: Debug
+      gatherCoverageData: true
+      coverageTargets:
+        - Grain
       targets:
         - GrainTests
     profile:
