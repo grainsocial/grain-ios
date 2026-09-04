@@ -27,12 +27,18 @@ final class FeedCache: @unchecked Sendable {
         return galleries
     }
 
-    /// Persist `galleries` to disk for `key`. No-ops on empty arrays.
-    func save(_ galleries: [GrainGallery], key: String) {
+    /// Persist `galleries` to disk for `key`, filed under `did`.
+    /// No-ops on empty arrays.
+    ///
+    /// The owning account is a parameter rather than a lookup because saving
+    /// happens on a detached task: resolving "who is signed in" here would read
+    /// it *after* the fetch, so switching accounts while a feed was in flight
+    /// filed one account's feed under the other's cache.
+    func save(_ galleries: [GrainGallery], key: String, did: String?) {
         guard !galleries.isEmpty,
               let data = try? JSONEncoder().encode(galleries)
         else { return }
-        try? data.write(to: fileURL(for: key), options: .atomic)
+        try? data.write(to: fileURL(for: key, did: did), options: .atomic)
     }
 
     /// Drop every entry belonging to `did` (that account was signed out).

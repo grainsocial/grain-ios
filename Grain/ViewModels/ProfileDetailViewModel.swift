@@ -174,8 +174,11 @@ final class ProfileDetailViewModel {
             profileLogger.info("loadFavorites ok count=\(loadedCount, privacy: .public)")
             let toCache = Array(favoriteGalleries.prefix(Self.favoritesDiskCacheLimit))
             let key = Self.favoritesCacheKey(did: did)
+            // Captured before the hop, for the same reason as `FeedViewModel`:
+            // the detached task would otherwise resolve the owner after the fact.
+            let owner = AccountScopedStorage.activeAccountID
             Task.detached(priority: .utility) {
-                FeedCache.shared.save(toCache, key: key)
+                FeedCache.shared.save(toCache, key: key, did: owner)
             }
         } catch {
             favoritesError = error

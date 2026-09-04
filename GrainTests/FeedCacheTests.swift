@@ -2,7 +2,7 @@
 import XCTest
 
 @MainActor
-final class FeedCacheTests: XCTestCase {
+final class FeedCacheTests: GrainTestCase {
     private func makeGallery(uri: String, cid: String = "bafytest") -> GrainGallery {
         GrainGallery(
             uri: uri,
@@ -29,7 +29,7 @@ final class FeedCacheTests: XCTestCase {
             makeGallery(uri: "at://a", cid: "cid-a"),
             makeGallery(uri: "at://b", cid: "cid-b"),
         ]
-        FeedCache.shared.save(input, key: key)
+        FeedCache.shared.save(input, key: key, did: AccountScopedStorage.activeAccountID)
         let loaded = FeedCache.shared.load(key: key)
         XCTAssertEqual(loaded.map(\.uri), ["at://a", "at://b"])
         XCTAssertEqual(loaded.map(\.cid), ["cid-a", "cid-b"])
@@ -42,9 +42,9 @@ final class FeedCacheTests: XCTestCase {
     func testSaveIgnoresEmptyArrayAndPreservesPriorData() {
         let key = "test_empty_save"
         let seed = [makeGallery(uri: "at://seed")]
-        FeedCache.shared.save(seed, key: key)
+        FeedCache.shared.save(seed, key: key, did: AccountScopedStorage.activeAccountID)
 
-        FeedCache.shared.save([], key: key)
+        FeedCache.shared.save([], key: key, did: AccountScopedStorage.activeAccountID)
 
         let loaded = FeedCache.shared.load(key: key)
         XCTAssertEqual(loaded.map(\.uri), ["at://seed"])
@@ -53,7 +53,7 @@ final class FeedCacheTests: XCTestCase {
     func testKeyWithSlashesColonsAndSpacesRoundTrips() {
         let key = "feed/home:pinned 1"
         let input = [makeGallery(uri: "at://tricky")]
-        FeedCache.shared.save(input, key: key)
+        FeedCache.shared.save(input, key: key, did: AccountScopedStorage.activeAccountID)
         XCTAssertEqual(FeedCache.shared.load(key: key).map(\.uri), ["at://tricky"])
     }
 }

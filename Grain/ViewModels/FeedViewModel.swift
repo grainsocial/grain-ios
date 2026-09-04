@@ -78,8 +78,11 @@ final class FeedViewModel {
                 hasMore = response.cursor != nil
                 if let key = cacheKey {
                     let toCache = galleries
+                    // Captured now, not inside the detached task: this feed
+                    // belongs to whoever was signed in when it was fetched.
+                    let owner = AccountScopedStorage.activeAccountID
                     Task.detached(priority: .utility) {
-                        FeedCache.shared.save(toCache, key: key)
+                        FeedCache.shared.save(toCache, key: key, did: owner)
                     }
                 }
             } catch {
