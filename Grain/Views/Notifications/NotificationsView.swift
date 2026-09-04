@@ -90,7 +90,7 @@ struct NotificationsView: View {
 
 // MARK: - List Content (no @Environment — auth passed as closure)
 
-private struct NotificationListContent: View {
+struct NotificationListContent: View {
     let viewModel: NotificationsViewModel
     let client: XRPCClient
     let authContext: () async -> AuthContext?
@@ -133,7 +133,7 @@ private struct NotificationListContent: View {
 
 // MARK: - Row Container (no @Environment — auth passed as closure)
 
-private struct NotificationRowContainer: View {
+struct NotificationRowContainer: View {
     let group: GroupedNotification
     let client: XRPCClient
     let authContext: () async -> AuthContext?
@@ -203,7 +203,7 @@ private struct NotificationRowContainer: View {
 
 // MARK: - Reason Icon
 
-private struct ReasonIcon: View {
+struct ReasonIcon: View {
     let reason: NotificationReason
 
     private var iconName: String {
@@ -246,7 +246,7 @@ private struct ReasonIcon: View {
 
 // MARK: - Grouped Notification Row
 
-private struct GroupedNotificationRow: View {
+struct GroupedNotificationRow: View {
     let group: GroupedNotification
     var onProfileTap: ((String) -> Void)?
     var onSubjectTap: (() -> Void)?
@@ -339,7 +339,7 @@ private struct GroupedNotificationRow: View {
 
 // MARK: - Single Notification Row
 
-private struct SingleNotificationRow: View {
+struct SingleNotificationRow: View {
     let notification: GrainNotification
     var onProfileTap: ((String) -> Void)?
     var onSubjectTap: (() -> Void)?
@@ -414,7 +414,7 @@ private struct SingleNotificationRow: View {
 
 // MARK: - Overlapping Avatars
 
-private struct OverlappingAvatarsView: View {
+struct OverlappingAvatarsView: View {
     let authors: [GrainProfile]
     let size: CGFloat
     let overlap: CGFloat
@@ -442,7 +442,7 @@ private struct OverlappingAvatarsView: View {
 
 // MARK: - Cached Thumbnail (sync cache read, no LazyImage)
 
-private struct CachedThumbnailView: View {
+struct CachedThumbnailView: View {
     let url: String
     let size: CGFloat
     var portrait: Bool = false
@@ -477,7 +477,7 @@ private struct CachedThumbnailView: View {
 
 // MARK: - Grouped Authors Detail View
 
-private struct GroupedAuthorsView: View {
+struct GroupedAuthorsView: View {
     let group: GroupedNotification
     let client: XRPCClient
 

@@ -14,7 +14,7 @@ struct ProfileGallerySelection: Hashable {
 /// holding the `LazyVStack`. Reading them up there made every page fetch
 /// re-evaluate every instantiated card body — the same problem measured in the
 /// main feed, where scoping it this way halved body evaluations per card.
-private struct ProfileFeedLoadingFooter: View {
+struct ProfileFeedLoadingFooter: View {
     let viewModel: ProfileDetailViewModel
     let source: ProfileGalleryFeedSource
 

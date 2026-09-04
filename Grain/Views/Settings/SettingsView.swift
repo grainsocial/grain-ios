@@ -186,7 +186,7 @@ extension URL: @retroactive Identifiable {
     }
 }
 
-private struct AccountRow: View {
+struct AccountRow: View {
     let account: StoredAccount
     let isActive: Bool
     let isSwitching: Bool
@@ -221,7 +221,7 @@ private struct AccountRow: View {
 }
 
 /// Sign in to an additional account without disturbing the current one.
-private struct AddAccountView: View {
+struct AddAccountView: View {
     @Environment(AuthManager.self) private var auth
     @Environment(\.dismiss) private var dismiss
     @State private var handle = ""
@@ -292,7 +292,7 @@ private struct AddAccountView: View {
     }
 }
 
-private struct AccountDetailView: View {
+struct AccountDetailView: View {
     @Environment(AuthManager.self) private var auth
     @Environment(\.dismiss) private var dismiss
     let client: XRPCClient
@@ -393,7 +393,7 @@ private struct AccountDetailView: View {
     }
 }
 
-private struct FeedsSettingsView: View {
+struct FeedsSettingsView: View {
     @AppStorage("privacy.showSuggestedUsers") private var showSuggestedUsers = true
 
     var body: some View {
@@ -406,7 +406,7 @@ private struct FeedsSettingsView: View {
     }
 }
 
-private struct AppearanceSettingsView: View {
+struct AppearanceSettingsView: View {
     @AppStorage("appearance") private var appearance: String = "auto"
 
     var body: some View {
@@ -434,7 +434,7 @@ private struct AppearanceSettingsView: View {
     }
 }
 
-private struct UploadDefaultsView: View {
+struct UploadDefaultsView: View {
     @Environment(AuthManager.self) private var auth
     let client: XRPCClient
     @State private var includeExif = true

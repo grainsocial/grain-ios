@@ -132,7 +132,7 @@ struct LikeParticleView: View {
     }
 }
 
-private struct PageIndicatorView: View {
+struct PageIndicatorView: View {
     let photos: [GrainPhoto]
     let currentPage: Int
     let hasPortrait: Bool
@@ -163,7 +163,7 @@ private struct PageIndicatorView: View {
     }
 }
 
-private struct CopiedToastView: View {
+struct CopiedToastView: View {
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: "doc.on.doc.fill")
@@ -736,7 +736,7 @@ extension GalleryCardView {
     .frame(maxHeight: .infinity, alignment: .top)
 }
 
-private struct GalleryActionsSheet: View {
+struct GalleryActionsSheet: View {
     @Environment(\.dismiss) private var dismiss
     var onReport: (() -> Void)?
     var onDelete: (() -> Void)?

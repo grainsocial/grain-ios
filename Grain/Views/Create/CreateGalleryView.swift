@@ -88,6 +88,17 @@ struct CreateGalleryView: View {
     let client: XRPCClient
     var onCreated: (() -> Void)?
 
+    /// `photoItems` starts the sheet with photos already chosen rather than
+    /// waiting on the picker. Everything below the picker button — the editor,
+    /// the carousel, the exif and location rows, the Post button — only exists
+    /// once there is something to post.
+    init(client: XRPCClient, onCreated: (() -> Void)? = nil, photoItems: [PhotoItem] = []) {
+        self.client = client
+        self.onCreated = onCreated
+        _photoItems = State(initialValue: photoItems)
+        _selectedPhotoID = State(initialValue: photoItems.first?.id)
+    }
+
     private let maxTitle = 100
     private let maxDescription = 1000
 
@@ -587,21 +598,21 @@ enum PhotoSource: @unchecked Sendable {
 // These feed the on-screen `ExifInfoView`. The parallel extraction that
 // builds the `social.grain.photo.exif` record lives in `GalleryDraftBuilder`.
 
-private func makeExifSummary(from metadata: [String: Any]) -> ExifSummary? {
+func makeExifSummary(from metadata: [String: Any]) -> ExifSummary? {
     let exifDict = metadata[kCGImagePropertyExifDictionary as String] as? [String: Any]
     let tiffDict = metadata[kCGImagePropertyTIFFDictionary as String] as? [String: Any]
     let exifAux = metadata[kCGImagePropertyExifAuxDictionary as String] as? [String: Any]
     return buildExifSummary(exifDict: exifDict, tiffDict: tiffDict, exifAux: exifAux)
 }
 
-private func makeExifSummary(from data: Data) -> ExifSummary? {
+func makeExifSummary(from data: Data) -> ExifSummary? {
     guard let source = CGImageSourceCreateWithData(data as CFData, nil),
           let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any]
     else { return nil }
     return makeExifSummary(from: properties)
 }
 
-private func buildExifSummary(exifDict: [String: Any]?, tiffDict: [String: Any]?, exifAux: [String: Any]?) -> ExifSummary? {
+func buildExifSummary(exifDict: [String: Any]?, tiffDict: [String: Any]?, exifAux: [String: Any]?) -> ExifSummary? {
     var summary = ExifSummary()
 
     let make = (tiffDict?[kCGImagePropertyTIFFMake as String] as? String)?.trimmingCharacters(in: .whitespaces)

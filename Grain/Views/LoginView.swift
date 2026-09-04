@@ -20,6 +20,14 @@ struct LoginView: View {
     @State private var safariURL: URL?
     @FocusState private var isInputFocused: Bool
 
+    /// `handle` and `suggestions` seed the field and its results list, which is
+    /// the half of this screen that only exists once somebody has typed
+    /// something.
+    init(handle: String = "", suggestions: [ActorSuggestion] = []) {
+        _handle = State(initialValue: handle)
+        _suggestions = State(initialValue: suggestions)
+    }
+
     var body: some View {
         GeometryReader { geo in
             let fullHeight = geo.size.height + geo.safeAreaInsets.top + geo.safeAreaInsets.bottom
@@ -413,7 +421,7 @@ struct LoginView: View {
     }
 }
 
-private struct ActorSuggestion: Identifiable, Equatable {
+struct ActorSuggestion: Identifiable, Equatable {
     let handle: String
     let displayName: String?
     let avatar: String?

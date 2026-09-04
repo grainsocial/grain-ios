@@ -314,7 +314,7 @@ struct FeedView: View {
 /// toggle it twice and re-evaluate every instantiated card body — measured at
 /// 6.4 body evaluations per card appearance during a scroll. `@Observable`
 /// scopes the dependency to whichever body actually touches the property.
-private struct FeedLoadingFooter: View {
+struct FeedLoadingFooter: View {
     let viewModel: FeedViewModel
 
     var body: some View {
@@ -325,7 +325,7 @@ private struct FeedLoadingFooter: View {
     }
 }
 
-private struct FeedTabContent: View {
+struct FeedTabContent: View {
     @Environment(AuthManager.self) private var auth
     @Environment(\.scenePhase) private var scenePhase
     @State private var viewModel: FeedViewModel

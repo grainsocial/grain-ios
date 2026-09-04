@@ -14,11 +14,18 @@ private let svSignposter = OSSignposter(subsystem: "social.grain.grain", categor
 
 @Observable
 @MainActor
-private final class StoryTimer {
+final class StoryTimer {
     var progress: CGFloat = 0
     var isRunning = false
     private var task: Task<Void, Never>?
-    private let duration: TimeInterval = 5.0
+
+    /// How long a story stays up. Injectable so a test can drive the whole
+    /// run in a fraction of a second rather than sitting through five of them.
+    private let duration: TimeInterval
+
+    init(duration: TimeInterval = 5.0) {
+        self.duration = duration
+    }
 
     func start() {
         svLogger.info("[timer.start] called")
@@ -1257,7 +1264,7 @@ extension StoryViewer {
 }
 
 /// Extracted so progress ticks only redraw this view, not the entire StoryViewer
-private struct StoryProgressBars: View {
+struct StoryProgressBars: View {
     let timer: StoryTimer
     let stories: [GrainStory]
     let currentStoryIndex: Int

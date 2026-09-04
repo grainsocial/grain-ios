@@ -21,9 +21,11 @@ struct SearchView: View {
     @State private var searchIsPresented = false
     let client: XRPCClient
 
-    init(client: XRPCClient) {
+    /// `viewModel` is injectable the same way `NotificationsView`'s is, so the
+    /// results state can be built without going through the search field.
+    init(client: XRPCClient, viewModel: SearchViewModel? = nil) {
         self.client = client
-        _viewModel = State(initialValue: SearchViewModel(client: client))
+        _viewModel = State(initialValue: viewModel ?? SearchViewModel(client: client))
         _recentSearches = State(initialValue: RecentSearchStorage())
     }
 
