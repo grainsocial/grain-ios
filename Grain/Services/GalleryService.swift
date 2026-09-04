@@ -25,4 +25,40 @@ enum GalleryService {
         let rkey = galleryUri.split(separator: "/").last.map(String.init) ?? ""
         try await client.deleteGallery(rkey: rkey, auth: auth)
     }
+
+    /// Resolves credentials, deletes, and reports the outcome.
+    ///
+    /// Routing every caller through one endpoint fixed half the problem. The
+    /// flow *around* it stayed copied out seven times, and all seven dropped the
+    /// error: six removed the gallery from their local collection regardless, so
+    /// a delete the server refused still looked like it worked until the next
+    /// refresh brought the gallery back, and the seventh silently did nothing at
+    /// all. Callers get a `Result` here because there is no sensible default for
+    /// a failed delete — the screen has to say something.
+    static func delete(
+        galleryUri: String,
+        client: XRPCClient,
+        auth: AuthManager
+    ) async -> Result<Void, Error> {
+        guard let context = await auth.authContext() else {
+            return .failure(GalleryDeleteError.notSignedIn)
+        }
+        do {
+            try await delete(galleryUri: galleryUri, client: client, auth: context)
+            return .success(())
+        } catch {
+            return .failure(error)
+        }
+    }
+}
+
+/// The one failure `GalleryService.delete` can hit before it reaches the network.
+enum GalleryDeleteError: LocalizedError, Equatable {
+    case notSignedIn
+
+    var errorDescription: String? {
+        switch self {
+        case .notSignedIn: "You're signed out. Sign in and try again."
+        }
+    }
 }

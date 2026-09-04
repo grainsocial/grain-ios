@@ -9,6 +9,7 @@ struct GalleryDetailView: View {
     @State private var selectedLocation: LocationDestination?
     @State private var favoritesGalleryUri: FavoritesDestination?
     @State private var showDeleteConfirmation = false
+    @State private var deleteErrorMessage: String?
     @State private var showReportSheet = false
     @State private var showCommentSheet = false
     @State private var zoomState = ImageZoomState()
@@ -110,6 +111,18 @@ struct GalleryDetailView: View {
         } message: {
             Text("This will permanently delete this gallery and all its photos.")
         }
+        .alert("Couldn't delete gallery", isPresented: Binding(
+            get: { deleteErrorMessage != nil },
+            set: {
+                if !$0 {
+                    deleteErrorMessage = nil
+                }
+            }
+        )) {
+            Button("OK", role: .cancel) { deleteErrorMessage = nil }
+        } message: {
+            Text(deleteErrorMessage ?? "")
+        }
         .sheet(isPresented: $showReportSheet) {
             if let gallery = viewModel.gallery {
                 ReportView(client: client, subjectUri: gallery.uri, subjectCid: gallery.cid)
@@ -162,12 +175,13 @@ struct GalleryDetailView: View {
     }
 
     private func deleteGallery() async {
-        guard let authContext = await auth.authContext() else { return }
-        do {
-            try await GalleryService.delete(galleryUri: galleryUri, client: client, auth: authContext)
+        switch await GalleryService.delete(galleryUri: galleryUri, client: client, auth: auth) {
+        case .success:
             deletedGalleryUri = galleryUri
             dismiss()
-        } catch {}
+        case let .failure(error):
+            deleteErrorMessage = error.localizedDescription
+        }
     }
 }
 

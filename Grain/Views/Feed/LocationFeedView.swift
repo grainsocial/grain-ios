@@ -18,6 +18,7 @@ struct LocationFeedView: View {
     @State private var reportGallery: GrainGallery?
     @State private var deleteGalleryUri: String?
     @State private var showDeleteConfirmation = false
+    @State private var deleteErrorMessage: String?
     @State private var mapInteractive = false
 
     let client: XRPCClient
@@ -202,9 +203,12 @@ struct LocationFeedView: View {
             Button("Delete", role: .destructive) {
                 if let uri = deleteGalleryUri {
                     Task {
-                        guard let authContext = await auth.authContext() else { return }
-                        try? await GalleryService.delete(galleryUri: uri, client: client, auth: authContext)
-                        galleries.removeAll { $0.uri == uri }
+                        switch await GalleryService.delete(galleryUri: uri, client: client, auth: auth) {
+                        case .success:
+                            galleries.removeAll { $0.uri == uri }
+                        case let .failure(error):
+                            deleteErrorMessage = error.localizedDescription
+                        }
                     }
                     deleteGalleryUri = nil
                 }
@@ -212,6 +216,18 @@ struct LocationFeedView: View {
             Button("Cancel", role: .cancel) { deleteGalleryUri = nil }
         } message: {
             Text("This will permanently delete this gallery and all its photos.")
+        }
+        .alert("Couldn't delete gallery", isPresented: Binding(
+            get: { deleteErrorMessage != nil },
+            set: {
+                if !$0 {
+                    deleteErrorMessage = nil
+                }
+            }
+        )) {
+            Button("OK", role: .cancel) { deleteErrorMessage = nil }
+        } message: {
+            Text(deleteErrorMessage ?? "")
         }
         .task {
             guard !isPreview else {
