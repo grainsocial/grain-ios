@@ -110,6 +110,10 @@ struct TestEnvironment {
     let pushManager = PushManager()
     let commentPresenter = StoryCommentPresenter()
 
+    /// Where a tap would have taken you. Assert on `router.path` instead of
+    /// trying to observe a push that only a real navigation stack performs.
+    let router = Router()
+
     /// A client whose traffic is served by `MockURLProtocol`, so rendering a
     /// view never reaches the network.
     let client = XRPCClient(
@@ -127,7 +131,8 @@ extension View {
     /// Attach the full environment set `GrainApp` provides.
     @MainActor
     func withTestEnvironment(_ env: TestEnvironment) -> some View {
-        environment(env.auth)
+        environment(env.router)
+            .environment(env.auth)
             .environment(env.viewedStories)
             .environment(env.labelDefs)
             .environment(env.storyStatus)

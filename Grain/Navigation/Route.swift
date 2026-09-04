@@ -35,10 +35,16 @@ struct RouteDestination: View {
     let route: Route
     let client: XRPCClient
 
+    /// Set by the gallery detail screen when it deletes what it was showing, so
+    /// the list underneath can drop the row. It lives on the builder rather than
+    /// in the `Route` because a route has to stay a plain value — carrying a
+    /// binding would make it uncodable and tie it to one particular caller.
+    var deletedGalleryUri: Binding<String?> = .constant(nil)
+
     var body: some View {
         switch route {
         case let .gallery(uri):
-            GalleryDetailView(client: client, galleryUri: uri)
+            GalleryDetailView(client: client, galleryUri: uri, deletedGalleryUri: deletedGalleryUri)
         case let .profile(did):
             ProfileView(client: client, did: did)
         case let .hashtag(tag):

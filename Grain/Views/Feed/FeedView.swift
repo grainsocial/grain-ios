@@ -12,8 +12,9 @@ struct FeedView: View {
     @State private var storyViewModel: StoryStripViewModel
     @State private var storyViewerDid: String?
     @Binding var showStoryCreate: Bool
-    @State private var deepLinkProfileDid: String?
-    @State private var deepLinkGalleryUri: String?
+    @State private var router = Router()
+    /// Set by the gallery detail screen when it deletes what it was showing.
+    @State private var deletedGalleryUri: String?
     @State private var deepLinkStoryAuthor: GrainStoryAuthor?
     @State private var deepLinkStory: GrainStory?
     @State private var showFeedsManagement = false
@@ -39,7 +40,7 @@ struct FeedView: View {
 
     var body: some View {
         let storySortVersion = storyViewModel.version
-        NavigationStack {
+        NavigationStack(path: $router.path) {
             ForEach(prefsViewModel.pinnedFeeds) { feed in
                 if feed.id == prefsViewModel.selectedFeedId {
                     FeedTabContent(
@@ -56,7 +57,8 @@ struct FeedView: View {
                         onRefresh: { [storyStatusCache] in
                             await storyViewModel.load(auth: auth.authContext(), storyStatusCache: storyStatusCache)
                         },
-                        prefsViewModel: prefsViewModel
+                        prefsViewModel: prefsViewModel,
+                        deletedGalleryUri: $deletedGalleryUri
                     )
                     .id(feedRefreshID)
                 }
@@ -109,7 +111,7 @@ struct FeedView: View {
                         onProfileTap: { profileDid in
                             storyViewerDid = nil
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                deepLinkProfileDid = profileDid
+                                router.push(.profile(did: profileDid))
                             }
                         },
                         onDismiss: {
@@ -123,12 +125,12 @@ struct FeedView: View {
                     Task { await storyViewModel.load(auth: auth.authContext(), storyStatusCache: storyStatusCache) }
                 }
             }
-            .navigationDestination(item: $deepLinkProfileDid) { did in
-                ProfileView(client: client, did: did)
+            .navigationDestination(for: Route.self) { route in
+                RouteDestination(route: route, client: client, deletedGalleryUri: $deletedGalleryUri)
             }
-            .navigationDestination(item: $deepLinkGalleryUri) { uri in
-                GalleryDetailView(client: client, galleryUri: uri)
-            }
+            // Applied outside `navigationDestination` so pushed screens see the
+            // router too, not just the content sitting at the root of the stack.
+            .environment(router)
             .sheet(isPresented: $showCreate) {
                 NavigationStack {
                     CreateGalleryView(client: client) {
@@ -144,7 +146,7 @@ struct FeedView: View {
                     client: client,
                     onProfileTap: { did in
                         deepLinkStoryAuthor = nil
-                        deepLinkProfileDid = did
+                        router.push(.profile(did: did))
                     },
                     onDismiss: {
                         deepLinkStoryAuthor = nil
@@ -164,7 +166,7 @@ struct FeedView: View {
                     client: client,
                     onProfileTap: { did in
                         deepLinkStory = nil
-                        deepLinkProfileDid = did
+                        router.push(.profile(did: did))
                     },
                     onDismiss: { deepLinkStory = nil }
                 )
@@ -246,40 +248,23 @@ struct FeedView: View {
         guard let link = pendingDeepLink else { return }
         pendingDeepLink = nil
 
-        // A deep-linked destination may already be on screen (e.g. the user opened a
-        // gallery link, backgrounded the app, then opened a second one). SwiftUI won't
-        // re-push when navigationDestination(item:) swaps straight from one non-nil
-        // value to another, and the destination keeps its @State either way — so pop
-        // what's showing first and present the new link once the pop settles.
-        if hasActiveDeepLinkDestination {
-            clearDeepLinkDestinations()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                present(link)
-            }
-        } else {
-            present(link)
-        }
-    }
-
-    private var hasActiveDeepLinkDestination: Bool {
-        deepLinkProfileDid != nil || deepLinkGalleryUri != nil
-            || deepLinkStoryAuthor != nil || deepLinkStory != nil
-    }
-
-    private func clearDeepLinkDestinations() {
-        deepLinkProfileDid = nil
-        deepLinkGalleryUri = nil
+        // A deep-linked destination may already be on screen — the user opened a
+        // gallery link, backgrounded the app, then opened a second one. Assigning
+        // the path replaces whatever is showing in one step. This used to need a
+        // pop followed by a 0.35s wait, because `navigationDestination(item:)`
+        // won't re-push when its value swaps straight from one non-nil to another.
         deepLinkStoryAuthor = nil
         deepLinkStory = nil
+        present(link)
     }
 
     private func present(_ link: DeepLink) {
-        switch link {
-        case let .profile(did):
-            deepLinkProfileDid = did
-        case .gallery:
-            deepLinkGalleryUri = link.galleryUri
-        case let .story(did, rkey):
+        if let route = link.route {
+            router.replace(with: [route])
+            return
+        }
+        // Stories present over the stack rather than joining it.
+        if case let .story(did, rkey) = link {
             Task { await openStoryDeepLink(did: did, rkey: rkey) }
         }
     }
@@ -300,11 +285,11 @@ struct FeedView: View {
                 if let story = try await client.getStory(uri: storyUri, auth: auth.authContext()).story {
                     deepLinkStory = story
                 } else {
-                    deepLinkProfileDid = did
+                    router.push(.profile(did: did))
                 }
             }
         } catch {
-            deepLinkProfileDid = did
+            router.push(.profile(did: did))
         }
     }
 }
@@ -329,12 +314,8 @@ struct FeedTabContent: View {
     @Environment(AuthManager.self) private var auth
     @Environment(\.scenePhase) private var scenePhase
     @State private var viewModel: FeedViewModel
-    @State private var selectedUri: String?
-    @State private var selectedProfileDid: String?
-    @State private var selectedHashtag: String?
-    @State private var selectedLocation: LocationDestination?
-    @State private var favoritesGalleryUri: FavoritesDestination?
-    @State private var deletedGalleryUri: String?
+    @Environment(Router.self) private var router
+    @Binding var deletedGalleryUri: String?
     @State private var zoomState = ImageZoomState()
     @State private var cardStoryAuthor: GrainStoryAuthor?
     @State private var commentSheetUri: String?
@@ -366,7 +347,8 @@ struct FeedTabContent: View {
         onStoryAuthorTap: @escaping (GrainStoryAuthor, Int) -> Void = { _, _ in },
         onStoryCreateTap: @escaping () -> Void = {},
         onRefresh: (@Sendable () async -> Void)? = nil,
-        prefsViewModel: FeedPreferencesViewModel
+        prefsViewModel: FeedPreferencesViewModel,
+        deletedGalleryUri: Binding<String?> = .constant(nil)
     ) {
         self.client = client
         self.storyAuthors = storyAuthors
@@ -376,6 +358,7 @@ struct FeedTabContent: View {
         self.onStoryCreateTap = onStoryCreateTap
         self.onRefresh = onRefresh
         self.prefsViewModel = prefsViewModel
+        _deletedGalleryUri = deletedGalleryUri
         _viewModel = State(initialValue: FeedViewModel(client: client, pinnedFeed: pinnedFeed, userDID: userDID))
     }
 
@@ -388,7 +371,7 @@ struct FeedTabContent: View {
                     userAvatar: userAvatar,
                     sortVersion: storySortVersion,
                     onAuthorTap: onStoryAuthorTap,
-                    onAuthorLongPress: { did in selectedProfileDid = did },
+                    onAuthorLongPress: { did in router.push(.profile(did: did)) },
                     onCreateTap: onStoryCreateTap
                 )
 
@@ -402,17 +385,17 @@ struct FeedTabContent: View {
                         deleteGalleryUri = gallery.uri
                     } : nil
                     GalleryCardView(gallery: $gallery, client: client, onNavigate: {
-                        selectedUri = gallery.uri
+                        router.push(.gallery(uri: gallery.uri))
                     }, onCommentTap: {
                         commentSheetUri = gallery.uri
                     }, onFavoritesTap: {
-                        favoritesGalleryUri = FavoritesDestination(galleryUri: gallery.uri)
+                        router.push(.galleryFavorites(uri: gallery.uri))
                     }, onProfileTap: { did in
-                        selectedProfileDid = did
+                        router.push(.profile(did: did))
                     }, onHashtagTap: { tag in
-                        selectedHashtag = tag
+                        router.push(.hashtag(tag))
                     }, onLocationTap: { h3, name in
-                        selectedLocation = LocationDestination(h3Index: h3, name: name)
+                        router.push(.location(h3Index: h3, name: name))
                     }, onStoryTap: { author in
                         cardStoryAuthor = author
                     }, onReport: reportAction, onDelete: deleteAction)
@@ -432,7 +415,7 @@ struct FeedTabContent: View {
 
                     if index == 4, showSuggestedUsers {
                         SuggestedFollowsView(client: client, suggestions: $suggestedFollows, onProfileTap: { did in
-                            selectedProfileDid = did
+                            router.push(.profile(did: did))
                         })
                     }
                 }
@@ -450,28 +433,13 @@ struct FeedTabContent: View {
             _ = await (feed, stories, prefs)
             lastLoadTime = .now
         }
-        .navigationDestination(item: $selectedUri) { uri in
-            GalleryDetailView(client: client, galleryUri: uri, deletedGalleryUri: $deletedGalleryUri)
-        }
-        .navigationDestination(item: $selectedProfileDid) { did in
-            ProfileView(client: client, did: did)
-        }
-        .navigationDestination(item: $selectedHashtag) { tag in
-            HashtagFeedView(client: client, tag: tag)
-        }
-        .navigationDestination(item: $selectedLocation) { loc in
-            LocationFeedView(client: client, h3Index: loc.h3Index, locationName: loc.name)
-        }
-        .navigationDestination(item: $favoritesGalleryUri) { dest in
-            FollowListView(client: client, mode: .galleryFavorites(dest.galleryUri))
-        }
         .fullScreenCover(item: $cardStoryAuthor) { author in
             StoryViewer(
                 authors: [author],
                 client: client,
                 onProfileTap: { did in
                     cardStoryAuthor = nil
-                    selectedProfileDid = did
+                    router.push(.profile(did: did))
                 },
                 onDismiss: { cardStoryAuthor = nil }
             )
@@ -492,11 +460,11 @@ struct FeedTabContent: View {
                     onDismiss: { commentSheetUri = nil },
                     onProfileTap: { did in
                         commentSheetUri = nil
-                        selectedProfileDid = did
+                        router.push(.profile(did: did))
                     },
                     onHashtagTap: { tag in
                         commentSheetUri = nil
-                        selectedHashtag = tag
+                        router.push(.hashtag(tag))
                     },
                     onStoryTap: { author in
                         commentSheetUri = nil
