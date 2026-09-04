@@ -18,7 +18,7 @@ private let serverFeeds = """
 /// part worth holding still: without it a tab bar shows a feed the account
 /// doesn't actually have pinned.
 @MainActor
-final class FeedPreferencesViewModelTests: XCTestCase {
+final class FeedPreferencesViewModelTests: GrainTestCase {
     private var client: XRPCClient!
     private var vm: FeedPreferencesViewModel!
 

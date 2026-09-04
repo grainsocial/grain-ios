@@ -1,7 +1,7 @@
 @testable import Grain
 import XCTest
 
-final class GrainTests: XCTestCase {
+final class GrainTests: GrainTestCase {
     func testAspectRatio() {
         let ratio = AspectRatio(width: 16, height: 9)
         XCTAssertEqual(ratio.ratio, 16.0 / 9.0, accuracy: 0.001)

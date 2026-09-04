@@ -6,7 +6,7 @@ import XCTest
 /// suggestions list, the highlighted row, the error line, the re-auth notice —
 /// only exists past a keystroke, so an empty render never reaches it.
 @MainActor
-final class LoginRenderTests: XCTestCase {
+final class LoginRenderTests: GrainTestCase {
     private var account: TestAccount!
 
     /// Async overrides: the synchronous `setUp`/`tearDown` are nonisolated, so
@@ -14,12 +14,10 @@ final class LoginRenderTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
         account = TestAccount()
-        MockURLProtocol.interceptSharedSession()
         MockURLProtocol.respondByPath(Fixtures.routes)
     }
 
     override func tearDown() async throws {
-        MockURLProtocol.stopInterceptingSharedSession()
         MockURLProtocol.handler = nil
         account.restore()
         try await super.tearDown()

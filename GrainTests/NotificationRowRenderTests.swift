@@ -7,7 +7,7 @@ import XCTest
 /// instead of one avatar — so the rows are rendered directly rather than left
 /// to whatever a list render happens to reach.
 @MainActor
-final class NotificationRowRenderTests: XCTestCase {
+final class NotificationRowRenderTests: GrainTestCase {
     private var account: TestAccount!
 
     /// Async overrides: the synchronous `setUp`/`tearDown` are nonisolated, so
@@ -15,12 +15,10 @@ final class NotificationRowRenderTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
         account = TestAccount()
-        MockURLProtocol.interceptSharedSession()
         MockURLProtocol.respondByPath(Fixtures.routes)
     }
 
     override func tearDown() async throws {
-        MockURLProtocol.stopInterceptingSharedSession()
         MockURLProtocol.handler = nil
         account.restore()
         try await super.tearDown()

@@ -6,7 +6,7 @@ import XCTest
 /// same reason, same subject, within two days — and only for the reasons that
 /// read sensibly in the plural.
 @MainActor
-final class NotificationGroupingTests: XCTestCase {
+final class NotificationGroupingTests: GrainTestCase {
     // MARK: - Builders
 
     private func profile(_ id: String) -> GrainProfile {

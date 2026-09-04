@@ -7,7 +7,7 @@ import XCTest
 /// driven entirely by bindings and values, so they can be put into every state
 /// they have without a picker or a network.
 @MainActor
-final class CreateFlowRenderTests: XCTestCase {
+final class CreateFlowRenderTests: GrainTestCase {
     private var account: TestAccount!
 
     /// Async overrides: the synchronous `setUp`/`tearDown` are nonisolated, so
@@ -15,11 +15,9 @@ final class CreateFlowRenderTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
         account = TestAccount()
-        MockURLProtocol.interceptSharedSession()
     }
 
     override func tearDown() async throws {
-        MockURLProtocol.stopInterceptingSharedSession()
         MockURLProtocol.handler = nil
         account.restore()
         try await super.tearDown()

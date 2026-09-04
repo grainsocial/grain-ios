@@ -1,7 +1,7 @@
 @testable import Grain
 import XCTest
 
-final class NominatimResultTests: XCTestCase {
+final class NominatimResultTests: GrainTestCase {
     /// Reverse-geocoding a spot in Kansas City returns a `county` field. It must not
     /// leak into the stored `name` — we want "Kansas City, Missouri, United States",
     /// not "Kansas City, Jackson County, Missouri, United States".

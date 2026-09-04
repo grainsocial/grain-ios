@@ -5,7 +5,7 @@ import XCTest
 /// shares its Keychain with the app installed on the simulator, so every test
 /// uses synthetic DIDs and puts the active account back afterwards.
 @MainActor
-final class TokenStorageTests: XCTestCase {
+final class TokenStorageTests: GrainTestCase {
     private var did = ""
     private var savedActiveDID: String?
 

@@ -32,7 +32,7 @@ struct GrainApp: App {
             var req = URLRequest(url: AuthManager.serverURL.appendingPathComponent("_health"))
             req.httpMethod = "GET"
             req.timeoutInterval = 5
-            _ = try? await URLSession.shared.data(for: req)
+            _ = try? await NetworkEnvironment.session.data(for: req)
             appSignposter.endInterval("ConnectionPreheat", state)
         }
         appSignposter.emitEvent("GrainAppInitEnd")

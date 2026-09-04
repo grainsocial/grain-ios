@@ -11,12 +11,12 @@ enum AccountScopedStorage {
     /// source of truth, but it's too slow to consult from the launch path — the
     /// feed cache is read before the first frame — and the DID is public data.
     static var activeAccountID: String? {
-        get { UserDefaults.standard.string(forKey: "activeAccountID") }
+        get { StorageEnvironment.defaults.string(forKey: "activeAccountID") }
         set {
             if let newValue {
-                UserDefaults.standard.set(newValue, forKey: "activeAccountID")
+                StorageEnvironment.defaults.set(newValue, forKey: "activeAccountID")
             } else {
-                UserDefaults.standard.removeObject(forKey: "activeAccountID")
+                StorageEnvironment.defaults.removeObject(forKey: "activeAccountID")
             }
         }
     }
@@ -39,7 +39,7 @@ enum AccountScopedStorage {
     /// Claim any unsuffixed state left by a pre-multi-account build for `did`.
     /// Runs once — after the move there's nothing left at the bare key.
     static func migrateLegacyState(to did: String) {
-        let defaults = UserDefaults.standard
+        let defaults = StorageEnvironment.defaults
         for base in scopedDefaultsKeys {
             guard let legacy = defaults.object(forKey: base) else { continue }
             if defaults.object(forKey: key(base, did: did)) == nil {
@@ -53,7 +53,7 @@ enum AccountScopedStorage {
     /// Delete everything account-scoped for `did`, leaving other accounts alone.
     static func purge(did: String) {
         for base in scopedDefaultsKeys {
-            UserDefaults.standard.removeObject(forKey: key(base, did: did))
+            StorageEnvironment.defaults.removeObject(forKey: key(base, did: did))
         }
         FeedCache.shared.purge(did: did)
     }

@@ -7,7 +7,7 @@ import XCTest
 /// the clamp wrong lets the strip drift off its own content, which is invisible
 /// in a screenshot and obvious the moment you drag.
 @MainActor
-final class StripScrollStateTests: XCTestCase {
+final class StripScrollStateTests: GrainTestCase {
     /// Matches the layout constants: 72pt thumbs, 20pt apart.
     private let thumbStride: CGFloat = 92
     private let width: CGFloat = 402

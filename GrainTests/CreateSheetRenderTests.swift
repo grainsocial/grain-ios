@@ -6,7 +6,7 @@ import XCTest
 /// its tabs. Both are most of a screen that only exists past a step a render
 /// can't take — picking from the library, or tapping a tab.
 @MainActor
-final class CreateSheetRenderTests: XCTestCase {
+final class CreateSheetRenderTests: GrainTestCase {
     private var account: TestAccount!
 
     /// Async overrides: the synchronous `setUp`/`tearDown` are nonisolated, so
@@ -14,12 +14,10 @@ final class CreateSheetRenderTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
         account = TestAccount()
-        MockURLProtocol.interceptSharedSession()
         MockURLProtocol.respondByPath(Fixtures.routes)
     }
 
     override func tearDown() async throws {
-        MockURLProtocol.stopInterceptingSharedSession()
         MockURLProtocol.handler = nil
         account.restore()
         try await super.tearDown()

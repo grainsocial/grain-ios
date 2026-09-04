@@ -2,7 +2,7 @@
 import Nuke
 import XCTest
 
-final class ImagePrefetchPlanningTests: XCTestCase {
+final class ImagePrefetchPlanningTests: GrainTestCase {
     // MARK: - Helpers
 
     private func photo(index: Int) -> (thumb: String, fullsize: String) {

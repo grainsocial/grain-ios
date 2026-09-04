@@ -66,7 +66,7 @@ private func bodyData(of request: URLRequest) -> Data? {
 /// on the PDS. It is also the one write that can duplicate — hence the record
 /// key carried on the draft.
 @MainActor
-final class CrossPostPublishTests: XCTestCase {
+final class CrossPostPublishTests: GrainTestCase {
     private var root: URL!
     private var store: GalleryDraftStore!
     private var center: GalleryUploadCenter!

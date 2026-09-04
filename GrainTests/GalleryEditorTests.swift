@@ -2,7 +2,7 @@
 import UIKit
 import XCTest
 
-final class GalleryEditorTests: XCTestCase {
+final class GalleryEditorTests: GrainTestCase {
     // MARK: - PhotoItem Selection Stability
 
     func testSelectionStableThroughReorder() throws {

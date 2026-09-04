@@ -121,12 +121,12 @@ final class ViewedStoryStorage {
             storageSignposter.endInterval("ViewedStorageLoad", state)
             storageLogger.debug("[ViewedStorageLoad] end uris=\(self.viewedUris.count) authors=\(self.authorLastViewed.count)")
         }
-        if let data = UserDefaults.standard.data(forKey: urisKey),
+        if let data = StorageEnvironment.defaults.data(forKey: urisKey),
            let decoded = try? JSONDecoder().decode(Set<String>.self, from: data)
         {
             viewedUris = decoded
         }
-        if let data = UserDefaults.standard.data(forKey: authorKey),
+        if let data = StorageEnvironment.defaults.data(forKey: authorKey),
            let decoded = try? JSONDecoder().decode([String: String].self, from: data)
         {
             authorLastViewed = decoded
@@ -144,10 +144,10 @@ final class ViewedStoryStorage {
 
     private func save() {
         if let data = try? JSONEncoder().encode(viewedUris) {
-            UserDefaults.standard.set(data, forKey: urisKey)
+            StorageEnvironment.defaults.set(data, forKey: urisKey)
         }
         if let data = try? JSONEncoder().encode(authorLastViewed) {
-            UserDefaults.standard.set(data, forKey: authorKey)
+            StorageEnvironment.defaults.set(data, forKey: authorKey)
         }
     }
 }

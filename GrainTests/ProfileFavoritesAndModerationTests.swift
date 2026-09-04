@@ -56,7 +56,7 @@ private func profileJSON(viewer: String = "{}") -> String {
 /// fiddly half: they're cached to disk, paged, and filtered — a gallery whose
 /// thumbnail can't load would otherwise sit as a permanent blank tile.
 @MainActor
-final class ProfileFavoritesAndModerationTests: XCTestCase {
+final class ProfileFavoritesAndModerationTests: GrainTestCase {
     private var client: XRPCClient!
     private var vm: ProfileDetailViewModel!
     private var auth: AuthContext!

@@ -5,7 +5,7 @@ import XCTest
 /// The animation a double-tap plays over a photo — a heart, three ripples and a
 /// scatter of particles, each on its own curve and delay.
 @MainActor
-final class LikeBurstRenderTests: XCTestCase {
+final class LikeBurstRenderTests: GrainTestCase {
     private var account: TestAccount!
 
     /// Async overrides: the synchronous `setUp`/`tearDown` are nonisolated, so
@@ -13,12 +13,10 @@ final class LikeBurstRenderTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
         account = TestAccount()
-        MockURLProtocol.interceptSharedSession()
         MockURLProtocol.respondByPath(Fixtures.routes)
     }
 
     override func tearDown() async throws {
-        MockURLProtocol.stopInterceptingSharedSession()
         MockURLProtocol.handler = nil
         account.restore()
         try await super.tearDown()

@@ -11,7 +11,7 @@ private let recently = DateFormatting.nowISO(date: Date().addingTimeInterval(-36
 /// ring behind, and a failed load must leave the strip absent rather than
 /// broken.
 @MainActor
-final class StoryStripViewModelTests: XCTestCase {
+final class StoryStripViewModelTests: GrainTestCase {
     private var client: XRPCClient!
     private var vm: StoryStripViewModel!
 

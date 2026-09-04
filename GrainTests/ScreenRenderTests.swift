@@ -6,7 +6,7 @@ import XCTest
 /// suite. Rendering a screen also renders the cards, rows and strips it is
 /// built from, so these cover a good deal more than the file they name.
 @MainActor
-final class ScreenRenderTests: XCTestCase {
+final class ScreenRenderTests: GrainTestCase {
     private var account: TestAccount!
 
     /// Async overrides: the synchronous `setUp`/`tearDown` are nonisolated, so
@@ -14,12 +14,10 @@ final class ScreenRenderTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
         account = TestAccount()
-        MockURLProtocol.interceptSharedSession()
     }
 
     override func tearDown() async throws {
         MockURLProtocol.handler = nil
-        MockURLProtocol.stopInterceptingSharedSession()
         account.restore()
         try await super.tearDown()
     }

@@ -11,7 +11,7 @@ import XCTest
 /// entirely. Those branches are easy to break without noticing, because the
 /// signed-in path is the one anyone developing the app looks at.
 @MainActor
-final class ViewerStateRenderTests: XCTestCase {
+final class ViewerStateRenderTests: GrainTestCase {
     private var account: TestAccount!
 
     /// Async overrides: the synchronous `setUp`/`tearDown` are nonisolated, so
@@ -19,11 +19,9 @@ final class ViewerStateRenderTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
         account = TestAccount()
-        MockURLProtocol.interceptSharedSession()
     }
 
     override func tearDown() async throws {
-        MockURLProtocol.stopInterceptingSharedSession()
         MockURLProtocol.handler = nil
         account.restore()
         try await super.tearDown()

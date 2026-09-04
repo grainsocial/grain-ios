@@ -6,7 +6,7 @@ import XCTest
 /// will take, and describing the resulting blob in the shape the profile
 /// record expects.
 @MainActor
-final class AvatarUploadTests: XCTestCase {
+final class AvatarUploadTests: GrainTestCase {
     /// `scale` defaults to 1 — the picker decodes from data, which gives a
     /// scale-1 image — but it is settable, because an image carrying a scale is
     /// exactly what used to make the resize overshoot.

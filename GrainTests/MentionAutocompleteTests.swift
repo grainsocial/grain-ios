@@ -6,7 +6,7 @@ import XCTest
 /// one at all. Detection and completion are synchronous; only the lookup they
 /// trigger is not, so these stay off the network by clearing before it fires.
 @MainActor
-final class MentionAutocompleteTests: XCTestCase {
+final class MentionAutocompleteTests: GrainTestCase {
     private var state: MentionAutocompleteState!
 
     override func setUp() async throws {

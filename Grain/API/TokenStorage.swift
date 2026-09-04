@@ -19,7 +19,11 @@ struct StoredAccount: Codable, Identifiable, Hashable {
 /// lands after the user switched accounts must not write over the account they
 /// switched to. `activeDID` records which one the UI is currently showing.
 enum TokenStorage {
-    private static let keychain = Keychain(service: "social.grain.oauth")
+    /// Rebuilt per access so a task-local override applies. `Keychain` is a
+    /// value wrapper over query attributes, so this costs nothing.
+    private static var keychain: Keychain {
+        Keychain(service: StorageEnvironment.credentialService)
+    }
 
     // MARK: - Account list
 

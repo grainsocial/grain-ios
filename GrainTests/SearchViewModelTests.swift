@@ -5,7 +5,7 @@ import XCTest
 /// empty state rather than an alert. That makes the failure paths worth pinning
 /// down explicitly — a regression there is silent by design.
 @MainActor
-final class SearchViewModelTests: XCTestCase {
+final class SearchViewModelTests: GrainTestCase {
     private var client: XRPCClient!
     private var vm: SearchViewModel!
 

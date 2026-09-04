@@ -9,7 +9,7 @@ import XCTest
 /// hard requirement — a blob over the limit is rejected by the server after the
 /// upload has already been paid for.
 @MainActor
-final class ImageProcessingTests: XCTestCase {
+final class ImageProcessingTests: GrainTestCase {
     // MARK: - Fixtures
 
     /// High-frequency detail, so JPEG can't compress it down to nothing and the

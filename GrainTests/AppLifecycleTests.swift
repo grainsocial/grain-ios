@@ -8,7 +8,7 @@ import XCTest
 /// registration callbacks in between. None of it is reachable by rendering a
 /// view, and all of it decides where the app opens.
 @MainActor
-final class AppLifecycleTests: XCTestCase {
+final class AppLifecycleTests: GrainTestCase {
     /// Captures whatever a callback or notification hands back.
     private final class Box: @unchecked Sendable {
         private let lock = NSLock()

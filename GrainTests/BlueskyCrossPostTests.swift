@@ -55,7 +55,7 @@ private final class PostLog: @unchecked Sendable {
 /// `buildPostText` already has its own suite; this covers what happens to that
 /// text afterwards: facets, the image embed, and which write verb is used.
 @MainActor
-final class BlueskyCrossPostTests: XCTestCase {
+final class BlueskyCrossPostTests: GrainTestCase {
     private var client: XRPCClient!
     private var log: PostLog!
     private var auth: AuthContext!

@@ -9,7 +9,7 @@ import XCTest
 /// "no galleries yet" and "that didn't work" branches — which is what someone
 /// on a bad connection or a brand new account actually sees — went unexercised.
 @MainActor
-final class EmptyAndFailedStateRenderTests: XCTestCase {
+final class EmptyAndFailedStateRenderTests: GrainTestCase {
     private var account: TestAccount!
 
     /// Async overrides: the synchronous `setUp`/`tearDown` are nonisolated, so
@@ -17,11 +17,9 @@ final class EmptyAndFailedStateRenderTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
         account = TestAccount()
-        MockURLProtocol.interceptSharedSession()
     }
 
     override func tearDown() async throws {
-        MockURLProtocol.stopInterceptingSharedSession()
         MockURLProtocol.handler = nil
         account.restore()
         try await super.tearDown()

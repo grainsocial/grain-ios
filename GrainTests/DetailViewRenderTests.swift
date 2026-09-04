@@ -6,7 +6,7 @@ import XCTest
 /// creation flows. Like the other render suites these exist to run the layout
 /// code, which is where most of these files' lines are.
 @MainActor
-final class DetailViewRenderTests: XCTestCase {
+final class DetailViewRenderTests: GrainTestCase {
     private var account: TestAccount!
 
     /// Async overrides: the synchronous `setUp`/`tearDown` are nonisolated, so
@@ -14,12 +14,10 @@ final class DetailViewRenderTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
         account = TestAccount()
-        MockURLProtocol.interceptSharedSession()
     }
 
     override func tearDown() async throws {
         MockURLProtocol.handler = nil
-        MockURLProtocol.stopInterceptingSharedSession()
         account.restore()
         try await super.tearDown()
     }

@@ -3,7 +3,7 @@ import CryptoKit
 import XCTest
 
 @MainActor
-final class StoryCommentsViewModelTests: XCTestCase {
+final class StoryCommentsViewModelTests: GrainTestCase {
     private var client: XRPCClient!
     private var vm: StoryCommentsViewModel!
 

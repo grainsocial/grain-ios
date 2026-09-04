@@ -112,7 +112,7 @@ enum LocationServices {
         var request = URLRequest(url: url)
         request.setValue("grain-app/1.0", forHTTPHeaderField: "User-Agent")
 
-        guard let (data, _) = try? await URLSession.shared.data(for: request),
+        guard let (data, _) = try? await NetworkEnvironment.session.data(for: request),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else {
             return nil
@@ -138,7 +138,7 @@ enum LocationServices {
         var request = URLRequest(url: url)
         request.setValue("grain-app/1.0", forHTTPHeaderField: "User-Agent")
 
-        guard let (data, _) = try? await URLSession.shared.data(for: request),
+        guard let (data, _) = try? await NetworkEnvironment.session.data(for: request),
               let json = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
         else {
             return []

@@ -6,7 +6,7 @@ import XCTest
 /// share or a copy puts up, the long-press action sheet, and the thumbnails in
 /// a profile grid.
 @MainActor
-final class CardChromeRenderTests: XCTestCase {
+final class CardChromeRenderTests: GrainTestCase {
     private var account: TestAccount!
 
     /// Async overrides: the synchronous `setUp`/`tearDown` are nonisolated, so
@@ -14,12 +14,10 @@ final class CardChromeRenderTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
         account = TestAccount()
-        MockURLProtocol.interceptSharedSession()
         MockURLProtocol.respondByPath(Fixtures.routes)
     }
 
     override func tearDown() async throws {
-        MockURLProtocol.stopInterceptingSharedSession()
         MockURLProtocol.handler = nil
         account.restore()
         try await super.tearDown()

@@ -2,7 +2,7 @@
 import XCTest
 
 @MainActor
-final class NotificationsViewModelTests: XCTestCase {
+final class NotificationsViewModelTests: GrainTestCase {
     private var client: XRPCClient!
     private var vm: NotificationsViewModel!
 

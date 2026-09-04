@@ -6,7 +6,7 @@ import XCTest
 /// their work down into UIKit for smoothness, which leaves a small amount of
 /// SwiftUI-side state and a lot of view code that nothing was reaching.
 @MainActor
-final class ZoomAndDismissTests: XCTestCase {
+final class ZoomAndDismissTests: GrainTestCase {
     // MARK: - ImageZoomState
 
     func testTheZoomStateStartsAtRest() {

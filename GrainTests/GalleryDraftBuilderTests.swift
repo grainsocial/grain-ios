@@ -9,7 +9,7 @@ import XCTest
 /// and every record key is assigned, so that publishing can then be resumed
 /// from the draft alone.
 @MainActor
-final class GalleryDraftBuilderTests: XCTestCase {
+final class GalleryDraftBuilderTests: GrainTestCase {
     private var root: URL!
     private var store: GalleryDraftStore!
 

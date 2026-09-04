@@ -70,7 +70,7 @@ private func bodyData(of request: URLRequest) -> Data? {
     return data
 }
 
-final class GalleryPublishTests: XCTestCase {
+final class GalleryPublishTests: GrainTestCase {
     private var store: GalleryDraftStore!
     private var storeRoot: URL!
     private var log: RequestLog!

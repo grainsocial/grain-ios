@@ -8,7 +8,7 @@ import XCTest
 /// `GalleryPublishTests` covers the upload and commit state machine; this
 /// covers the parts that decide what the resume banner shows.
 @MainActor
-final class UploadCenterStateTests: XCTestCase {
+final class UploadCenterStateTests: GrainTestCase {
     private var root: URL!
     private var store: GalleryDraftStore!
     private var center: GalleryUploadCenter!

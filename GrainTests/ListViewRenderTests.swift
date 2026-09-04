@@ -6,7 +6,7 @@ import XCTest
 /// most are a loading state, a loaded list and an empty state, so they are
 /// rendered across those branches rather than just once.
 @MainActor
-final class ListViewRenderTests: XCTestCase {
+final class ListViewRenderTests: GrainTestCase {
     private var account: TestAccount!
 
     /// Async overrides: the synchronous `setUp`/`tearDown` are nonisolated, so
@@ -14,12 +14,10 @@ final class ListViewRenderTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
         account = TestAccount()
-        MockURLProtocol.interceptSharedSession()
     }
 
     override func tearDown() async throws {
         MockURLProtocol.handler = nil
-        MockURLProtocol.stopInterceptingSharedSession()
         account.restore()
         try await super.tearDown()
     }

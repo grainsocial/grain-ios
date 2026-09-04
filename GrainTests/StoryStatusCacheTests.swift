@@ -2,7 +2,7 @@
 import XCTest
 
 @MainActor
-final class StoryStatusCacheTests: XCTestCase {
+final class StoryStatusCacheTests: GrainTestCase {
     private static let iso8601: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]

@@ -75,12 +75,12 @@ final class RecentSearchStorage {
     }
 
     private func load() {
-        if let data = UserDefaults.standard.data(forKey: profilesKey),
+        if let data = StorageEnvironment.defaults.data(forKey: profilesKey),
            let decoded = try? JSONDecoder().decode([RecentProfileSearch].self, from: data)
         {
             profiles = decoded
         }
-        if let data = UserDefaults.standard.data(forKey: textKey),
+        if let data = StorageEnvironment.defaults.data(forKey: textKey),
            let decoded = try? JSONDecoder().decode([RecentTextSearch].self, from: data)
         {
             textSearches = decoded
@@ -89,10 +89,10 @@ final class RecentSearchStorage {
 
     private func save() {
         if let data = try? JSONEncoder().encode(profiles) {
-            UserDefaults.standard.set(data, forKey: profilesKey)
+            StorageEnvironment.defaults.set(data, forKey: profilesKey)
         }
         if let data = try? JSONEncoder().encode(textSearches) {
-            UserDefaults.standard.set(data, forKey: textKey)
+            StorageEnvironment.defaults.set(data, forKey: textKey)
         }
     }
 }

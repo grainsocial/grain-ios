@@ -2,7 +2,7 @@
 import XCTest
 
 @MainActor
-final class ViewedStoryStorageTests: XCTestCase {
+final class ViewedStoryStorageTests: GrainTestCase {
     private var storage: ViewedStoryStorage!
     /// Watch history is stored per account, and the test host shares
     /// UserDefaults with the app on the simulator — so pin these to a DID

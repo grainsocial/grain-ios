@@ -1,7 +1,7 @@
 @testable import Grain
 import XCTest
 
-final class FacetCodingTests: XCTestCase {
+final class FacetCodingTests: GrainTestCase {
     private let decoder = JSONDecoder()
     private let encoder = JSONEncoder()
 

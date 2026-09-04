@@ -8,7 +8,7 @@ import XCTest
 /// Every test uses synthetic DIDs — the test host shares its Keychain and
 /// UserDefaults with the app installed on the simulator.
 @MainActor
-final class AccountSwitchingTests: XCTestCase {
+final class AccountSwitchingTests: GrainTestCase {
     private let alice = "did:plc:switchtest-alice"
     private let bob = "did:plc:switchtest-bob"
 

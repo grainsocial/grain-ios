@@ -7,7 +7,7 @@ import XCTest
 /// filled heart, a location row, an exif line, an owner-only menu. These render
 /// them across those fields rather than against one plain fixture.
 @MainActor
-final class ContentVariationRenderTests: XCTestCase {
+final class ContentVariationRenderTests: GrainTestCase {
     private var account: TestAccount!
 
     /// Async overrides: the synchronous `setUp`/`tearDown` are nonisolated, so
@@ -15,13 +15,11 @@ final class ContentVariationRenderTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
         account = TestAccount()
-        MockURLProtocol.interceptSharedSession()
         MockURLProtocol.respondByPath(Fixtures.routes)
     }
 
     override func tearDown() async throws {
         MockURLProtocol.handler = nil
-        MockURLProtocol.stopInterceptingSharedSession()
         account.restore()
         try await super.tearDown()
     }

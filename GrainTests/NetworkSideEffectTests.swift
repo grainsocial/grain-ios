@@ -55,9 +55,11 @@ private final class SharedSessionLog: @unchecked Sendable {
 /// the Bluesky handle resolver, and push token registration. They reach for
 /// `URLSession.shared` directly, so nothing else in the suite exercises them.
 ///
-/// The shared session is intercepted here, so no request leaves the machine.
+/// `GrainTestCase` binds `NetworkEnvironment.session` to a mocked session for
+/// every test, so these requests are served locally without anything being
+/// registered against `URLSession.shared` process-wide.
 @MainActor
-final class NetworkSideEffectTests: XCTestCase {
+final class NetworkSideEffectTests: GrainTestCase {
     private var log: SharedSessionLog!
     private var account: TestAccount!
 
@@ -65,11 +67,9 @@ final class NetworkSideEffectTests: XCTestCase {
         try await super.setUp()
         log = SharedSessionLog()
         account = TestAccount()
-        MockURLProtocol.interceptSharedSession()
     }
 
     override func tearDown() async throws {
-        MockURLProtocol.stopInterceptingSharedSession()
         MockURLProtocol.handler = nil
         account.restore()
         try await super.tearDown()

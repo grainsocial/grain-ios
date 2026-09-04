@@ -61,7 +61,7 @@ private final class RequestLog: @unchecked Sendable {
 /// are a contract with the server that nothing else in the suite pins down —
 /// a renamed parameter compiles fine and fails only against a live PDS.
 @MainActor
-final class EndpointContractTests: XCTestCase {
+final class EndpointContractTests: GrainTestCase {
     private var client: XRPCClient!
     private var log: RequestLog!
     private var auth: AuthContext!

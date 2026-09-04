@@ -53,7 +53,7 @@ private final class TokenLog: @unchecked Sendable {
 ///
 /// `URLSession.shared` is intercepted here, so no request leaves the machine.
 @MainActor
-final class AuthRefreshTests: XCTestCase {
+final class AuthRefreshTests: GrainTestCase {
     private var log: TokenLog!
     private var did = ""
     private var other = ""
@@ -67,11 +67,9 @@ final class AuthRefreshTests: XCTestCase {
         savedActiveDID = TokenStorage.activeDID
         savedActiveAccountID = AccountScopedStorage.activeAccountID
         log = TokenLog()
-        MockURLProtocol.interceptSharedSession()
     }
 
     override func tearDown() async throws {
-        MockURLProtocol.stopInterceptingSharedSession()
         MockURLProtocol.handler = nil
         for account in [did, other] {
             TokenStorage.removeAccount(account)

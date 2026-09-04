@@ -1,7 +1,7 @@
 @testable import Grain
 import XCTest
 
-final class NetworkRetryTests: XCTestCase {
+final class NetworkRetryTests: GrainTestCase {
     // MARK: - Classification
 
     func testDroppedConnectionsAreTransient() {

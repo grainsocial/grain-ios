@@ -29,7 +29,7 @@ private final class Recorder: @unchecked Sendable {
 /// `tearDown` — the test host shares its Keychain with the app installed on the
 /// simulator.
 @MainActor
-final class AuthManagerAccountTests: XCTestCase {
+final class AuthManagerAccountTests: GrainTestCase {
     private var alice = ""
     private var bob = ""
     private var savedActiveDID: String?

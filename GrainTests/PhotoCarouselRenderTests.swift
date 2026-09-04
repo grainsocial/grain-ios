@@ -6,7 +6,7 @@ import XCTest
 /// a chosen photo is shown at full width, and it decodes a screen-sized preview
 /// per photo to do it.
 @MainActor
-final class PhotoCarouselRenderTests: XCTestCase {
+final class PhotoCarouselRenderTests: GrainTestCase {
     private var account: TestAccount!
 
     /// Async overrides: the synchronous `setUp`/`tearDown` are nonisolated, so
@@ -14,12 +14,10 @@ final class PhotoCarouselRenderTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
         account = TestAccount()
-        MockURLProtocol.interceptSharedSession()
         MockURLProtocol.respondByPath(Fixtures.routes)
     }
 
     override func tearDown() async throws {
-        MockURLProtocol.stopInterceptingSharedSession()
         MockURLProtocol.handler = nil
         account.restore()
         try await super.tearDown()

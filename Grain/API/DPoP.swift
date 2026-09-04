@@ -82,7 +82,10 @@ final class DPoP: Sendable {
 // MARK: - Key Management
 
 extension DPoP {
-    private static let keychainService = "social.grain.dpop"
+    private static var keychainService: String {
+        StorageEnvironment.dpopService
+    }
+
     private static let legacyKeychainAccount = "dpop-private-key"
 
     private static func account(for did: String) -> String {

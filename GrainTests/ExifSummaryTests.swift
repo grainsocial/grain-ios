@@ -8,7 +8,7 @@ import XCTest
 /// extraction in `GalleryDraftBuilder` — this one is display-only, and gets to
 /// leave out anything it can't format rather than storing a partial record.
 @MainActor
-final class ExifSummaryTests: XCTestCase {
+final class ExifSummaryTests: GrainTestCase {
     private func metadata(
         make: String? = "  FUJIFILM ",
         model: String? = "X100V ",

@@ -7,7 +7,7 @@ import XCTest
 /// layouts and the slot maths are value types, so they can be checked directly
 /// rather than by eye.
 @MainActor
-final class EditorLayoutTests: XCTestCase {
+final class EditorLayoutTests: GrainTestCase {
     private let width: CGFloat = 402
 
     /// 402 - 2*16 outer padding - 2*4 spacing, over three columns.

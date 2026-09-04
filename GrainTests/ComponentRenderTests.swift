@@ -7,7 +7,7 @@ import XCTest
 /// and a labelled gallery doesn't show its photos at all — so each is rendered
 /// across the branches rather than once in its happy state.
 @MainActor
-final class ComponentRenderTests: XCTestCase {
+final class ComponentRenderTests: GrainTestCase {
     private var account: TestAccount!
 
     /// Async overrides: the synchronous `setUp`/`tearDown` are nonisolated, so
@@ -15,12 +15,10 @@ final class ComponentRenderTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
         account = TestAccount()
-        MockURLProtocol.interceptSharedSession()
     }
 
     override func tearDown() async throws {
         MockURLProtocol.handler = nil
-        MockURLProtocol.stopInterceptingSharedSession()
         account.restore()
         try await super.tearDown()
     }

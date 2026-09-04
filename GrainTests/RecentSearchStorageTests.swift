@@ -5,7 +5,7 @@ import XCTest
 /// synthetic DID and clears it afterwards — the test host shares UserDefaults
 /// with the app installed on the simulator.
 @MainActor
-final class RecentSearchStorageTests: XCTestCase {
+final class RecentSearchStorageTests: GrainTestCase {
     private var did = ""
 
     override func setUp() async throws {

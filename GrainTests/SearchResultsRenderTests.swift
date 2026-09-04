@@ -7,7 +7,7 @@ import XCTest
 /// tab — only appears when the view model has a query in it, so the results
 /// half of the screen is unreachable from a plain render.
 @MainActor
-final class SearchResultsRenderTests: XCTestCase {
+final class SearchResultsRenderTests: GrainTestCase {
     private var account: TestAccount!
 
     /// Async overrides: the synchronous `setUp`/`tearDown` are nonisolated, so
@@ -15,12 +15,10 @@ final class SearchResultsRenderTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
         account = TestAccount()
-        MockURLProtocol.interceptSharedSession()
         MockURLProtocol.respondByPath(Fixtures.routes)
     }
 
     override func tearDown() async throws {
-        MockURLProtocol.stopInterceptingSharedSession()
         MockURLProtocol.handler = nil
         account.restore()
         try await super.tearDown()

@@ -9,7 +9,7 @@ import XCTest
 /// from six of the seven delete actions until 2026-08-14. The bug is invisible
 /// from the client (the record does disappear), so it's worth asserting the
 /// request lands on the endpoint that walks the whole graph.
-final class GalleryServiceTests: XCTestCase {
+final class GalleryServiceTests: GrainTestCase {
     private var recorder: Recorder!
 
     override func tearDown() {

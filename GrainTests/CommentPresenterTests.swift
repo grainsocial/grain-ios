@@ -9,7 +9,7 @@ import XCTest
 /// scene — and a dismissal path that has to be deferred off the current run
 /// loop turn or it re-enters SwiftUI mid-teardown.
 @MainActor
-final class CommentPresenterTests: XCTestCase {
+final class CommentPresenterTests: GrainTestCase {
     private var env: TestEnvironment!
 
     override func setUp() async throws {

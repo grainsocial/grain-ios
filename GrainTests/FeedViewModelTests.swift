@@ -24,7 +24,7 @@ private func feedBody(ids: [Int], cursor: String?) -> String {
 /// are where it goes wrong quietly: a stale cursor re-appends a page, and a
 /// cache key collision shows one account another's galleries.
 @MainActor
-final class FeedViewModelTests: XCTestCase {
+final class FeedViewModelTests: GrainTestCase {
     private var client: XRPCClient!
 
     override func setUp() async throws {

@@ -34,7 +34,7 @@ private func commentsBody(ids: [Int], cursor: String?) -> String {
 /// misbehaves quietly: a stale cursor either re-appends a page or stops paging
 /// a thread that still has more.
 @MainActor
-final class GalleryDetailViewModelTests: XCTestCase {
+final class GalleryDetailViewModelTests: GrainTestCase {
     private var client: XRPCClient!
     private var vm: GalleryDetailViewModel!
 

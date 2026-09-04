@@ -6,7 +6,7 @@ import XCTest
 /// second, with a pause that has to resume where it left off rather than start
 /// over — holding a finger down mid-story and letting go shouldn't rewind it.
 @MainActor
-final class StoryTimerTests: XCTestCase {
+final class StoryTimerTests: GrainTestCase {
     /// A story that runs in a fifth of a second rather than five. The ticker
     /// works in fractions of the duration, so every assertion below holds at
     /// either speed — it just isn't worth a minute of the suite's time to watch

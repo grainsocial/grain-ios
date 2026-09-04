@@ -83,7 +83,7 @@ final class MentionAutocompleteState {
         ]
         guard let url = components.url else { return }
 
-        guard let (data, _) = try? await URLSession.shared.data(from: url),
+        guard let (data, _) = try? await NetworkEnvironment.session.data(from: url),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let actors = json["actors"] as? [[String: Any]]
         else {

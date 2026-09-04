@@ -6,7 +6,7 @@ import XCTest
 /// the existing suite. These render it in each of the states it branches on so
 /// the layout code runs at all.
 @MainActor
-final class ProfileViewRenderTests: XCTestCase {
+final class ProfileViewRenderTests: GrainTestCase {
     private var keychain: KeychainGuard!
 
     /// Async overrides: the synchronous `setUp`/`tearDown` are nonisolated, so

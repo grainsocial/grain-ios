@@ -6,7 +6,7 @@ import XCTest
 /// these, so the cards, the story strip, the suggested-follows block and the
 /// paging footer all live here rather than in the parent.
 @MainActor
-final class FeedTabContentRenderTests: XCTestCase {
+final class FeedTabContentRenderTests: GrainTestCase {
     private var account: TestAccount!
 
     /// Async overrides: the synchronous `setUp`/`tearDown` are nonisolated, so
@@ -14,12 +14,10 @@ final class FeedTabContentRenderTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
         account = TestAccount()
-        MockURLProtocol.interceptSharedSession()
         MockURLProtocol.respondByPath(Fixtures.routes)
     }
 
     override func tearDown() async throws {
-        MockURLProtocol.stopInterceptingSharedSession()
         MockURLProtocol.handler = nil
         account.restore()
         try await super.tearDown()
@@ -104,15 +102,15 @@ final class FeedTabContentRenderTests: XCTestCase {
     /// the privacy toggle allows them.
     func testRendersATabOfFeedWithSuggestedFollowsTurnedOff() {
         let key = "privacy.showSuggestedUsers"
-        let saved = UserDefaults.standard.object(forKey: key) as? Bool
+        let saved = StorageEnvironment.defaults.object(forKey: key) as? Bool
         defer {
             if let saved {
-                UserDefaults.standard.set(saved, forKey: key)
+                StorageEnvironment.defaults.set(saved, forKey: key)
             } else {
-                UserDefaults.standard.removeObject(forKey: key)
+                StorageEnvironment.defaults.removeObject(forKey: key)
             }
         }
-        UserDefaults.standard.set(false, forKey: key)
+        StorageEnvironment.defaults.set(false, forKey: key)
 
         let env = TestEnvironment()
         renderTab(PinnedFeed.defaults[1], env: env)

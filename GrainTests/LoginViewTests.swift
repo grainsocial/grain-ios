@@ -2,7 +2,7 @@
 import XCTest
 
 @MainActor
-final class LoginViewTests: XCTestCase {
+final class LoginViewTests: GrainTestCase {
     func testLegalTextContainsAllThreeLinks() throws {
         let attributed = try AttributedString(markdown: LoginView.legalMarkdown)
         var urls: [String] = []

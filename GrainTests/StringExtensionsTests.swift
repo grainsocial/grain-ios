@@ -4,7 +4,7 @@ import XCTest
 /// Count formatting appears under every gallery and on every profile, and the
 /// digit proxy is what stops those counts from shifting the layout when they
 /// tick over. Both are pure string work, so they are cheap to pin down exactly.
-final class StringExtensionsTests: XCTestCase {
+final class StringExtensionsTests: GrainTestCase {
     // MARK: - compactCount
 
     func testCountsBelowAThousandAreLeftAlone() {

@@ -13,7 +13,7 @@ private struct Input: Encodable {
 /// awkward middle: DPoP nonce handshakes, 401 refresh, and turning a response
 /// into either a value or a typed error. Those paths only run against a real
 /// PDS in production, so they're worth pinning here.
-final class XRPCClientTests: XCTestCase {
+final class XRPCClientTests: GrainTestCase {
     private let baseURL = URL(string: "https://test.local")!
 
     override func tearDown() {

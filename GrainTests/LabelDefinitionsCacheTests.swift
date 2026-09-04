@@ -5,7 +5,7 @@ import XCTest
 /// gallery is blurred, so it has to fetch once and survive a failure without
 /// leaving the app unable to resolve labels at all.
 @MainActor
-final class LabelDefinitionsCacheTests: XCTestCase {
+final class LabelDefinitionsCacheTests: GrainTestCase {
     private var client: XRPCClient!
     private var cache: LabelDefinitionsCache!
 

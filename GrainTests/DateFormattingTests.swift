@@ -1,7 +1,7 @@
 @testable import Grain
 import XCTest
 
-final class DateFormattingTests: XCTestCase {
+final class DateFormattingTests: GrainTestCase {
     // MARK: - parse()
 
     func testParseFractionalSeconds() {

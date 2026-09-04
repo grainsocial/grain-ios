@@ -6,7 +6,7 @@ import XCTest
 /// it for whoever was signed in; without it that account appears to lose its
 /// watch history and search history on update.
 @MainActor
-final class LegacyStateMigrationTests: XCTestCase {
+final class LegacyStateMigrationTests: GrainTestCase {
     private var did = ""
     private let legacyKeys = ["viewedStoryUris", "viewedStoryAuthors", "recentSearchProfiles", "recentSearchText"]
 
@@ -24,7 +24,7 @@ final class LegacyStateMigrationTests: XCTestCase {
 
     private func clearLegacyKeys() {
         for key in legacyKeys {
-            UserDefaults.standard.removeObject(forKey: key)
+            StorageEnvironment.defaults.removeObject(forKey: key)
         }
     }
 
@@ -33,35 +33,35 @@ final class LegacyStateMigrationTests: XCTestCase {
     }
 
     func testLegacyStateIsClaimedByTheSignedInAccount() {
-        UserDefaults.standard.set(["at://story-1"], forKey: "viewedStoryUris")
-        UserDefaults.standard.set(["portra"], forKey: "recentSearchText")
+        StorageEnvironment.defaults.set(["at://story-1"], forKey: "viewedStoryUris")
+        StorageEnvironment.defaults.set(["portra"], forKey: "recentSearchText")
 
         AccountScopedStorage.migrateLegacyState(to: did)
 
-        XCTAssertEqual(UserDefaults.standard.stringArray(forKey: scoped("viewedStoryUris")), ["at://story-1"])
-        XCTAssertEqual(UserDefaults.standard.stringArray(forKey: scoped("recentSearchText")), ["portra"])
+        XCTAssertEqual(StorageEnvironment.defaults.stringArray(forKey: scoped("viewedStoryUris")), ["at://story-1"])
+        XCTAssertEqual(StorageEnvironment.defaults.stringArray(forKey: scoped("recentSearchText")), ["portra"])
     }
 
     /// The bare keys have to go, or a second account signing in later would
     /// inherit the first one's history.
     func testTheUnsuffixedKeysAreRemovedAfterwards() {
-        UserDefaults.standard.set(["at://story-1"], forKey: "viewedStoryUris")
+        StorageEnvironment.defaults.set(["at://story-1"], forKey: "viewedStoryUris")
 
         AccountScopedStorage.migrateLegacyState(to: did)
 
-        XCTAssertNil(UserDefaults.standard.object(forKey: "viewedStoryUris"))
+        XCTAssertNil(StorageEnvironment.defaults.object(forKey: "viewedStoryUris"))
     }
 
     /// Migration runs on sign-in, which happens again every time an account is
     /// re-added — it must not clobber the state that account has since built up.
     func testExistingScopedStateWins() {
-        UserDefaults.standard.set(["at://mine"], forKey: scoped("viewedStoryUris"))
-        UserDefaults.standard.set(["at://legacy"], forKey: "viewedStoryUris")
+        StorageEnvironment.defaults.set(["at://mine"], forKey: scoped("viewedStoryUris"))
+        StorageEnvironment.defaults.set(["at://legacy"], forKey: "viewedStoryUris")
 
         AccountScopedStorage.migrateLegacyState(to: did)
 
-        XCTAssertEqual(UserDefaults.standard.stringArray(forKey: scoped("viewedStoryUris")), ["at://mine"])
-        XCTAssertNil(UserDefaults.standard.object(forKey: "viewedStoryUris"), "The legacy key is still cleaned up")
+        XCTAssertEqual(StorageEnvironment.defaults.stringArray(forKey: scoped("viewedStoryUris")), ["at://mine"])
+        XCTAssertNil(StorageEnvironment.defaults.object(forKey: "viewedStoryUris"), "The legacy key is still cleaned up")
     }
 
     /// A fresh install has nothing to migrate.
@@ -69,7 +69,7 @@ final class LegacyStateMigrationTests: XCTestCase {
         AccountScopedStorage.migrateLegacyState(to: did)
 
         for key in legacyKeys {
-            XCTAssertNil(UserDefaults.standard.object(forKey: scoped(key)))
+            XCTAssertNil(StorageEnvironment.defaults.object(forKey: scoped(key)))
         }
     }
 

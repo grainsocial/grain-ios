@@ -1,7 +1,7 @@
 @testable import Grain
 import XCTest
 
-final class LabelResolutionTests: XCTestCase {
+final class LabelResolutionTests: GrainTestCase {
     // MARK: - LabelAction ordering
 
     func testLabelActionSeverityOrder() {

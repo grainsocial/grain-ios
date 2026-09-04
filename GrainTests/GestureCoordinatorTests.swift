@@ -9,7 +9,7 @@ import XCTest
 /// them coexist is entirely in their delegates, which is exactly the part a
 /// render test never reaches.
 @MainActor
-final class GestureCoordinatorTests: XCTestCase {
+final class GestureCoordinatorTests: GrainTestCase {
     /// Records callbacks a coordinator fires.
     private final class Calls {
         var phases: [String] = []

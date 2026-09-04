@@ -4,7 +4,7 @@ import XCTest
 /// Decides whether a caption gets a "translate" affordance. Detection is
 /// `NLLanguageRecognizer`, which is slow enough that the answer is memoized —
 /// so the cache has to give the same answer as a cold call, not a stale one.
-final class LanguageDetectorTests: XCTestCase {
+final class LanguageDetectorTests: GrainTestCase {
     private var readerReadsEnglish: Bool {
         (Locale.preferredLanguages.first ?? "en").hasPrefix("en")
     }

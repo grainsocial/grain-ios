@@ -2,7 +2,7 @@
 import XCTest
 
 @MainActor
-final class ProfileDetailViewModelTests: XCTestCase {
+final class ProfileDetailViewModelTests: GrainTestCase {
     private var client: XRPCClient!
     private var vm: ProfileDetailViewModel!
     /// `TokenStorage.userDID` is Keychain-backed and the test host shares that

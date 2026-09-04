@@ -5,7 +5,7 @@ import XCTest
 /// The pieces of a profile header: the follower and gallery counts, and the
 /// full-screen lightbox a profile picture opens into.
 @MainActor
-final class ProfileHeaderRenderTests: XCTestCase {
+final class ProfileHeaderRenderTests: GrainTestCase {
     private var account: TestAccount!
 
     /// Async overrides: the synchronous `setUp`/`tearDown` are nonisolated, so
@@ -13,12 +13,10 @@ final class ProfileHeaderRenderTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
         account = TestAccount()
-        MockURLProtocol.interceptSharedSession()
         MockURLProtocol.respondByPath(Fixtures.routes)
     }
 
     override func tearDown() async throws {
-        MockURLProtocol.stopInterceptingSharedSession()
         MockURLProtocol.handler = nil
         account.restore()
         try await super.tearDown()

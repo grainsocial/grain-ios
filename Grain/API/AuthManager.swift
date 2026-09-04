@@ -70,7 +70,13 @@ final class AuthManager {
     /// suffix: `scopeMigrationDone_v2`, `_v3`, etc.
     private static let scopeMigrationKey = "scopeMigrationDone_v2"
 
-    init() {
+    /// The session every OAuth call goes through. Injectable so tests can serve
+    /// the PAR/token/refresh endpoints without registering a `URLProtocol`
+    /// against `URLSession.shared` for the whole process.
+    private let session: URLSession
+
+    init(session: URLSession = NetworkEnvironment.session) {
+        self.session = session
         let spid = authSignposter.makeSignpostID()
         let state = authSignposter.beginInterval("SessionRestore", id: spid)
         logger.debug("[SessionRestore] begin")
@@ -115,18 +121,18 @@ final class AuthManager {
     /// most once per install per version — even if the re-login somehow
     /// still returns an insufficient grant, we don't loop.
     private func runScopeMigrationIfNeeded(did: String) {
-        guard !UserDefaults.standard.bool(forKey: Self.scopeMigrationKey) else { return }
+        guard !StorageEnvironment.defaults.bool(forKey: Self.scopeMigrationKey) else { return }
 
         let stored = TokenStorage.grantedScope(for: did).map { Set($0.split(separator: " ").map(String.init)) } ?? []
         let missing = Self.requiredScopes.filter { !stored.contains($0) }
         guard !missing.isEmpty else {
             // Nothing to do — stored token already covers every required scope.
-            UserDefaults.standard.set(true, forKey: Self.scopeMigrationKey)
+            StorageEnvironment.defaults.set(true, forKey: Self.scopeMigrationKey)
             return
         }
 
         logger.info("[ScopeMigration] forcing re-auth; missing=\(missing.joined(separator: ","), privacy: .public)")
-        UserDefaults.standard.set(true, forKey: Self.scopeMigrationKey)
+        StorageEnvironment.defaults.set(true, forKey: Self.scopeMigrationKey)
         // A scope bump applies to every grant, so drop them all rather than
         // leaving stale accounts in the switcher that can't be switched to.
         for account in TokenStorage.accounts {
@@ -201,7 +207,7 @@ final class AuthManager {
         let parProof = try await dpop.createProof(httpMethod: "POST", url: parURL)
         parRequest.setValue(parProof, forHTTPHeaderField: "DPoP")
 
-        var (parData, parHTTPResponse) = try await URLSession.shared.data(for: parRequest)
+        var (parData, parHTTPResponse) = try await session.data(for: parRequest)
 
         // Handle DPoP nonce requirement on PAR
         if let httpResp = parHTTPResponse as? HTTPURLResponse,
@@ -210,7 +216,7 @@ final class AuthManager {
         {
             let retryProof = try await dpop.createProof(httpMethod: "POST", url: parURL, nonce: nonce)
             parRequest.setValue(retryProof, forHTTPHeaderField: "DPoP")
-            (parData, parHTTPResponse) = try await URLSession.shared.data(for: parRequest)
+            (parData, parHTTPResponse) = try await session.data(for: parRequest)
         }
 
         if let httpResp = parHTTPResponse as? HTTPURLResponse,
@@ -315,7 +321,7 @@ final class AuthManager {
         let proof = try await dpop.createProof(httpMethod: "POST", url: tokenURL)
         request.setValue(proof, forHTTPHeaderField: "DPoP")
 
-        var (data, response) = try await URLSession.shared.data(for: request)
+        var (data, response) = try await session.data(for: request)
 
         // Handle DPoP nonce requirement
         if let httpResp = response as? HTTPURLResponse,
@@ -324,7 +330,7 @@ final class AuthManager {
         {
             let retryProof = try await dpop.createProof(httpMethod: "POST", url: tokenURL, nonce: nonce)
             request.setValue(retryProof, forHTTPHeaderField: "DPoP")
-            (data, response) = try await URLSession.shared.data(for: request)
+            (data, response) = try await session.data(for: request)
         }
 
         guard let httpResponse = response as? HTTPURLResponse else {
@@ -408,7 +414,7 @@ final class AuthManager {
         let proof = try await dpop.createProof(httpMethod: "POST", url: tokenURL)
         request.setValue(proof, forHTTPHeaderField: "DPoP")
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
 
         // Handle DPoP nonce retry
         if let httpResponse = response as? HTTPURLResponse,
@@ -418,7 +424,7 @@ final class AuthManager {
             let retryProof = try await dpop.createProof(httpMethod: "POST", url: tokenURL, nonce: nonce)
             var retryRequest = request
             retryRequest.setValue(retryProof, forHTTPHeaderField: "DPoP")
-            let (retryData, _) = try await URLSession.shared.data(for: retryRequest)
+            let (retryData, _) = try await session.data(for: retryRequest)
             let tokenResponse = try JSONDecoder().decode(TokenResponse.self, from: retryData)
             store(tokenResponse, for: tokenResponse.sub, dpop: dpop, makeActive: true)
             return
@@ -518,7 +524,7 @@ final class AuthManager {
     private func downloadAvatarImage() async {
         guard let urlString = userAvatar, let url = URL(string: urlString) else { return }
         do {
-            let (data, _) = try await URLSession.shared.data(from: url)
+            let (data, _) = try await session.data(from: url)
             if let image = UIImage(data: data) {
                 avatarImage = image
             }

@@ -1,7 +1,7 @@
 @testable import Grain
 import XCTest
 
-final class BlueskyPostTests: XCTestCase {
+final class BlueskyPostTests: GrainTestCase {
     private let url = "https://grain.social/profile/did:plc:abc/gallery/xyz"
 
     /// POI with distinct name — append locality, region, country

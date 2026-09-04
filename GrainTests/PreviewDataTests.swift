@@ -8,7 +8,7 @@ import XCTest
 /// renamed, breaks every canvas at once and only shows up when someone opens
 /// Xcode. These assert the shapes the previews rely on.
 @MainActor
-final class PreviewDataTests: XCTestCase {
+final class PreviewDataTests: GrainTestCase {
     // MARK: - Profiles
 
     func testTheProfileFixturesAreDistinctPeople() {

@@ -2,7 +2,7 @@
 import Nuke
 import XCTest
 
-final class StoryImageCacheTests: XCTestCase {
+final class StoryImageCacheTests: GrainTestCase {
     // MARK: - Helpers
 
     private func makeStory(fullsize: String) -> GrainStory {

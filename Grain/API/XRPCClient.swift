@@ -35,7 +35,7 @@ final class XRPCClient: Sendable {
     private let encoder: JSONEncoder
     private let onUnauthorized: (@Sendable () async throws -> AuthContext?)?
 
-    init(baseURL: URL, session: URLSession = .shared, onUnauthorized: (@Sendable () async throws -> AuthContext?)? = nil) {
+    init(baseURL: URL, session: URLSession = NetworkEnvironment.session, onUnauthorized: (@Sendable () async throws -> AuthContext?)? = nil) {
         self.baseURL = baseURL
         self.session = session
         decoder = JSONDecoder()

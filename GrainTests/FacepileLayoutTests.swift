@@ -6,7 +6,7 @@ import XCTest
 /// more room the row proposes less width to the facepile, so the facepile has
 /// to report the same size regardless of what it is offered.
 @MainActor
-final class FacepileLayoutTests: XCTestCase {
+final class FacepileLayoutTests: GrainTestCase {
     private struct Member: FacepileMember {
         let did: String
         let avatar: String?

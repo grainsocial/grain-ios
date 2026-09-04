@@ -6,7 +6,7 @@ import XCTest
 /// avatars everywhere else. All are small views with several visual states, and
 /// none of them was reachable from the suite.
 @MainActor
-final class EditorCellRenderTests: XCTestCase {
+final class EditorCellRenderTests: GrainTestCase {
     private var account: TestAccount!
 
     /// Async overrides: the synchronous `setUp`/`tearDown` are nonisolated, so
@@ -14,11 +14,9 @@ final class EditorCellRenderTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
         account = TestAccount()
-        MockURLProtocol.interceptSharedSession()
     }
 
     override func tearDown() async throws {
-        MockURLProtocol.stopInterceptingSharedSession()
         MockURLProtocol.handler = nil
         account.restore()
         try await super.tearDown()

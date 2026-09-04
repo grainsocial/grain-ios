@@ -6,7 +6,7 @@ import XCTest
 /// a feed card, and the story viewer — each handing it a different set of
 /// callbacks and a different way to dismiss.
 @MainActor
-final class CommentSheetRenderTests: XCTestCase {
+final class CommentSheetRenderTests: GrainTestCase {
     private var account: TestAccount!
 
     /// Async overrides: the synchronous `setUp`/`tearDown` are nonisolated, so
@@ -14,11 +14,9 @@ final class CommentSheetRenderTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
         account = TestAccount()
-        MockURLProtocol.interceptSharedSession()
     }
 
     override func tearDown() async throws {
-        MockURLProtocol.stopInterceptingSharedSession()
         MockURLProtocol.handler = nil
         account.restore()
         try await super.tearDown()

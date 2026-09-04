@@ -100,7 +100,9 @@ enum ViewRender {
 /// the same set or the view traps on a missing value.
 @MainActor
 struct TestEnvironment {
-    let auth = AuthManager()
+    /// Served by `MockURLProtocol` like `client` is, so a token refresh or an
+    /// avatar fetch triggered by a render can't reach the network either.
+    let auth = AuthManager(session: MockURLProtocol.mockSession())
     let viewedStories = ViewedStoryStorage(did: "did:plc:test")
     let labelDefs = LabelDefinitionsCache()
     let storyStatus = StoryStatusCache()
@@ -135,21 +137,19 @@ extension View {
     }
 }
 
-/// `TokenStorage` is Keychain-backed and the test host shares that Keychain
-/// with the installed simulator app, so any test that writes it has to put the
-/// old value back or it corrupts the signed-in account. Mirrors the save and
-/// restore that `ProfileDetailViewModelTests` does by hand.
+/// Sets `TokenStorage.userDID` for the duration of a test.
+///
+/// This used to save and put back the real value, because the test host shares
+/// a Keychain with the app installed on the same simulator. `GrainTestCase` now
+/// binds a per-test Keychain service, so there is no real value to protect.
 @MainActor
 final class KeychainGuard {
-    private let savedUserDID: String?
-
     init(userDID: String?) {
-        savedUserDID = TokenStorage.userDID
         TokenStorage.userDID = userDID
     }
 
     func restore() {
-        TokenStorage.userDID = savedUserDID
+        TokenStorage.userDID = nil
     }
 }
 
@@ -160,27 +160,17 @@ final class KeychainGuard {
 /// without one renders only their signed-out half, which is a large share of
 /// the view code going unexercised.
 ///
-/// The test host shares its Keychain with the app installed on the simulator,
-/// so this saves the real active account and `restore()` puts it back.
+/// Writes land in whatever namespace `StorageEnvironment` currently binds, which
+/// `GrainTestCase` scopes to the individual test — so this no longer has to save
+/// and put back the credentials of the app installed on the same simulator.
 @MainActor
 final class TestAccount {
     let did: String
     let handle: String
-    private let savedActiveDID: String?
-    private let savedActiveAccountID: String?
-
-    /// `AuthManager` runs a one-shot scope migration on first launch that can
-    /// sign every account out. Storing a full scope keeps it from firing, but
-    /// it still writes its "done" flag — so put that back too.
-    private static let scopeMigrationKey = "scopeMigrationDone_v2"
-    private let savedScopeMigration: Bool
 
     init(did: String = "did:plc:test", handle: String = "tester.grain.social") {
         self.did = did
         self.handle = handle
-        savedActiveDID = TokenStorage.activeDID
-        savedActiveAccountID = AccountScopedStorage.activeAccountID
-        savedScopeMigration = UserDefaults.standard.bool(forKey: Self.scopeMigrationKey)
 
         _ = try? DPoP.loadOrCreate(for: did)
         TokenStorage.storeTokens(
@@ -211,12 +201,12 @@ final class TestAccount {
         try? await auth.switchTo(did: did)
     }
 
+    /// Kept so existing tearDowns keep compiling. The namespace is discarded
+    /// wholesale when the test ends, so this is only about leaving a tidy store
+    /// behind for anything sharing the namespace within one test.
     func restore() {
         TokenStorage.removeAccount(did)
         try? DPoP.clearKey(for: did)
         AccountScopedStorage.purge(did: did)
-        TokenStorage.activeDID = savedActiveDID
-        AccountScopedStorage.activeAccountID = savedActiveAccountID
-        UserDefaults.standard.set(savedScopeMigration, forKey: Self.scopeMigrationKey)
     }
 }

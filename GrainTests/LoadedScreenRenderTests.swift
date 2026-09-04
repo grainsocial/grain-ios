@@ -11,7 +11,7 @@ import XCTest
 /// never reached. `Fixtures.routes` answers each endpoint with a payload of the
 /// right shape instead.
 @MainActor
-final class LoadedScreenRenderTests: XCTestCase {
+final class LoadedScreenRenderTests: GrainTestCase {
     private var account: TestAccount!
 
     /// Async overrides: the synchronous `setUp`/`tearDown` are nonisolated, so
@@ -19,13 +19,11 @@ final class LoadedScreenRenderTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
         account = TestAccount()
-        MockURLProtocol.interceptSharedSession()
         MockURLProtocol.respondByPath(Fixtures.routes)
     }
 
     override func tearDown() async throws {
         MockURLProtocol.handler = nil
-        MockURLProtocol.stopInterceptingSharedSession()
         account.restore()
         try await super.tearDown()
     }

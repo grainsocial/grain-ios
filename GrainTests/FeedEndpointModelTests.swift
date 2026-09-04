@@ -1,7 +1,7 @@
 @testable import Grain
 import XCTest
 
-final class FeedEndpointModelTests: XCTestCase {
+final class FeedEndpointModelTests: GrainTestCase {
     // MARK: - PinnedFeed.feedName
 
     func testFeedNameForCameraType() {

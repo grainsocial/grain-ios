@@ -81,8 +81,8 @@ final class PushManager: NSObject {
     // MARK: - Private
 
     private var currentToken: String? {
-        get { UserDefaults.standard.string(forKey: "apns_device_token") }
-        set { UserDefaults.standard.set(newValue, forKey: "apns_device_token") }
+        get { StorageEnvironment.defaults.string(forKey: "apns_device_token") }
+        set { StorageEnvironment.defaults.set(newValue, forKey: "apns_device_token") }
     }
 
     private func sendTokenToServer(token: String) async {

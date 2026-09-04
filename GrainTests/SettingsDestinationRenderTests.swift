@@ -6,7 +6,7 @@ import XCTest
 /// own load, so rendering the Settings list never reaches them — they only
 /// appear once something is pushed.
 @MainActor
-final class SettingsDestinationRenderTests: XCTestCase {
+final class SettingsDestinationRenderTests: GrainTestCase {
     private var account: TestAccount!
 
     /// Async overrides: the synchronous `setUp`/`tearDown` are nonisolated, so
@@ -14,12 +14,10 @@ final class SettingsDestinationRenderTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
         account = TestAccount()
-        MockURLProtocol.interceptSharedSession()
         MockURLProtocol.respondByPath(Fixtures.routes)
     }
 
     override func tearDown() async throws {
-        MockURLProtocol.stopInterceptingSharedSession()
         MockURLProtocol.handler = nil
         account.restore()
         try await super.tearDown()
@@ -88,17 +86,17 @@ final class SettingsDestinationRenderTests: XCTestCase {
     /// rendered against each of them.
     func testRendersTheAppearanceScreenForEachOption() {
         let key = "appearance"
-        let saved = UserDefaults.standard.string(forKey: key)
+        let saved = StorageEnvironment.defaults.string(forKey: key)
         defer {
             if let saved {
-                UserDefaults.standard.set(saved, forKey: key)
+                StorageEnvironment.defaults.set(saved, forKey: key)
             } else {
-                UserDefaults.standard.removeObject(forKey: key)
+                StorageEnvironment.defaults.removeObject(forKey: key)
             }
         }
 
         for option in ["auto", "light", "dark"] {
-            UserDefaults.standard.set(option, forKey: key)
+            StorageEnvironment.defaults.set(option, forKey: key)
             ViewRender.render(AppearanceSettingsView(), settle: 0.1)
         }
     }

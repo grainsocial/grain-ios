@@ -5,7 +5,7 @@ import XCTest
 /// notification that `MainTabView` listens for. The rawValues are the contract
 /// between the two halves, and nothing else checks that they still line up.
 @MainActor
-final class AppShortcutsTests: XCTestCase {
+final class AppShortcutsTests: GrainTestCase {
     private func actionPosted(by run: @MainActor () async throws -> Void) async rethrows -> String? {
         final class Box: @unchecked Sendable {
             var value: String?

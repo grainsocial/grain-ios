@@ -94,17 +94,4 @@ extension MockURLProtocol {
     }
 }
 
-extension MockURLProtocol {
-    /// Also intercept `URLSession.shared`.
-    ///
-    /// A few paths don't take an injected client — the avatar refresh after an
-    /// account switch, Nominatim lookups, the Bluesky handle resolver — and
-    /// without this they reach the real network from a test.
-    static func interceptSharedSession() {
-        URLProtocol.registerClass(MockURLProtocol.self)
-    }
-
-    static func stopInterceptingSharedSession() {
-        URLProtocol.unregisterClass(MockURLProtocol.self)
-    }
-}
+extension MockURLProtocol {}

@@ -1,7 +1,7 @@
 @testable import Grain
 import XCTest
 
-final class TIDTests: XCTestCase {
+final class TIDTests: GrainTestCase {
     func testNextIsThirteenValidCharacters() {
         let tid = TID.next()
         XCTAssertEqual(tid.count, 13)

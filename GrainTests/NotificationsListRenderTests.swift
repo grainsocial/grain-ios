@@ -9,7 +9,7 @@ import XCTest
 /// list that builds them — including the grouping applied on the way in, which
 /// is what decides whether four favorites are four rows or one.
 @MainActor
-final class NotificationsListRenderTests: XCTestCase {
+final class NotificationsListRenderTests: GrainTestCase {
     private var account: TestAccount!
 
     /// Async overrides: the synchronous `setUp`/`tearDown` are nonisolated, so
@@ -17,11 +17,9 @@ final class NotificationsListRenderTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
         account = TestAccount()
-        MockURLProtocol.interceptSharedSession()
     }
 
     override func tearDown() async throws {
-        MockURLProtocol.stopInterceptingSharedSession()
         MockURLProtocol.handler = nil
         account.restore()
         try await super.tearDown()

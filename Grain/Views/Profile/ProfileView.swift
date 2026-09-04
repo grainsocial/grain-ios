@@ -968,7 +968,7 @@ extension ProfileView {
                     req.httpMethod = "HEAD"
                     req.timeoutInterval = 10
                     do {
-                        let (_, response) = try await URLSession.shared.data(for: req)
+                        let (_, response) = try await NetworkEnvironment.session.data(for: req)
                         guard let http = response as? HTTPURLResponse else {
                             return FavoriteThumbProbe(uri: uri, result: .unknown)
                         }

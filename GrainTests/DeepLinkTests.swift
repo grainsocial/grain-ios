@@ -1,7 +1,7 @@
 @testable import Grain
 import XCTest
 
-final class DeepLinkTests: XCTestCase {
+final class DeepLinkTests: GrainTestCase {
     // MARK: - grain:// scheme
 
     func testGrainSchemeProfile() throws {

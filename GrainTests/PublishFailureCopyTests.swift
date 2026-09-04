@@ -9,7 +9,7 @@ import XCTest
 /// the wrong thing sends people to the wrong remedy. Every branch here has to
 /// say what happened and reassure that the work is still on the device.
 @MainActor
-final class PublishFailureCopyTests: XCTestCase {
+final class PublishFailureCopyTests: GrainTestCase {
     private func message(_ error: Error) -> String {
         GalleryUploadCenter.message(for: error)
     }
