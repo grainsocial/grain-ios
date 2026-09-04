@@ -8,8 +8,7 @@ private let notificationsLaunchSignposter = OSSignposter(subsystem: "social.grai
 struct NotificationsView: View {
     @Environment(AuthManager.self) private var auth
     var viewModel: NotificationsViewModel
-    @State private var selectedGalleryUri: String?
-    @State private var selectedProfileDid: String?
+    @Environment(Router.self) private var router
     @State private var cardStoryAuthor: GrainStoryAuthor?
     @State private var selectedStory: GrainStory?
     @State private var selectedGroup: GroupedNotification?
@@ -22,24 +21,22 @@ struct NotificationsView: View {
     }
 
     var body: some View {
+        @Bindable var router = router
         let _ = notificationsLaunchSignposter.emitEvent("NotificationsViewBodyBegin")
-        NavigationStack {
+        NavigationStack(path: $router.path) {
             NotificationListContent(
                 viewModel: viewModel,
                 client: client,
                 authContext: { await auth.authContext() },
-                onProfileTap: { selectedProfileDid = $0 },
-                onGalleryTap: { selectedGalleryUri = $0 },
+                onProfileTap: { router.push(.profile(did: $0)) },
+                onGalleryTap: { router.push(.gallery(uri: $0)) },
                 onStoryAuthorTap: { cardStoryAuthor = $0 },
                 onStoryTap: { selectedStory = $0 },
                 onGroupTap: { selectedGroup = $0 }
             )
             .navigationTitle("Notifications")
-            .navigationDestination(item: $selectedGalleryUri) { uri in
-                GalleryDetailView(client: client, galleryUri: uri)
-            }
-            .navigationDestination(item: $selectedProfileDid) { did in
-                ProfileView(client: client, did: did)
+            .navigationDestination(for: Route.self) { route in
+                RouteDestination(route: route, client: client)
             }
             .navigationDestination(item: $selectedGroup) { group in
                 GroupedAuthorsView(
@@ -53,7 +50,7 @@ struct NotificationsView: View {
                     client: client,
                     onProfileTap: { did in
                         cardStoryAuthor = nil
-                        selectedProfileDid = did
+                        router.push(.profile(did: did))
                     },
                     onDismiss: { cardStoryAuthor = nil }
                 )
@@ -70,7 +67,7 @@ struct NotificationsView: View {
                     client: client,
                     onProfileTap: { did in
                         selectedStory = nil
-                        selectedProfileDid = did
+                        router.push(.profile(did: did))
                     },
                     onDismiss: { selectedStory = nil }
                 )

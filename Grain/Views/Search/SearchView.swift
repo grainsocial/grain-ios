@@ -6,11 +6,7 @@ struct SearchView: View {
     @Environment(ViewedStoryStorage.self) private var viewedStories
     @State private var viewModel: SearchViewModel
     @State private var searchText = ""
-    @State private var searchNavigationUri: String?
-    @State private var selectedProfileDid: String?
-    @State private var selectedHashtag: String?
-    @State private var selectedLocation: LocationDestination?
-    @State private var favoritesGalleryUri: FavoritesDestination?
+    @Environment(Router.self) private var router
     @State private var zoomState = ImageZoomState()
     @State private var cardStoryAuthor: GrainStoryAuthor?
     @State private var commentSheetUri: String?
@@ -31,7 +27,8 @@ struct SearchView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        @Bindable var router = router
+        NavigationStack(path: $router.path) {
             Group {
                 if viewModel.searchText.isEmpty {
                     if recentSearches.profiles.isEmpty, recentSearches.textSearches.isEmpty {
@@ -54,17 +51,17 @@ struct SearchView: View {
                                         deleteGalleryUri = gallery.uri
                                     } : nil
                                     GalleryCardView(gallery: $gallery, client: client, onNavigate: {
-                                        searchNavigationUri = gallery.uri
+                                        router.push(.gallery(uri: gallery.uri))
                                     }, onCommentTap: {
                                         commentSheetUri = gallery.uri
                                     }, onFavoritesTap: {
-                                        favoritesGalleryUri = FavoritesDestination(galleryUri: gallery.uri)
+                                        router.push(.galleryFavorites(uri: gallery.uri))
                                     }, onProfileTap: { did in
-                                        selectedProfileDid = did
+                                        router.push(.profile(did: did))
                                     }, onHashtagTap: { tag in
-                                        selectedHashtag = tag
+                                        router.push(.hashtag(tag))
                                     }, onLocationTap: { h3, name in
-                                        selectedLocation = LocationDestination(h3Index: h3, name: name)
+                                        router.push(.location(h3Index: h3, name: name))
                                     }, onStoryTap: { author in
                                         cardStoryAuthor = author
                                     }, onReport: reportAction, onDelete: deleteAction)
@@ -73,7 +70,7 @@ struct SearchView: View {
                                 ForEach(viewModel.profileResults) { profile in
                                     Button {
                                         recentSearches.addProfile(did: profile.did, displayName: profile.displayName, handle: profile.handle, avatar: profile.avatar)
-                                        selectedProfileDid = profile.did
+                                        router.push(.profile(did: profile.did))
                                     } label: {
                                         HStack {
                                             StoryRingView(
@@ -88,7 +85,7 @@ struct SearchView: View {
                                                 hasStory: storyStatusCache.hasStory(for: profile.did),
                                                 onViewProfile: {
                                                     recentSearches.addProfile(did: profile.did, displayName: profile.displayName, handle: profile.handle, avatar: profile.avatar)
-                                                    selectedProfileDid = profile.did
+                                                    router.push(.profile(did: profile.did))
                                                 },
                                                 onViewStory: {
                                                     if let author = storyStatusCache.author(for: profile.did) {
@@ -138,28 +135,13 @@ struct SearchView: View {
                     Task { await viewModel.search(auth: auth.authContext()) }
                 }
             }
-            .navigationDestination(item: $searchNavigationUri) { uri in
-                GalleryDetailView(client: client, galleryUri: uri)
-            }
-            .navigationDestination(item: $selectedProfileDid) { did in
-                ProfileView(client: client, did: did)
-            }
-            .navigationDestination(item: $selectedHashtag) { tag in
-                HashtagFeedView(client: client, tag: tag)
-            }
-            .navigationDestination(item: $selectedLocation) { loc in
-                LocationFeedView(client: client, h3Index: loc.h3Index, locationName: loc.name)
-            }
-            .navigationDestination(item: $favoritesGalleryUri) { dest in
-                FollowListView(client: client, mode: .galleryFavorites(dest.galleryUri))
-            }
             .fullScreenCover(item: $cardStoryAuthor) { author in
                 StoryViewer(
                     authors: [author],
                     client: client,
                     onProfileTap: { did in
                         cardStoryAuthor = nil
-                        selectedProfileDid = did
+                        router.push(.profile(did: did))
                     },
                     onDismiss: { cardStoryAuthor = nil }
                 )
@@ -180,11 +162,11 @@ struct SearchView: View {
                         onDismiss: { commentSheetUri = nil },
                         onProfileTap: { did in
                             commentSheetUri = nil
-                            selectedProfileDid = did
+                            router.push(.profile(did: did))
                         },
                         onHashtagTap: { tag in
                             commentSheetUri = nil
-                            selectedHashtag = tag
+                            router.push(.hashtag(tag))
                         },
                         onStoryTap: { author in
                             commentSheetUri = nil
@@ -265,7 +247,7 @@ struct SearchView: View {
                                         .frame(width: 72)
                                 }
                                 .onTapGesture {
-                                    selectedProfileDid = profile.did
+                                    router.push(.profile(did: profile.did))
                                 }
                             }
                         }

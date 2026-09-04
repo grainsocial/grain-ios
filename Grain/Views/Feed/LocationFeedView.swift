@@ -8,10 +8,7 @@ struct LocationFeedView: View {
     @State private var cursor: String?
     @State private var isLoading = false
     @State private var isPinned = false
-    @State private var selectedUri: String?
-    @State private var selectedProfileDid: String?
-    @State private var selectedHashtag: String?
-    @State private var favoritesGalleryUri: FavoritesDestination?
+    @Environment(Router.self) private var router
     @State private var zoomState = ImageZoomState()
     @State private var cardStoryAuthor: GrainStoryAuthor?
     @State private var commentSheetUri: String?
@@ -75,15 +72,15 @@ struct LocationFeedView: View {
                         deleteGalleryUri = gallery.uri
                     } : nil
                     GalleryCardView(gallery: $gallery, client: client, onNavigate: {
-                        selectedUri = gallery.uri
+                        router.push(.gallery(uri: gallery.uri))
                     }, onCommentTap: {
                         commentSheetUri = gallery.uri
                     }, onFavoritesTap: {
-                        favoritesGalleryUri = FavoritesDestination(galleryUri: gallery.uri)
+                        router.push(.galleryFavorites(uri: gallery.uri))
                     }, onProfileTap: { did in
-                        selectedProfileDid = did
+                        router.push(.profile(did: did))
                     }, onHashtagTap: { tag in
-                        selectedHashtag = tag
+                        router.push(.hashtag(tag))
                     }, onStoryTap: { author in
                         cardStoryAuthor = author
                     }, onReport: reportAction, onDelete: deleteAction)
@@ -139,25 +136,13 @@ struct LocationFeedView: View {
             guard !isPreview else { return }
             await checkPinned()
         }
-        .navigationDestination(item: $selectedUri) { uri in
-            GalleryDetailView(client: client, galleryUri: uri)
-        }
-        .navigationDestination(item: $selectedProfileDid) { did in
-            ProfileView(client: client, did: did)
-        }
-        .navigationDestination(item: $selectedHashtag) { tag in
-            HashtagFeedView(client: client, tag: tag)
-        }
-        .navigationDestination(item: $favoritesGalleryUri) { dest in
-            FollowListView(client: client, mode: .galleryFavorites(dest.galleryUri))
-        }
         .fullScreenCover(item: $cardStoryAuthor) { author in
             StoryViewer(
                 authors: [author],
                 client: client,
                 onProfileTap: { did in
                     cardStoryAuthor = nil
-                    selectedProfileDid = did
+                    router.push(.profile(did: did))
                 },
                 onDismiss: { cardStoryAuthor = nil }
             )
@@ -178,11 +163,11 @@ struct LocationFeedView: View {
                     onDismiss: { commentSheetUri = nil },
                     onProfileTap: { did in
                         commentSheetUri = nil
-                        selectedProfileDid = did
+                        router.push(.profile(did: did))
                     },
                     onHashtagTap: { tag in
                         commentSheetUri = nil
-                        selectedHashtag = tag
+                        router.push(.hashtag(tag))
                     },
                     onStoryTap: { author in
                         commentSheetUri = nil

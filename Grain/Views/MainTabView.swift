@@ -16,6 +16,14 @@ struct MainTabView: View {
     @Environment(GalleryUploadCenter.self) private var uploadCenter
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedTab: AppTab = .feed
+
+    /// One navigation path per tab, so each keeps its own history and a screen
+    /// that appears in several tabs — `ProfileView` is in its own tab and pushed
+    /// from three others — pushes onto whichever stack it is currently inside.
+    @State private var feedRouter = Router()
+    @State private var searchRouter = Router()
+    @State private var notificationsRouter = Router()
+    @State private var profileRouter = Router()
     @State private var commentPresenter = StoryCommentPresenter()
     @State private var client: XRPCClient?
     @State private var showCreate = false
@@ -57,20 +65,24 @@ struct MainTabView: View {
                     Tab("Feed", systemImage: "photo.on.rectangle", value: AppTab.feed) {
                         FeedView(client: client, pendingDeepLink: $pendingDeepLink, showCreate: $showCreate, showStoryCreate: $showStoryCreate)
                             .id(feedRefreshID)
+                            .environment(feedRouter)
                     }
 
                     Tab("Search", systemImage: "magnifyingglass", value: AppTab.search) {
                         SearchView(client: client)
+                            .environment(searchRouter)
                     }
 
                     Tab("Notifications", systemImage: "bell", value: AppTab.notifications) {
                         NotificationsView(client: client, viewModel: notificationsVM)
+                            .environment(notificationsRouter)
                     }
                     .badge(notificationsVM.unseenCount)
 
                     Tab(value: AppTab.profile) {
                         if let did = auth.userDID {
                             ProfileView(client: client, did: did, isRoot: true)
+                                .environment(profileRouter)
                         }
                     } label: {
                         if let img = avatarTabImage {

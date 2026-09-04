@@ -4,10 +4,7 @@ import SwiftUI
 struct GalleryDetailView: View {
     @Environment(AuthManager.self) private var auth
     @State private var viewModel: GalleryDetailViewModel
-    @State private var selectedProfileDid: String?
-    @State private var selectedHashtag: String?
-    @State private var selectedLocation: LocationDestination?
-    @State private var favoritesGalleryUri: FavoritesDestination?
+    @Environment(Router.self) private var router
     @State private var showDeleteConfirmation = false
     @State private var deleteErrorMessage: String?
     @State private var showReportSheet = false
@@ -44,16 +41,16 @@ struct GalleryDetailView: View {
                             showCommentSheet = true
                         },
                         onFavoritesTap: {
-                            favoritesGalleryUri = FavoritesDestination(galleryUri: galleryUri)
+                            router.push(.galleryFavorites(uri: galleryUri))
                         },
                         onProfileTap: { did in
-                            selectedProfileDid = did
+                            router.push(.profile(did: did))
                         },
                         onHashtagTap: { tag in
-                            selectedHashtag = tag
+                            router.push(.hashtag(tag))
                         },
                         onLocationTap: { h3, name in
-                            selectedLocation = LocationDestination(h3Index: h3, name: name)
+                            router.push(.location(h3Index: h3, name: name))
                         },
                         onStoryTap: { author in
                             cardStoryAuthor = author
@@ -90,18 +87,6 @@ struct GalleryDetailView: View {
         .environment(zoomState)
         .modifier(ImageZoomOverlay(zoomState: zoomState))
         .navigationBarTitleDisplayMode(.inline)
-        .navigationDestination(item: $selectedProfileDid) { did in
-            ProfileView(client: client, did: did)
-        }
-        .navigationDestination(item: $selectedHashtag) { tag in
-            HashtagFeedView(client: client, tag: tag)
-        }
-        .navigationDestination(item: $selectedLocation) { loc in
-            LocationFeedView(client: client, h3Index: loc.h3Index, locationName: loc.name)
-        }
-        .navigationDestination(item: $favoritesGalleryUri) { dest in
-            FollowListView(client: client, mode: .galleryFavorites(dest.galleryUri))
-        }
         .toolbarTitleDisplayMode(.inline)
         .alert("Delete gallery?", isPresented: $showDeleteConfirmation) {
             Button("Delete", role: .destructive) {
@@ -134,7 +119,7 @@ struct GalleryDetailView: View {
                 client: client,
                 onProfileTap: { did in
                     cardStoryAuthor = nil
-                    selectedProfileDid = did
+                    router.push(.profile(did: did))
                 },
                 onDismiss: { cardStoryAuthor = nil }
             )
@@ -147,11 +132,11 @@ struct GalleryDetailView: View {
                 onDismiss: { showCommentSheet = false },
                 onProfileTap: { did in
                     showCommentSheet = false
-                    selectedProfileDid = did
+                    router.push(.profile(did: did))
                 },
                 onHashtagTap: { tag in
                     showCommentSheet = false
-                    selectedHashtag = tag
+                    router.push(.hashtag(tag))
                 },
                 onStoryTap: { author in
                     showCommentSheet = false

@@ -12,7 +12,7 @@ struct FeedView: View {
     @State private var storyViewModel: StoryStripViewModel
     @State private var storyViewerDid: String?
     @Binding var showStoryCreate: Bool
-    @State private var router = Router()
+    @Environment(Router.self) private var router
     /// Set by the gallery detail screen when it deletes what it was showing.
     @State private var deletedGalleryUri: String?
     @State private var deepLinkStoryAuthor: GrainStoryAuthor?
@@ -39,6 +39,7 @@ struct FeedView: View {
     }
 
     var body: some View {
+        @Bindable var router = router
         let storySortVersion = storyViewModel.version
         NavigationStack(path: $router.path) {
             ForEach(prefsViewModel.pinnedFeeds) { feed in

@@ -26,7 +26,8 @@ extension View {
 
     /// Injects the standard Grain environment objects required by most previews.
     func previewEnvironments() -> some View {
-        environment(AuthManager())
+        environment(Router())
+            .environment(AuthManager())
             .environment(StoryStatusCache())
             .environment(ViewedStoryStorage())
             .environment(LabelDefinitionsCache())

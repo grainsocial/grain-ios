@@ -17,8 +17,7 @@ struct ProfileView: View {
     @State private var showAvatarOverlay = false
     @State private var viewModel: ProfileDetailViewModel
     @State private var selectedGallery: ProfileGallerySelection?
-    @State private var selectedProfileDid: String?
-    @State private var selectedHashtag: String?
+    @Environment(Router.self) private var router
     @State private var deletedGalleryUri: String?
     @State private var viewMode: ProfileViewMode = .grid
     @State private var tabPageWidth: CGFloat = 0
@@ -51,9 +50,10 @@ struct ProfileView: View {
     }
 
     var body: some View {
-        ZStack {
+        @Bindable var router = router
+        return ZStack {
             if isRoot {
-                NavigationStack {
+                NavigationStack(path: $router.path) {
                     profileContent
                 }
             } else {
@@ -219,8 +219,8 @@ extension ProfileView {
                                     RichTextView(
                                         text: description,
                                         font: .subheadline,
-                                        onMentionTap: { did in selectedProfileDid = did },
-                                        onHashtagTap: { tag in selectedHashtag = tag }
+                                        onMentionTap: { did in router.push(.profile(did: did)) },
+                                        onHashtagTap: { tag in router.push(.hashtag(tag)) }
                                     )
                                     .padding(.top, 2)
                                 }
@@ -396,6 +396,9 @@ extension ProfileView {
                     }
                 }
             }
+            .navigationDestination(for: Route.self) { route in
+                RouteDestination(route: route, client: client)
+            }
             .navigationDestination(item: $selectedGallery) { selection in
                 ProfileGalleryFeedView(
                     viewModel: viewModel,
@@ -410,12 +413,6 @@ extension ProfileView {
                 .id(selection.uri)
                 .navigationTransition(.zoom(sourceID: selection.uri, in: galleryZoomNS))
             }
-            .navigationDestination(item: $selectedProfileDid) { did in
-                ProfileView(client: client, did: did)
-            }
-            .navigationDestination(item: $selectedHashtag) { tag in
-                HashtagFeedView(client: client, tag: tag)
-            }
             .fullScreenCover(isPresented: $showStoryViewer) {
                 if let profile = viewModel.profile {
                     StoryViewer(
@@ -427,7 +424,7 @@ extension ProfileView {
                         client: client,
                         onProfileTap: { did in
                             showStoryViewer = false
-                            selectedProfileDid = did
+                            router.push(.profile(did: did))
                         },
                         onDismiss: { showStoryViewer = false }
                     )
@@ -440,7 +437,7 @@ extension ProfileView {
                     client: client,
                     onProfileTap: { did in
                         cardStoryAuthor = nil
-                        selectedProfileDid = did
+                        router.push(.profile(did: did))
                     },
                     onDismiss: { cardStoryAuthor = nil }
                 )
@@ -460,7 +457,7 @@ extension ProfileView {
                         client: client,
                         onProfileTap: { did in
                             selectedArchivedStory = nil
-                            selectedProfileDid = did
+                            router.push(.profile(did: did))
                         },
                         onDismiss: { selectedArchivedStory = nil }
                     )

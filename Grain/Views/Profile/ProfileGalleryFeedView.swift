@@ -42,10 +42,7 @@ struct ProfileGalleryFeedView: View {
     let source: ProfileGalleryFeedSource
 
     @State private var didScroll = false
-    @State private var selectedProfileDid: String?
-    @State private var selectedHashtag: String?
-    @State private var selectedLocation: LocationDestination?
-    @State private var favoritesGalleryUri: FavoritesDestination?
+    @Environment(Router.self) private var router
     @State private var zoomState = ImageZoomState()
     @State private var cardStoryAuthor: GrainStoryAuthor?
     @State private var commentSheetUri: String?
@@ -135,25 +132,13 @@ struct ProfileGalleryFeedView: View {
             .environment(zoomState)
             .modifier(ImageZoomOverlay(zoomState: zoomState))
             .navigationBarTitleDisplayMode(.inline)
-            .navigationDestination(item: $selectedProfileDid) { did in
-                ProfileView(client: client, did: did)
-            }
-            .navigationDestination(item: $selectedHashtag) { tag in
-                HashtagFeedView(client: client, tag: tag)
-            }
-            .navigationDestination(item: $selectedLocation) { loc in
-                LocationFeedView(client: client, h3Index: loc.h3Index, locationName: loc.name)
-            }
-            .navigationDestination(item: $favoritesGalleryUri) { dest in
-                FollowListView(client: client, mode: .galleryFavorites(dest.galleryUri))
-            }
             .fullScreenCover(item: $cardStoryAuthor) { author in
                 StoryViewer(
                     authors: [author],
                     client: client,
                     onProfileTap: { did in
                         cardStoryAuthor = nil
-                        selectedProfileDid = did
+                        router.push(.profile(did: did))
                     },
                     onDismiss: { cardStoryAuthor = nil }
                 )
@@ -174,11 +159,11 @@ struct ProfileGalleryFeedView: View {
                         onDismiss: { commentSheetUri = nil },
                         onProfileTap: { did in
                             commentSheetUri = nil
-                            selectedProfileDid = did
+                            router.push(.profile(did: did))
                         },
                         onHashtagTap: { tag in
                             commentSheetUri = nil
-                            selectedHashtag = tag
+                            router.push(.hashtag(tag))
                         },
                         onStoryTap: { author in
                             commentSheetUri = nil
@@ -234,10 +219,10 @@ struct ProfileGalleryFeedView: View {
             gallery: gallery, client: client,
             onNavigate: {},
             onCommentTap: { commentSheetUri = item.uri },
-            onFavoritesTap: { favoritesGalleryUri = FavoritesDestination(galleryUri: item.uri) },
-            onProfileTap: { did in selectedProfileDid = did },
-            onHashtagTap: { tag in selectedHashtag = tag },
-            onLocationTap: { h3, name in selectedLocation = LocationDestination(h3Index: h3, name: name) },
+            onFavoritesTap: { router.push(.galleryFavorites(uri: item.uri)) },
+            onProfileTap: { did in router.push(.profile(did: did)) },
+            onHashtagTap: { tag in router.push(.hashtag(tag)) },
+            onLocationTap: { h3, name in router.push(.location(h3Index: h3, name: name)) },
             onStoryTap: { author in cardStoryAuthor = author },
             onReport: !isOwner ? { reportGallery = item } : nil,
             onDelete: isOwner ? { showDeleteConfirmation = true; deleteGalleryUri = item.uri } : nil
