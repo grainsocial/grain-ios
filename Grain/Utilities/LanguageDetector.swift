@@ -20,24 +20,36 @@ actor LanguageDetector {
     /// a rebuild is cheap now that it's off the main thread.
     private static let cacheLimit = 500
 
+    /// Fewer letters than this and the recogniser is guessing. It will still
+    /// name a language confidently for a caption that is only "#35mm" or an
+    /// emoji, which is how an offer to translate ends up under a caption that
+    /// has no prose in it at all.
+    private static let minimumLetters = 8
+
     func isForeign(_ text: String) -> Bool {
         if let cached = cache[text] {
             return cached
         }
 
-        let recognizer = NLLanguageRecognizer()
-        recognizer.processString(text)
-
-        var result = false
-        if let detected = recognizer.dominantLanguage?.rawValue {
-            let preferred = Locale.preferredLanguages.first ?? "en"
-            result = !preferred.hasPrefix(detected)
-        }
+        let result = detect(text)
 
         if cache.count >= Self.cacheLimit {
             cache.removeAll(keepingCapacity: true)
         }
         cache[text] = result
         return result
+    }
+
+    private func detect(_ text: String) -> Bool {
+        guard text.unicodeScalars.count(where: { CharacterSet.letters.contains($0) }) >= Self.minimumLetters else {
+            return false
+        }
+
+        let recognizer = NLLanguageRecognizer()
+        recognizer.processString(text)
+
+        guard let detected = recognizer.dominantLanguage?.rawValue else { return false }
+        let preferred = Locale.preferredLanguages.first ?? "en"
+        return !preferred.hasPrefix(detected)
     }
 }
