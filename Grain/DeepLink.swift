@@ -35,3 +35,21 @@ enum DeepLink: Equatable {
         return nil
     }
 }
+
+extension DeepLink {
+    /// The push this link corresponds to, if it is one.
+    ///
+    /// Stories return `nil`: they present as a full-screen cover rather than
+    /// joining the navigation stack, so the screen handling the link presents
+    /// them itself.
+    var route: Route? {
+        switch self {
+        case let .profile(did):
+            .profile(did: did)
+        case let .gallery(did, rkey):
+            .gallery(uri: "at://\(did)/social.grain.gallery/\(rkey)")
+        case .story:
+            nil
+        }
+    }
+}
