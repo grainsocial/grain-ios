@@ -246,7 +246,7 @@ struct EditProfileView: View {
         isSaving = false
     }
 
-    private func blobRefToAnyCodable(_ blob: BlobRef) -> AnyCodable {
+    func blobRefToAnyCodable(_ blob: BlobRef) -> AnyCodable {
         var dict: [String: AnyCodable] = [
             "$type": AnyCodable("blob"),
         ]
@@ -262,12 +262,24 @@ struct EditProfileView: View {
         return AnyCodable(dict)
     }
 
-    private func resizeImage(_ image: UIImage, maxSize: CGFloat, maxBytes: Int) -> Data {
-        let size = image.size
-        let scale = min(maxSize / size.width, maxSize / size.height, 1.0)
-        let newSize = CGSize(width: size.width * scale, height: size.height * scale)
+    /// Shrink `image` to fit `maxSize` on its long edge and compress it under
+    /// `maxBytes`.
+    ///
+    /// Both measurements are in pixels. `UIImage.size` is in points, and a
+    /// renderer left on its default scale draws at the screen's — so on a 3x
+    /// phone this used to hand back a 3000px JPEG for a `maxSize` of 1000, then
+    /// spend the whole byte budget compressing those extra pixels. The avatar
+    /// came out both larger and blurrier than asked for.
+    /// `ImageProcessing.resizeImage` works in pixels for the same reason.
+    func resizeImage(_ image: UIImage, maxSize: CGFloat, maxBytes: Int) -> Data {
+        let pixelWidth = image.size.width * image.scale
+        let pixelHeight = image.size.height * image.scale
+        let scale = min(maxSize / pixelWidth, maxSize / pixelHeight, 1.0)
+        let newSize = CGSize(width: round(pixelWidth * scale), height: round(pixelHeight * scale))
 
-        let renderer = UIGraphicsImageRenderer(size: newSize)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let renderer = UIGraphicsImageRenderer(size: newSize, format: format)
         let rendered = renderer.image { _ in
             image.draw(in: CGRect(origin: .zero, size: newSize))
         }
