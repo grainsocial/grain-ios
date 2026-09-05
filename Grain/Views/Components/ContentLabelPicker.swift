@@ -3,6 +3,9 @@ import SwiftUI
 struct ContentLabelPicker: View {
     @Environment(LabelDefinitionsCache.self) private var labelDefs
     @Binding var selectedLabels: Set<String>
+    /// Start with the label rows showing rather than folded behind the
+    /// disclosure. Used where the picker is the whole screen.
+    var initiallyExpanded = false
 
     private static let selfLabelValues = ["nudity", "sexual", "gore"]
 
@@ -42,6 +45,11 @@ struct ContentLabelPicker: View {
             } label: {
                 Text("Content warning")
                     .foregroundStyle(.primary)
+            }
+        }
+        .onAppear {
+            if initiallyExpanded {
+                isExpanded = true
             }
         }
         .onChange(of: selectedLabels) {

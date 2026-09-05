@@ -121,7 +121,7 @@ struct FeedView: View {
                     )
                 }
             }
-            .sheet(isPresented: $showStoryCreate) {
+            .fullScreenCover(isPresented: $showStoryCreate) {
                 StoryCreateView(client: client) {
                     Task { await storyViewModel.load(auth: auth.authContext(), storyStatusCache: storyStatusCache, viewedStories: viewedStories) }
                 }

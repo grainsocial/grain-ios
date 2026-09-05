@@ -1,17 +1,19 @@
-import AVFoundation
 import PhotosUI
 import SwiftUI
 
+/// Camera-first story composer. Opens on a live viewfinder with a shutter
+/// button; once a photo is taken (or picked from the library) it swaps to a
+/// review stage where location, content labels, and cross-posting are set
+/// from chips over the photo.
 struct StoryCreateView: View {
     @Environment(AuthManager.self) private var auth
     @Environment(\.dismiss) private var dismiss
     let client: XRPCClient
     var onCreated: (() -> Void)?
 
+    @State private var camera: StoryCamera
     @State private var selectedPhoto: PhotosPickerItem?
-    @State private var photoData: Data?
     @State private var previewImage: UIImage?
-    @State private var showCamera = false
     @State private var resolvedLocation: (h3: String, name: String, address: [String: AnyCodable]?)?
     @State private var photoLocationResult: NominatimResult?
     @State private var includeLocation = true
@@ -19,103 +21,105 @@ struct StoryCreateView: View {
     @State private var errorMessage: String?
     @State private var postToBluesky = false
     @State private var selectedLabels: Set<String> = []
+    @State private var showLocationSheet = false
+    @State private var showLabelSheet = false
+
+    /// `camera` defaults to the real one. A test hands in one whose permission
+    /// answer it controls, since the simulator can't reach the ready state.
+    init(client: XRPCClient, camera: StoryCamera = StoryCamera(), onCreated: (() -> Void)? = nil) {
+        self.client = client
+        self.onCreated = onCreated
+        _camera = State(initialValue: camera)
+    }
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section("Photo") {
-                    if let previewImage {
-                        Image(uiImage: previewImage)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(maxHeight: 300)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                    }
+        ZStack {
+            Color.black.ignoresSafeArea()
 
-                    PhotosPicker(selection: $selectedPhoto, matching: .images) {
-                        Label("Choose from library", systemImage: "photo.on.rectangle")
-                    }
+            // The capture stage stays mounted underneath the review stage.
+            // Tearing down the viewfinder and re-attaching its preview layer
+            // to the running session stalls the main thread for a beat, which
+            // made retake feel sluggish.
+            StoryCaptureStage(
+                camera: camera,
+                selectedPhoto: $selectedPhoto,
+                errorMessage: previewImage == nil ? errorMessage : nil,
+                onCapture: handleCameraImage,
+                onCaptureFailed: { errorMessage = "Couldn't take the photo. Try again." },
+                onCancel: { dismiss() }
+            )
+            .accessibilityHidden(previewImage != nil)
 
-                    Button {
-                        showCamera = true
-                    } label: {
-                        Label("Take photo", systemImage: "camera")
-                    }
-                }
-
-                Section("Location") {
-                    LocationPickerRows(
-                        resolvedLocation: $resolvedLocation,
-                        photoLocationResult: photoLocationResult,
-                        onSelectLocation: selectLocation
-                    )
-                }
-
-                ContentLabelPicker(selectedLabels: $selectedLabels)
-
-                Section {
-                    Toggle("Post to Bluesky", isOn: $postToBluesky)
-                } footer: {
-                    Text("Includes location and photo.")
-                }
-
-                if let errorMessage {
-                    Section {
-                        Text(errorMessage)
-                            .foregroundStyle(.red)
-                            .font(.caption)
-                    }
-                }
-            }
-            .task {
-                if let authContext = await auth.authContext(),
-                   let prefs = try? await client.getPreferences(auth: authContext).preferences,
-                   let location = prefs.includeLocation
-                {
-                    includeLocation = location
-                }
-            }
-            .onChange(of: selectedPhoto) {
-                Task { await loadPhoto() }
-            }
-            .fullScreenCover(isPresented: $showCamera) {
-                CameraPicker { image, _ in
-                    handleCameraImage(image)
-                }
-                .ignoresSafeArea()
-            }
-            .navigationTitle("New story")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        Task { await createStory() }
-                    } label: {
-                        if isUploading {
-                            ProgressView()
-                        } else {
-                            Text("Post")
-                                .bold()
-                        }
-                    }
-                    .disabled(previewImage == nil || isUploading)
-                }
+            if let previewImage {
+                StoryReviewStage(
+                    image: previewImage,
+                    locationName: resolvedLocation?.name,
+                    labelSummary: labelSummary,
+                    postToBluesky: $postToBluesky,
+                    errorMessage: errorMessage,
+                    isUploading: isUploading,
+                    onRetake: discardPhoto,
+                    onEditLocation: { showLocationSheet = true },
+                    onClearLocation: { resolvedLocation = nil },
+                    onEditLabels: { showLabelSheet = true },
+                    onClearLabels: { selectedLabels = [] },
+                    onPost: { Task { await createStory() } }
+                )
+                .background(Color.black.ignoresSafeArea())
+                .transition(.opacity)
             }
         }
+        .animation(.easeInOut(duration: 0.2), value: previewImage == nil)
+        .preferredColorScheme(.dark)
+        .task {
+            if let authContext = await auth.authContext(),
+               let prefs = try? await client.getPreferences(auth: authContext).preferences,
+               let location = prefs.includeLocation
+            {
+                includeLocation = location
+            }
+        }
+        .task {
+            guard !isPreview else { return }
+            await camera.start()
+        }
+        .onDisappear { camera.stop() }
+        .onChange(of: selectedPhoto) {
+            Task { await loadPhoto() }
+        }
+        .sheet(isPresented: $showLocationSheet) {
+            StoryLocationSheet(
+                resolvedLocation: $resolvedLocation,
+                photoLocationResult: photoLocationResult,
+                onSelectLocation: selectLocation
+            )
+        }
+        .sheet(isPresented: $showLabelSheet) {
+            StoryContentLabelSheet(selectedLabels: $selectedLabels)
+        }
+    }
+
+    private var labelSummary: String? {
+        guard !selectedLabels.isEmpty else { return nil }
+        return selectedLabels.sorted().map(\.capitalized).joined(separator: ", ")
     }
 
     // MARK: - Camera
 
     private func handleCameraImage(_ image: UIImage) {
         previewImage = image
-        if let data = image.jpegData(compressionQuality: 1.0) {
-            photoData = data
-        }
         selectedPhoto = nil
         resolvedLocation = nil
         photoLocationResult = nil
+        errorMessage = nil
+    }
+
+    private func discardPhoto() {
+        previewImage = nil
+        selectedPhoto = nil
+        resolvedLocation = nil
+        photoLocationResult = nil
+        errorMessage = nil
     }
 
     // MARK: - Photo Loading
@@ -124,13 +128,9 @@ struct StoryCreateView: View {
         guard let item = selectedPhoto,
               let data = try? await item.loadTransferable(type: Data.self),
               let image = UIImage(data: data)
-        else {
-            photoData = nil
-            previewImage = nil
-            return
-        }
-        photoData = data
+        else { return }
         previewImage = image
+        errorMessage = nil
 
         resolvedLocation = nil
         photoLocationResult = nil
@@ -147,89 +147,25 @@ struct StoryCreateView: View {
     // MARK: - Create
 
     private func createStory() async {
-        guard let authContext = await auth.authContext(),
-              let repo = auth.userDID,
-              let previewImage else { return }
+        guard let previewImage else { return }
 
         isUploading = true
         errorMessage = nil
+        defer { isUploading = false }
 
-        do {
-            let (resized, size) = ImageProcessing.resizeImage(previewImage, maxDimension: 2000, maxBytes: 900_000)
-            let response = try await client.uploadBlob(data: resized, mimeType: "image/jpeg", auth: authContext)
-
-            let blobDict: [String: AnyCodable] = [
-                "$type": AnyCodable(response.blob.type ?? "blob"),
-                "ref": AnyCodable(["$link": AnyCodable(response.blob.ref?.link ?? "")] as [String: AnyCodable]),
-                "mimeType": AnyCodable(response.blob.mimeType ?? "image/jpeg"),
-                "size": AnyCodable(response.blob.size ?? 0),
-            ]
-
-            var record: [String: AnyCodable] = [
-                "media": AnyCodable(blobDict),
-                "aspectRatio": AnyCodable([
-                    "width": AnyCodable(Int(size.width)),
-                    "height": AnyCodable(Int(size.height)),
-                ] as [String: AnyCodable]),
-                "createdAt": AnyCodable(DateFormatting.nowISO()),
-            ]
-
-            if let loc = resolvedLocation {
-                record["location"] = AnyCodable([
-                    "value": AnyCodable(loc.h3),
-                    "name": AnyCodable(loc.name),
-                ] as [String: AnyCodable])
-                if let addr = loc.address {
-                    record["address"] = AnyCodable(addr)
-                }
-            }
-            if !selectedLabels.isEmpty {
-                let labelValues = selectedLabels.map { ["val": AnyCodable($0)] as [String: AnyCodable] }
-                record["labels"] = AnyCodable([
-                    "$type": AnyCodable("com.atproto.label.defs#selfLabels"),
-                    "values": AnyCodable(labelValues as [[String: AnyCodable]]),
-                ] as [String: AnyCodable])
-            }
-
-            let storyResult = try await client.createRecord(
-                collection: "social.grain.story",
-                repo: repo,
-                record: AnyCodable(record),
-                auth: authContext
-            )
-
-            // Cross-post to Bluesky if toggled
-            if postToBluesky, let storyUri = storyResult.uri {
-                let rkey = storyUri.split(separator: "/").last.map(String.init) ?? ""
-                let postURL = "https://grain.social/profile/\(repo)/story/\(rkey)"
-                do {
-                    let location: (name: String, address: [String: AnyCodable]?)? = resolvedLocation.map { ($0.name, $0.address) }
-                    try await BlueskyPost.create(
-                        options: BlueskyPostOptions(
-                            url: postURL,
-                            title: nil,
-                            location: location,
-                            description: nil,
-                            images: [(blob: response.blob, alt: "", width: Int(size.width), height: Int(size.height))]
-                        ),
-                        client: client,
-                        repo: repo,
-                        auth: authContext
-                    )
-                } catch {
-                    // Don't fail the story creation if cross-post fails
-                }
-            }
-
+        let draft = StoryDraft(
+            image: previewImage,
+            location: resolvedLocation.map { StoryDraft.Location(h3: $0.h3, name: $0.name, address: $0.address) },
+            labels: selectedLabels,
+            postToBluesky: postToBluesky
+        )
+        switch await StoryService.publish(draft, client: client, auth: auth) {
+        case .success:
             onCreated?()
             dismiss()
-        } catch let XRPCError.httpError(statusCode, body) {
-            let bodyStr = body.flatMap { String(data: $0, encoding: .utf8) } ?? "no body"
-            errorMessage = "HTTP \(statusCode): \(bodyStr)"
-        } catch {
-            errorMessage = error.localizedDescription
+        case let .failure(error):
+            errorMessage = StoryService.message(for: error)
         }
-        isUploading = false
     }
 
     // MARK: - Location
@@ -240,9 +176,8 @@ struct StoryCreateView: View {
     }
 }
 
-#Preview {
+#Preview("Capture") {
     StoryCreateView(client: .preview)
         .previewEnvironments()
-        .preferredColorScheme(.dark)
-        .tint(Color.accentColor)
+        .grainPreview()
 }
