@@ -130,6 +130,11 @@ struct MainTabView: View {
             let newClient = auth.makeClient()
             client = newClient
             notificationsVM.updateClient(newClient)
+            viewedStories.uploader = { [auth] uris in
+                guard let ctx = await auth.authContext() else { throw XRPCError.unauthorized }
+                try await newClient.markStoriesViewed(uris: uris, auth: ctx)
+            }
+            await viewedStories.flushPending()
 
             // Changing this ID remounts FeedView wholesale, which would take
             // the create sheet — and whatever gallery is half-composed inside
@@ -193,6 +198,8 @@ struct MainTabView: View {
                 Task {
                     try? await auth.refreshIfNeeded()
                     await notificationsVM.fetchUnseenCount(auth: auth.authContext())
+                    // Anything watched while offline goes up now.
+                    await viewedStories.flushPending()
                     if let client {
                         await labelDefsCache.loadIfNeeded(client: client, auth: auth.authContext())
                         // Coming back to the app is the most likely moment for

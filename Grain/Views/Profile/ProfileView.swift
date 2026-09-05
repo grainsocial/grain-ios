@@ -488,6 +488,11 @@ extension ProfileView {
                     await viewModel.loadStoryArchive(did: actor, auth: auth.authContext())
                 }
             }
+            // The profile's live stories carry the server's viewed flags, which
+            // is how the ring here knows about a story watched on the web.
+            .onChange(of: viewModel.stories.map(\.uri), initial: true) {
+                viewedStories.absorb(stories: viewModel.stories)
+            }
             .task {
                 guard !isPreview else {
                     #if DEBUG

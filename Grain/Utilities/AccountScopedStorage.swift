@@ -25,6 +25,7 @@ enum AccountScopedStorage {
     private static let scopedDefaultsKeys = [
         "viewedStoryUris",
         "viewedStoryAuthors",
+        "viewedStoryPending",
         "recentSearchProfiles",
         "recentSearchText",
     ]

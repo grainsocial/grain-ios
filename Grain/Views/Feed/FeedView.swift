@@ -56,7 +56,7 @@ struct FeedView: View {
                         },
                         onStoryCreateTap: { showStoryCreate = true },
                         onRefresh: { [storyStatusCache] in
-                            await storyViewModel.load(auth: auth.authContext(), storyStatusCache: storyStatusCache)
+                            await storyViewModel.load(auth: auth.authContext(), storyStatusCache: storyStatusCache, viewedStories: viewedStories)
                         },
                         prefsViewModel: prefsViewModel,
                         deletedGalleryUri: $deletedGalleryUri
@@ -85,7 +85,7 @@ struct FeedView: View {
                 await prefsViewModel.loadIfNeeded(auth: auth.authContext())
                 launchSignposter.endInterval("FeedPrefsLoad", prefsState)
                 launchSignposter.emitEvent("FeedPrefsReady")
-                await storyViewModel.load(auth: auth.authContext(), storyStatusCache: storyStatusCache)
+                await storyViewModel.load(auth: auth.authContext(), storyStatusCache: storyStatusCache, viewedStories: viewedStories)
             }
             .onAppear {
                 Task { await prefsViewModel.refresh(auth: auth.authContext()) }
@@ -93,7 +93,7 @@ struct FeedView: View {
             .onChange(of: storyViewerDid) {
                 if storyViewerDid == nil {
                     storyViewModel.invalidate()
-                    Task { await storyViewModel.load(auth: auth.authContext(), storyStatusCache: storyStatusCache) }
+                    Task { await storyViewModel.load(auth: auth.authContext(), storyStatusCache: storyStatusCache, viewedStories: viewedStories) }
                 }
             }
             .fullScreenCover(isPresented: Binding(
@@ -123,7 +123,7 @@ struct FeedView: View {
             }
             .sheet(isPresented: $showStoryCreate) {
                 StoryCreateView(client: client) {
-                    Task { await storyViewModel.load(auth: auth.authContext(), storyStatusCache: storyStatusCache) }
+                    Task { await storyViewModel.load(auth: auth.authContext(), storyStatusCache: storyStatusCache, viewedStories: viewedStories) }
                 }
             }
             .navigationDestination(for: Route.self) { route in

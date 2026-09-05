@@ -14,12 +14,18 @@ final class StoryStripViewModel {
         self.client = client
     }
 
-    func load(auth: AuthContext? = nil, storyStatusCache: StoryStatusCache? = nil) async {
+    func load(
+        auth: AuthContext? = nil,
+        storyStatusCache: StoryStatusCache? = nil,
+        viewedStories: ViewedStoryStorage? = nil
+    ) async {
         isLoading = true
         do {
             let response = try await client.getStoryAuthors(auth: auth)
             authors = response.authors.filter { $0.storyCount > 0 }
             storyStatusCache?.update(from: response.authors)
+            // What was watched on another device arrives with the list.
+            viewedStories?.absorb(authors: response.authors)
         } catch {
             // Silently fail — strip just won't show
         }

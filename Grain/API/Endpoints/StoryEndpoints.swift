@@ -17,6 +17,10 @@ struct GetStoryAuthorsResponse: Codable, Sendable {
     let authors: [GrainStoryAuthor]
 }
 
+struct MarkStoriesViewedInput: Codable, Sendable {
+    let stories: [String]
+}
+
 extension XRPCClient {
     func getStories(actor: String, auth: AuthContext? = nil) async throws -> GetStoriesResponse {
         try await query("social.grain.unspecced.getStories", params: ["actor": actor], auth: auth, as: GetStoriesResponse.self)
@@ -36,5 +40,11 @@ extension XRPCClient {
 
     func getStoryAuthors(auth: AuthContext? = nil) async throws -> GetStoryAuthorsResponse {
         try await query("social.grain.unspecced.getStoryAuthors", auth: auth, as: GetStoryAuthorsResponse.self)
+    }
+
+    /// Tell the appview these stories were watched, so the web and Android
+    /// see them as watched too. At most 100 per call.
+    func markStoriesViewed(uris: [String], auth: AuthContext) async throws {
+        try await procedure("social.grain.unspecced.markStoriesViewed", input: MarkStoriesViewedInput(stories: uris), auth: auth)
     }
 }

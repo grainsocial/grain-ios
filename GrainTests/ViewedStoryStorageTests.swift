@@ -122,6 +122,110 @@ final class ViewedStoryStorageTests: GrainTestCase {
         XCTAssertEqual(storage.firstUnviewedIndex(in: stories), 0)
     }
 
+    // MARK: - Server state
+
+    private func author(_ did: String, latestAt: String, lastViewedAt: String? = nil) -> GrainStoryAuthor {
+        GrainStoryAuthor(
+            profile: GrainProfile(cid: "", did: did, handle: "\(did).test"),
+            storyCount: 1,
+            latestAt: latestAt,
+            lastViewedAt: lastViewedAt
+        )
+    }
+
+    private func story(_ uri: String, by did: String, createdAt: String, viewed: Bool?) -> GrainStory {
+        GrainStory(
+            uri: uri,
+            cid: "cid",
+            creator: GrainProfile(cid: "", did: did, handle: "\(did).test"),
+            thumb: "",
+            fullsize: "",
+            aspectRatio: AspectRatio(width: 9, height: 16),
+            createdAt: createdAt,
+            viewer: viewed.map { StoryViewerState(fav: nil, viewed: $0) }
+        )
+    }
+
+    func testAbsorbingAuthorsMovesTheMarkForward() {
+        storage.absorb(authors: [author("did:plc:alice", latestAt: "2024-06-15T14:00:00.000Z", lastViewedAt: "2024-06-15T14:00:00.000Z")])
+        XCTAssertTrue(storage.hasViewedAll(authorDid: "did:plc:alice", latestAt: "2024-06-15T14:00:00.000Z"))
+    }
+
+    func testAbsorbingAuthorsNeverMovesTheMarkBack() {
+        storage.markViewed(uri: "at://story/2", authorDid: "did:plc:alice", createdAt: "2024-06-15T14:00:00.000Z")
+        storage.absorb(authors: [author("did:plc:alice", latestAt: "2024-06-15T14:00:00.000Z", lastViewedAt: "2024-06-15T12:00:00.000Z")])
+        XCTAssertTrue(storage.hasViewedAll(authorDid: "did:plc:alice", latestAt: "2024-06-15T14:00:00.000Z"))
+    }
+
+    func testAbsorbingAuthorsWithoutAMarkChangesNothing() {
+        storage.absorb(authors: [author("did:plc:alice", latestAt: "2024-06-15T14:00:00.000Z")])
+        XCTAssertFalse(storage.hasViewedAll(authorDid: "did:plc:alice", latestAt: "2024-06-15T14:00:00.000Z"))
+        XCTAssertEqual(storage.pendingUploadCount, 0)
+    }
+
+    func testAbsorbingStoriesMarksTheFlaggedOnes() {
+        storage.absorb(stories: [
+            story("at://story/1", by: "did:plc:alice", createdAt: "2024-06-15T12:00:00.000Z", viewed: true),
+            story("at://story/2", by: "did:plc:alice", createdAt: "2024-06-15T13:00:00.000Z", viewed: nil),
+        ])
+        XCTAssertTrue(storage.isViewed(uri: "at://story/1"))
+        XCTAssertFalse(storage.isViewed(uri: "at://story/2"))
+        XCTAssertEqual(storage.firstUnviewedIndex(in: makeStories(["at://story/1", "at://story/2"])), 1)
+        XCTAssertFalse(storage.hasViewedAll(authorDid: "did:plc:alice", latestAt: "2024-06-15T13:00:00.000Z"))
+        // Nothing the server told us about goes back up to it.
+        XCTAssertEqual(storage.pendingUploadCount, 0)
+    }
+
+    // MARK: - Reporting to the appview
+
+    func testWatchedStoriesAreReportedInOneBatch() async {
+        var sent: [[String]] = []
+        storage.uploader = { uris in sent.append(uris.sorted()) }
+        storage.markViewed(uri: "at://story/1", authorDid: "did:plc:alice", createdAt: "2024-06-15T12:00:00.000Z")
+        storage.markViewed(uri: "at://story/2", authorDid: "did:plc:alice", createdAt: "2024-06-15T13:00:00.000Z")
+        XCTAssertEqual(storage.pendingUploadCount, 2)
+
+        await storage.flushPending()
+
+        XCTAssertEqual(sent, [["at://story/1", "at://story/2"]])
+        XCTAssertEqual(storage.pendingUploadCount, 0)
+    }
+
+    func testAFailedReportStaysQueued() async {
+        struct Offline: Error {}
+        storage.uploader = { _ in throw Offline() }
+        storage.markViewed(uri: "at://story/1", authorDid: "did:plc:alice", createdAt: "2024-06-15T12:00:00.000Z")
+
+        await storage.flushPending()
+
+        XCTAssertEqual(storage.pendingUploadCount, 1)
+        XCTAssertTrue(storage.isViewed(uri: "at://story/1"), "Locally it is still watched")
+
+        var sent: [String] = []
+        storage.uploader = { uris in sent = uris }
+        await storage.flushPending()
+        XCTAssertEqual(sent, ["at://story/1"])
+        XCTAssertEqual(storage.pendingUploadCount, 0)
+    }
+
+    func testTheQueueSurvivesARelaunch() {
+        storage.markViewed(uri: "at://story/1", authorDid: "did:plc:alice", createdAt: "2024-06-15T12:00:00.000Z")
+        storage.cleanup() // saves synchronously
+        let relaunched = ViewedStoryStorage(did: testDID)
+        XCTAssertEqual(relaunched.pendingUploadCount, 1)
+    }
+
+    func testReportsGoUpInServerSizedBatches() async {
+        var batches: [Int] = []
+        storage.uploader = { uris in batches.append(uris.count) }
+        for i in 0 ..< 150 {
+            storage.markViewed(uri: "at://story/\(i)", authorDid: "did:plc:alice", createdAt: "2024-06-15T12:00:00.000Z")
+        }
+        await storage.flushPending()
+        XCTAssertEqual(batches, [100, 50])
+        XCTAssertEqual(storage.pendingUploadCount, 0)
+    }
+
     // MARK: - cleanup
 
     func testCleanupRemovesOldAuthorEntries() {

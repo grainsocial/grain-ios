@@ -948,6 +948,9 @@ extension StoryViewer {
     private func presentStories(_ fetched: [GrainStory], resumeIndex: Int? = nil) {
         svLogger.info("[presentStories] enter count=\(fetched.count) resumeIndex=\(resumeIndex ?? -1)")
         svSignposter.emitEvent("presentStories.enter", "count=\(fetched.count)")
+        // The server knows what was watched elsewhere; fold that in before
+        // deciding which story to open on.
+        viewedStories.absorb(stories: fetched)
         let targetIndex: Int
         if let resume = resumeIndex {
             targetIndex = min(resume, max(fetched.count - 1, 0))
