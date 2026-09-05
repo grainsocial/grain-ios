@@ -20,14 +20,10 @@ struct ProfileView: View {
     @Environment(Router.self) private var router
     @State private var deletedGalleryUri: String?
     @State private var viewMode: ProfileViewMode = .grid
-    @State private var tabPageWidth: CGFloat = 0
-    @State private var tabScrollOffsetX: CGFloat = 0
-    @State private var tabHeights: [ProfileViewMode: CGFloat] = [:]
-    /// Whether the tab bar has scrolled up past the top of the viewport. A
-    /// Bool rather than the live offset: the offset changes every scroll frame
-    /// and each change re-evaluated this entire body, which is what made
-    /// scrolling the grid stutter. This only flips when the edge is crossed.
-    @State private var tabSectionScrolledPastTop = false
+    /// Everything a swipe between tabs writes per frame lives here, not in
+    /// this view's `@State`, so a swipe never re-evaluates this body.
+    @State private var pager = ProfilePagerState()
+    @Environment(\.displayScale) private var displayScale
     @State private var zoomState = ImageZoomState()
     @State private var cardStoryAuthor: GrainStoryAuthor?
     let client: XRPCClient
@@ -300,10 +296,13 @@ extension ProfileView {
                             if did == auth.userDID {
                                 ownProfileTabSection
                                     .id("profileTabSection")
+                                    // A Bool rather than the live offset: it
+                                    // only flips when the edge is crossed, so
+                                    // scrolling doesn't touch state per frame.
                                     .onGeometryChange(for: Bool.self) { proxy in
                                         proxy.frame(in: .scrollView).minY < 0
                                     } action: { newValue in
-                                        tabSectionScrolledPastTop = newValue
+                                        pager.scrolledPastTop = newValue
                                     }
                             } else {
                                 galleriesGrid
@@ -334,6 +333,9 @@ extension ProfileView {
                     }
                 }
             }
+            // The grids find the viewport through this name; they sit inside
+            // the horizontal pager, so `.scrollView` would give them that one.
+            .coordinateSpace(.named("profileScroll"))
             .environment(zoomState)
             .modifier(ImageZoomOverlay(zoomState: zoomState))
             .navigationTitle("")
@@ -536,9 +538,15 @@ extension ProfileView {
             }
             .animation(.spring(response: 0.4, dampingFraction: 0.7), value: showCopiedToast)
             .sensoryFeedback(.impact(weight: .medium), trigger: showCopiedToast)
-            .coordinateSpace(.named("profileScroll"))
-            .onChange(of: viewMode) { _, _ in
-                if tabSectionScrolledPastTop {
+            // Whether by tap or by swipe: fetch what the tab shows, and if
+            // the tab bar has gone off the top, bring it back into view.
+            .onChange(of: viewMode) { _, mode in
+                if mode == .stories {
+                    Task { await viewModel.loadStoryArchive(did: did, auth: auth.authContext()) }
+                } else if mode == .favorites {
+                    Task { await viewModel.loadFavorites(did: did, auth: auth.authContext()) }
+                }
+                if pager.scrolledPastTop {
                     withAnimation(.smooth(duration: 0.35)) {
                         scrollProxy.scrollTo("profileTabSection", anchor: .top)
                     }
@@ -597,114 +605,39 @@ extension ProfileView {
         .padding(.horizontal)
     }
 
-    private func tabButton(icon: String, mode: ProfileViewMode) -> some View {
-        let modes: [ProfileViewMode] = [.grid, .favorites, .stories]
-        let activeIdx: Int = {
-            if tabPageWidth > 0 {
-                let raw = Int((tabScrollOffsetX / tabPageWidth).rounded())
-                return max(0, min(modes.count - 1, raw))
-            }
-            return modes.firstIndex(of: viewMode) ?? 0
-        }()
-        let isActive = modes.firstIndex(of: mode) == activeIdx
-        let symbolName = isActive ? icon + ".fill" : icon
-        return Button {
-            setViewMode(mode)
-        } label: {
-            Image(systemName: symbolName)
-                .font(.system(size: 22))
-                .foregroundStyle(isActive ? .primary : .secondary)
-                .frame(maxWidth: .infinity)
-                .padding(.top, 8)
-                .padding(.bottom, 14)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(mode.rawValue.capitalized)")
-    }
-
     private func setViewMode(_ mode: ProfileViewMode) {
         guard mode != viewMode else { return }
         withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
             viewMode = mode
         }
-        if mode == .stories {
-            Task { await viewModel.loadStoryArchive(did: did, auth: auth.authContext()) }
-        } else if mode == .favorites {
-            Task { await viewModel.loadFavorites(did: did, auth: auth.authContext()) }
-        }
+    }
+
+    /// Pixels a cell of `size` covers on this screen, for sizing its thumbnail.
+    private func pixelSize(for size: CGSize) -> CGSize {
+        CGSize(width: size.width * displayScale, height: size.height * displayScale)
     }
 
     private var ownProfileTabSection: some View {
-        let modes: [ProfileViewMode] = [.grid, .favorites, .stories]
-        let currentIdx = modes.firstIndex(of: viewMode) ?? 0
-
+        // Optional because `scrollPosition(id:)` wants one; a nil never
+        // reaches `viewMode`.
         let scrollBinding = Binding<ProfileViewMode?>(
             get: { viewMode },
             set: { newMode in
                 guard let newMode, newMode != viewMode else { return }
                 viewMode = newMode
-                if newMode == .stories {
-                    Task { await viewModel.loadStoryArchive(did: did, auth: auth.authContext()) }
-                } else if newMode == .favorites {
-                    Task { await viewModel.loadFavorites(did: did, auth: auth.authContext()) }
-                }
             }
         )
 
         return VStack(spacing: 0) {
-            // Tab bar with a single indicator driven by live scroll offset.
-            HStack(spacing: 0) {
-                tabButton(icon: "square.grid.3x3", mode: .grid)
-                tabButton(icon: "heart", mode: .favorites)
-                tabButton(icon: "clock", mode: .stories)
-            }
-            .overlay(alignment: .bottomLeading) {
-                GeometryReader { tabBarGeo in
-                    let tabWidth = tabBarGeo.size.width / CGFloat(modes.count)
-                    let indicatorWidth: CGFloat = 32
-                    let fraction: CGFloat = tabPageWidth > 0
-                        ? tabScrollOffsetX / tabPageWidth
-                        : CGFloat(currentIdx)
-                    let clamped = max(0, min(fraction, CGFloat(modes.count - 1)))
-                    let xOffset = clamped * tabWidth + (tabWidth - indicatorWidth) / 2
-                    Rectangle()
-                        .fill(Color.accentColor)
-                        .frame(width: indicatorWidth, height: 2.5)
-                        .offset(x: xOffset, y: -6)
-                }
-                .frame(height: 2.5)
-                .allowsHitTesting(false)
-            }
+            ProfileTabBar(pager: pager, selected: viewMode, onSelect: setViewMode)
 
             // Native horizontally-paged grids. SwiftUI handles the physics, snapping,
             // and axis disambiguation with the outer vertical ScrollView.
             ScrollView(.horizontal) {
                 HStack(alignment: .top, spacing: 0) {
-                    galleriesGrid
-                        .containerRelativeFrame(.horizontal)
-                        .contentShape(Rectangle())
-                        .clipped()
-                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { newHeight in
-                            tabHeights[.grid] = newHeight
-                        }
-                        .id(ProfileViewMode.grid)
-                    favoritesGrid
-                        .containerRelativeFrame(.horizontal)
-                        .contentShape(Rectangle())
-                        .clipped()
-                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { newHeight in
-                            tabHeights[.favorites] = newHeight
-                        }
-                        .id(ProfileViewMode.favorites)
-                    storyArchiveGrid
-                        .containerRelativeFrame(.horizontal)
-                        .contentShape(Rectangle())
-                        .clipped()
-                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { newHeight in
-                            tabHeights[.stories] = newHeight
-                        }
-                        .id(ProfileViewMode.stories)
+                    page(galleriesGrid, mode: .grid)
+                    page(favoritesGrid, mode: .favorites)
+                    page(storyArchiveGrid, mode: .stories)
                 }
                 .scrollTargetLayout()
             }
@@ -714,31 +647,27 @@ extension ProfileView {
             .onScrollGeometryChange(for: CGFloat.self) { geo in
                 geo.contentOffset.x
             } action: { _, newValue in
-                tabScrollOffsetX = newValue
+                pager.offsetX = newValue
             }
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { newWidth in
                 if newWidth > 0 {
-                    tabPageWidth = newWidth
+                    pager.pageWidth = newWidth
                 }
             }
-            .frame(height: interpolatedTabHeight(modes: modes), alignment: .top)
+            .modifier(ProfilePagerHeight(pager: pager, selected: viewMode))
             .clipped()
         }
     }
 
-    private func interpolatedTabHeight(modes: [ProfileViewMode]) -> CGFloat {
-        let fallback: CGFloat = 200
-        let heights = modes.map { tabHeights[$0] ?? fallback }
-        guard tabPageWidth > 0 else {
-            let idx = modes.firstIndex(of: viewMode) ?? 0
-            return max(heights[idx], fallback)
-        }
-        let raw = tabScrollOffsetX / tabPageWidth
-        let clamped = max(0, min(raw, CGFloat(modes.count - 1)))
-        let lower = Int(clamped.rounded(.down))
-        let upper = min(lower + 1, modes.count - 1)
-        let progress = clamped - CGFloat(lower)
-        return max(heights[lower] * (1 - progress) + heights[upper] * progress, fallback)
+    private func page(_ content: some View, mode: ProfileViewMode) -> some View {
+        content
+            .containerRelativeFrame(.horizontal)
+            .contentShape(Rectangle())
+            .clipped()
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { newHeight in
+                pager.pageHeights[mode] = newHeight
+            }
+            .id(mode)
     }
 
     @ViewBuilder
@@ -754,58 +683,51 @@ extension ProfileView {
                 .frame(maxWidth: .infinity)
                 .padding(.top, 60)
         } else {
-            LazyVGrid(columns: [
-                GridItem(.flexible(), spacing: 2),
-                GridItem(.flexible(), spacing: 2),
-                GridItem(.flexible(), spacing: 2),
-            ], spacing: 2) {
-                ForEach(viewModel.galleries) { gallery in
-                    Button {
-                        selectedGallery = nil
-                        DispatchQueue.main.async {
-                            selectedGallery = ProfileGallerySelection(uri: gallery.uri, source: .galleries)
-                        }
-                    } label: {
-                        Color.clear
-                            .aspectRatio(3.0 / 4.0, contentMode: .fit)
-                            .overlay {
-                                if let photo = gallery.items?.first {
-                                    ProfileGridThumbnail(urlString: photo.thumb)
-                                }
-                            }
-                            .clipped()
-                            .contentShape(Rectangle())
-                            .overlay {
-                                let lr = resolveLabels(gallery.labels, definitions: labelDefsCache.definitions)
-                                if lr.action >= .warnMedia {
-                                    Rectangle().fill(Color(.secondarySystemBackground))
-                                    HStack(spacing: 4) {
-                                        Image(systemName: "info.circle.fill")
-                                            .font(.caption2)
-                                        Text(lr.name)
-                                            .font(.system(size: 9))
-                                    }
-                                    .foregroundStyle(.secondary)
-                                }
-                            }
-                            .overlay(alignment: .topTrailing) {
-                                if (gallery.items?.count ?? 0) > 1 {
-                                    Image(systemName: "square.on.square.fill")
-                                        .font(.system(size: 14))
-                                        .rotationEffect(.degrees(180))
-                                        .foregroundStyle(.white)
-                                        .shadow(color: .black.opacity(0.5), radius: 2, x: 0, y: 1)
-                                        .padding(6)
-                                        .accessibilityHidden(true)
-                                }
-                            }
+            WindowedGrid(items: viewModel.galleries, scrollSpace: "profileScroll") { gallery, cellSize in
+                Button {
+                    selectedGallery = nil
+                    DispatchQueue.main.async {
+                        selectedGallery = ProfileGallerySelection(uri: gallery.uri, source: .galleries)
                     }
-                    .buttonStyle(.plain)
-                    .matchedTransitionSource(id: gallery.uri, in: galleryZoomNS)
-                    .onAppear {
-                        if gallery.id == viewModel.galleries.last?.id {
-                            Task { await viewModel.loadMoreGalleries(did: did, auth: auth.authContext()) }
+                } label: {
+                    Color.clear
+                        .overlay {
+                            if let photo = gallery.items?.first {
+                                ProfileGridThumbnail(urlString: photo.thumb, pixelSize: pixelSize(for: cellSize))
+                            }
                         }
+                        .clipped()
+                        .contentShape(Rectangle())
+                        .overlay {
+                            let lr = resolveLabels(gallery.labels, definitions: labelDefsCache.definitions)
+                            if lr.action >= .warnMedia {
+                                Rectangle().fill(Color(.secondarySystemBackground))
+                                HStack(spacing: 4) {
+                                    Image(systemName: "info.circle.fill")
+                                        .font(.caption2)
+                                    Text(lr.name)
+                                        .font(.system(size: 9))
+                                }
+                                .foregroundStyle(.secondary)
+                            }
+                        }
+                        .overlay(alignment: .topTrailing) {
+                            if (gallery.items?.count ?? 0) > 1 {
+                                Image(systemName: "square.on.square.fill")
+                                    .font(.system(size: 14))
+                                    .rotationEffect(.degrees(180))
+                                    .foregroundStyle(.white)
+                                    .shadow(color: .black.opacity(0.5), radius: 2, x: 0, y: 1)
+                                    .padding(6)
+                                    .accessibilityHidden(true)
+                            }
+                        }
+                }
+                .buttonStyle(.plain)
+                .matchedTransitionSource(id: gallery.uri, in: galleryZoomNS)
+                .onAppear {
+                    if gallery.id == viewModel.galleries.last?.id {
+                        Task { await viewModel.loadMoreGalleries(did: did, auth: auth.authContext()) }
                     }
                 }
             }
@@ -821,44 +743,38 @@ extension ProfileView {
                 .frame(maxWidth: .infinity)
                 .padding(.top, 60)
         } else {
-            LazyVGrid(columns: [
-                GridItem(.flexible(), spacing: 2),
-                GridItem(.flexible(), spacing: 2),
-                GridItem(.flexible(), spacing: 2),
-            ], spacing: 2) {
-                ForEach(viewModel.archivedStories) { story in
-                    Button {
-                        if let index = viewModel.archivedStories.firstIndex(where: { $0.id == story.id }) {
-                            selectedArchivedStory = viewModel.archivedStories[index]
-                        }
-                    } label: {
-                        Color.clear
-                            .aspectRatio(3.0 / 4.0, contentMode: .fit)
-                            .overlay {
-                                LazyImage(url: URL(string: story.thumb)) { state in
-                                    if let image = state.image {
-                                        image
-                                            .resizable()
-                                            .scaledToFill()
-                                    } else {
-                                        Rectangle().fill(.quaternary)
-                                    }
+            WindowedGrid(items: viewModel.archivedStories, scrollSpace: "profileScroll") { story, cellSize in
+                Button {
+                    if let index = viewModel.archivedStories.firstIndex(where: { $0.id == story.id }) {
+                        selectedArchivedStory = viewModel.archivedStories[index]
+                    }
+                } label: {
+                    Color.clear
+                        .overlay {
+                            LazyImage(url: URL(string: story.thumb)) { state in
+                                if let image = state.image {
+                                    image
+                                        .resizable()
+                                        .scaledToFill()
+                                } else {
+                                    Rectangle().fill(.quaternary)
                                 }
                             }
-                            .clipped()
-                            .overlay(alignment: .bottomLeading) {
-                                Text(storyDateLabel(story.createdAt))
-                                    .font(.system(size: 11, weight: .medium))
-                                    .foregroundStyle(.white)
-                                    .shadow(color: .black.opacity(0.6), radius: 2, y: 1)
-                                    .padding(6)
-                            }
-                    }
-                    .buttonStyle(.plain)
-                    .onAppear {
-                        if story.id == viewModel.archivedStories.last?.id {
-                            Task { await viewModel.loadMoreArchive(did: did, auth: auth.authContext()) }
+                            .processors([ImageProcessors.Resize(size: pixelSize(for: cellSize), unit: .pixels, contentMode: .aspectFill)])
                         }
+                        .clipped()
+                        .overlay(alignment: .bottomLeading) {
+                            Text(storyDateLabel(story.createdAt))
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.white)
+                                .shadow(color: .black.opacity(0.6), radius: 2, y: 1)
+                                .padding(6)
+                        }
+                }
+                .buttonStyle(.plain)
+                .onAppear {
+                    if story.id == viewModel.archivedStories.last?.id {
+                        Task { await viewModel.loadMoreArchive(did: did, auth: auth.authContext()) }
                     }
                 }
             }
@@ -896,46 +812,39 @@ extension ProfileView {
                 .padding(.top, 60)
         } else {
             let visible = viewModel.visibleFavorites
-            LazyVGrid(columns: [
-                GridItem(.flexible(), spacing: 2),
-                GridItem(.flexible(), spacing: 2),
-                GridItem(.flexible(), spacing: 2),
-            ], spacing: 2) {
-                ForEach(visible) { gallery in
-                    Button {
-                        selectedGallery = nil
-                        DispatchQueue.main.async {
-                            selectedGallery = ProfileGallerySelection(uri: gallery.uri, source: .favorites)
-                        }
-                    } label: {
-                        Color.clear
-                            .aspectRatio(3.0 / 4.0, contentMode: .fit)
-                            .overlay {
-                                if let photo = gallery.items?.first {
-                                    ProfileGridThumbnail(urlString: photo.thumb)
-                                } else {
-                                    Rectangle().fill(.quaternary)
-                                }
-                            }
-                            .clipped()
-                            .overlay(alignment: .topTrailing) {
-                                if (gallery.items?.count ?? 0) > 1 {
-                                    Image(systemName: "square.on.square.fill")
-                                        .font(.system(size: 14))
-                                        .rotationEffect(.degrees(180))
-                                        .foregroundStyle(.white)
-                                        .shadow(color: .black.opacity(0.5), radius: 2, x: 0, y: 1)
-                                        .padding(6)
-                                        .accessibilityHidden(true)
-                                }
-                            }
+            WindowedGrid(items: visible, scrollSpace: "profileScroll") { gallery, cellSize in
+                Button {
+                    selectedGallery = nil
+                    DispatchQueue.main.async {
+                        selectedGallery = ProfileGallerySelection(uri: gallery.uri, source: .favorites)
                     }
-                    .buttonStyle(.plain)
-                    .matchedTransitionSource(id: gallery.uri, in: galleryZoomNS)
-                    .onAppear {
-                        if gallery.id == visible.last?.id {
-                            Task { await viewModel.loadMoreFavorites(did: did, auth: auth.authContext()) }
+                } label: {
+                    Color.clear
+                        .overlay {
+                            if let photo = gallery.items?.first {
+                                ProfileGridThumbnail(urlString: photo.thumb, pixelSize: pixelSize(for: cellSize))
+                            } else {
+                                Rectangle().fill(.quaternary)
+                            }
                         }
+                        .clipped()
+                        .overlay(alignment: .topTrailing) {
+                            if (gallery.items?.count ?? 0) > 1 {
+                                Image(systemName: "square.on.square.fill")
+                                    .font(.system(size: 14))
+                                    .rotationEffect(.degrees(180))
+                                    .foregroundStyle(.white)
+                                    .shadow(color: .black.opacity(0.5), radius: 2, x: 0, y: 1)
+                                    .padding(6)
+                                    .accessibilityHidden(true)
+                            }
+                        }
+                }
+                .buttonStyle(.plain)
+                .matchedTransitionSource(id: gallery.uri, in: galleryZoomNS)
+                .onAppear {
+                    if gallery.id == visible.last?.id {
+                        Task { await viewModel.loadMoreFavorites(did: did, auth: auth.authContext()) }
                     }
                 }
             }
@@ -1201,6 +1110,7 @@ private struct FavoritesProbeKey: Hashable {
 
 struct ProfileGridThumbnail: View {
     let urlString: String
+    private let request: ImageRequest?
     /// Seeded from the memory cache when the cell is built, so a cached
     /// thumbnail is on screen in its first frame. Held here afterwards: the
     /// body used to re-query the cache on every evaluation, and once the feed
@@ -1208,9 +1118,13 @@ struct ProfileGridThumbnail: View {
     /// mid-scroll and refetched them.
     @State private var image: UIImage?
 
-    init(urlString: String) {
+    /// `pixelSize` is the cell's size in pixels. Given, the thumbnail is
+    /// decoded at that size rather than the CDN's, so the cache holds a
+    /// cell-sized image per gallery instead of a screen-wide one.
+    init(urlString: String, pixelSize: CGSize? = nil) {
         self.urlString = urlString
-        _image = State(initialValue: Self.cachedImage(for: urlString))
+        request = Self.request(for: urlString, pixelSize: pixelSize)
+        _image = State(initialValue: Self.cachedImage(for: request))
     }
 
     var body: some View {
@@ -1225,19 +1139,28 @@ struct ProfileGridThumbnail: View {
             }
         }
         .onChange(of: urlString) {
-            image = Self.cachedImage(for: urlString)
+            image = Self.cachedImage(for: request)
             loadIfNeeded()
         }
     }
 
-    private static func cachedImage(for urlString: String) -> UIImage? {
+    private static func request(for urlString: String, pixelSize: CGSize?) -> ImageRequest? {
         guard let url = URL(string: urlString) else { return nil }
-        return ImagePipeline.shared.cache.cachedImage(for: ImageRequest(url: url))?.image
+        guard let pixelSize, pixelSize.width > 0, pixelSize.height > 0 else {
+            return ImageRequest(url: url)
+        }
+        return ImageRequest(url: url, processors: [
+            ImageProcessors.Resize(size: pixelSize, unit: .pixels, contentMode: .aspectFill),
+        ])
+    }
+
+    private static func cachedImage(for request: ImageRequest?) -> UIImage? {
+        guard let request else { return nil }
+        return ImagePipeline.shared.cache.cachedImage(for: request)?.image
     }
 
     private func loadIfNeeded() {
-        guard image == nil, let url = URL(string: urlString) else { return }
-        let request = ImageRequest(url: url)
+        guard image == nil, let request else { return }
         Task {
             if let loaded = try? await ImagePipeline.shared.image(for: request) {
                 image = loaded
