@@ -23,7 +23,11 @@ struct ProfileView: View {
     @State private var tabPageWidth: CGFloat = 0
     @State private var tabScrollOffsetX: CGFloat = 0
     @State private var tabHeights: [ProfileViewMode: CGFloat] = [:]
-    @State private var tabSectionViewportMinY: CGFloat = .infinity
+    /// Whether the tab bar has scrolled up past the top of the viewport. A
+    /// Bool rather than the live offset: the offset changes every scroll frame
+    /// and each change re-evaluated this entire body, which is what made
+    /// scrolling the grid stutter. This only flips when the edge is crossed.
+    @State private var tabSectionScrolledPastTop = false
     @State private var zoomState = ImageZoomState()
     @State private var cardStoryAuthor: GrainStoryAuthor?
     let client: XRPCClient
@@ -296,10 +300,10 @@ extension ProfileView {
                             if did == auth.userDID {
                                 ownProfileTabSection
                                     .id("profileTabSection")
-                                    .onGeometryChange(for: CGFloat.self) { proxy in
-                                        proxy.frame(in: .scrollView).minY
+                                    .onGeometryChange(for: Bool.self) { proxy in
+                                        proxy.frame(in: .scrollView).minY < 0
                                     } action: { newValue in
-                                        tabSectionViewportMinY = newValue
+                                        tabSectionScrolledPastTop = newValue
                                     }
                             } else {
                                 galleriesGrid
@@ -534,7 +538,7 @@ extension ProfileView {
             .sensoryFeedback(.impact(weight: .medium), trigger: showCopiedToast)
             .coordinateSpace(.named("profileScroll"))
             .onChange(of: viewMode) { _, _ in
-                if tabSectionViewportMinY < 0 {
+                if tabSectionScrolledPastTop {
                     withAnimation(.smooth(duration: 0.35)) {
                         scrollProxy.scrollTo("profileTabSection", anchor: .top)
                     }
@@ -936,10 +940,11 @@ extension ProfileView {
                 }
             }
             // HEAD-probe every loaded favorite thumb so dangling CDN refs get
-            // marked before render. Keyed on the full uri list so new batches
-            // from loadMore trigger a re-probe; probeFavoriteThumbs itself
-            // skips uris already checked this session.
-            .task(id: viewModel.favoriteGalleries.map(\.uri).joined(separator: "|")) {
+            // marked before render. Keyed on count plus the last uri so new
+            // batches from loadMore trigger a re-probe without joining every
+            // uri into a string on each body evaluation; probeFavoriteThumbs
+            // itself skips uris already checked this session.
+            .task(id: FavoritesProbeKey(galleries: viewModel.favoriteGalleries)) {
                 await probeFavoriteThumbs()
             }
         }
@@ -1181,45 +1186,61 @@ private struct FavoriteThumbProbe {
     let result: FavoriteThumbProbeResult
 }
 
+/// Cheap identity for the loaded favorites list, for the probe task's `id:`.
+private struct FavoritesProbeKey: Hashable {
+    let count: Int
+    let lastUri: String?
+
+    init(galleries: [GrainGallery]) {
+        count = galleries.count
+        lastUri = galleries.last?.uri
+    }
+}
+
 // MARK: - Profile Grid Thumbnail (sync cache read to avoid flash)
 
 struct ProfileGridThumbnail: View {
     let urlString: String
-    @State private var asyncImage: UIImage?
+    /// Seeded from the memory cache when the cell is built, so a cached
+    /// thumbnail is on screen in its first frame. Held here afterwards: the
+    /// body used to re-query the cache on every evaluation, and once the feed
+    /// and another profile had filled the cache the eviction turned cells grey
+    /// mid-scroll and refetched them.
+    @State private var image: UIImage?
 
-    private var imageURL: URL? {
-        URL(string: urlString)
-    }
-
-    private var resolvedImage: UIImage? {
-        if let imageURL,
-           let cached = ImagePipeline.shared.cache.cachedImage(for: ImageRequest(url: imageURL))?.image
-        {
-            return cached
-        }
-        return asyncImage
+    init(urlString: String) {
+        self.urlString = urlString
+        _image = State(initialValue: Self.cachedImage(for: urlString))
     }
 
     var body: some View {
-        if let image = resolvedImage {
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFill()
-        } else {
-            Rectangle().fill(.quaternary)
-                .onAppear { loadIfNeeded() }
+        Group {
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Rectangle().fill(.quaternary)
+                    .onAppear { loadIfNeeded() }
+            }
+        }
+        .onChange(of: urlString) {
+            image = Self.cachedImage(for: urlString)
+            loadIfNeeded()
         }
     }
 
+    private static func cachedImage(for urlString: String) -> UIImage? {
+        guard let url = URL(string: urlString) else { return nil }
+        return ImagePipeline.shared.cache.cachedImage(for: ImageRequest(url: url))?.image
+    }
+
     private func loadIfNeeded() {
-        guard let imageURL, asyncImage == nil else { return }
-        let request = ImageRequest(url: imageURL)
-        if ImagePipeline.shared.cache.cachedImage(for: request) != nil {
-            return
-        }
+        guard image == nil, let url = URL(string: urlString) else { return }
+        let request = ImageRequest(url: url)
         Task {
-            if let image = try? await ImagePipeline.shared.image(for: request) {
-                asyncImage = image
+            if let loaded = try? await ImagePipeline.shared.image(for: request) {
+                image = loaded
             }
         }
     }
