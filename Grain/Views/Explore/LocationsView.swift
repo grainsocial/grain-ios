@@ -29,6 +29,11 @@ struct LocationsView: View {
     @State private var camera: MapCameraRequest?
     @State private var sheetPresented = false
     @State private var fitted = false
+    /// `task` runs again every time the screen reappears — after a gallery is
+    /// popped, say — and re-selecting the chip's place then threw away
+    /// wherever the reader had got to. The first appearance is the only one
+    /// that loads.
+    @State private var loaded = false
     /// How deep this screen sits in the tab's stack, taken when it first
     /// appears. The sheet belongs up only while nothing is pushed over it.
     @State private var depth: Int?
@@ -100,7 +105,8 @@ struct LocationsView: View {
         .onChange(of: router.path.count) { syncSheet() }
         .sheet(isPresented: $sheetPresented) { sheet }
         .task {
-            guard !isPreview else { return }
+            guard !isPreview, !loaded else { return }
+            loaded = true
             let context = await auth.authContext()
             if let cell = initialPlace.cell, let name = initialPlace.name {
                 viewModel.select(cell: cell, name: name, galleryCount: initialPlace.galleryCount, auth: context)
