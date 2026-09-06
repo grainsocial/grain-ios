@@ -131,6 +131,50 @@ final class SearchViewModelTests: GrainTestCase {
         XCTAssertTrue(vm.galleryResults.isEmpty)
     }
 
+    // MARK: - As you type
+
+    func testASearchThatAnswersMarksItselfSearchedAndClearingUnmarksIt() async {
+        MockURLProtocol.respondWithJSON(Self.galleryResults)
+        vm.searchText = "film"
+        XCTAssertFalse(vm.hasSearched)
+
+        await vm.search()
+
+        XCTAssertTrue(vm.hasSearched)
+        XCTAssertEqual(vm.galleryResults.count, 1)
+
+        vm.clearResults()
+
+        XCTAssertFalse(vm.hasSearched)
+        XCTAssertFalse(vm.isSearching)
+        XCTAssertTrue(vm.galleryResults.isEmpty)
+    }
+
+    /// Two searches in flight, the first answering last: the field has moved
+    /// on, and the slow answer must not overwrite the one that matches it.
+    func testAnOvertakenSearchDoesNotOverwriteTheNewerAnswer() async {
+        let calls = CallCounter()
+        MockURLProtocol.handler = { request in
+            let call = calls.next()
+            if call == 1 {
+                // The first request is slow; the second overtakes it.
+                Thread.sleep(forTimeInterval: 0.3)
+            }
+            let body = call == 1 ? Self.galleryResults : Self.galleryResults.replacingOccurrences(of: "Found gallery", with: "Newer gallery")
+            return (Data(body.utf8), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        }
+
+        vm.searchText = "fil"
+        let slow = Task { await vm.search() }
+        try? await Task.sleep(for: .milliseconds(50))
+        vm.searchText = "film"
+        await vm.search()
+        await slow.value
+
+        XCTAssertEqual(vm.galleryResults.map(\.title), ["Newer gallery"])
+        XCTAssertFalse(vm.isSearching)
+    }
+
     // MARK: - loadDiscovery
 
     func testDiscoveryLoadsLocationsAndCameras() async {
@@ -178,5 +222,18 @@ final class SearchViewModelTests: GrainTestCase {
 
         XCTAssertTrue(vm.locations.isEmpty)
         XCTAssertTrue(vm.cameras.isEmpty)
+    }
+}
+
+/// Counts the mock's calls from the URL loading thread.
+private final class CallCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+
+    func next() -> Int {
+        lock.withLock {
+            count += 1
+            return count
+        }
     }
 }

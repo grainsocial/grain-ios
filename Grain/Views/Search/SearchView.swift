@@ -11,7 +11,12 @@ struct SearchView: View {
     @State private var modals = GalleryCardModals()
     @State private var recentSearches: RecentSearchStorage
     @State private var searchIsPresented = false
+    /// The search behind the keystrokes. Cancelled and restarted on each one,
+    /// so only the text that stood still for a beat reaches the network.
+    @State private var searchTask: Task<Void, Never>?
     let client: XRPCClient
+
+    private static let debounce: Duration = .milliseconds(300)
 
     /// `viewModel` is injectable the same way `NotificationsView`'s is, so the
     /// results state can be built without going through the search field.
@@ -35,6 +40,21 @@ struct SearchView: View {
                     } else {
                         ExploreView(client: client)
                     }
+                } else if viewModel.isSearching, resultsAreEmpty {
+                    // In progress with nothing yet: the shape of what is
+                    // coming, rather than a blank or the last query's answer.
+                    ScrollView {
+                        DelayedSkeleton {
+                            if viewModel.selectedTab == .galleries {
+                                SkeletonGalleryCards()
+                            } else {
+                                SkeletonProfileRows()
+                            }
+                        }
+                        .padding(.top)
+                    }
+                } else if viewModel.hasSearched, resultsAreEmpty {
+                    ContentUnavailableView.search(text: viewModel.searchText)
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 12) {
@@ -122,17 +142,33 @@ struct SearchView: View {
                 placement: .navigationBarDrawer(displayMode: .always),
                 prompt: "Search galleries and profiles"
             )
-            .searchScopes($viewModel.selectedTab, activation: .onSearchPresentation) {
+            // Scopes only once there is text: an empty field is for recents
+            // and explore, and two tabs over those asked a question nobody
+            // had typed yet.
+            .searchScopes($viewModel.selectedTab, activation: .onTextEntry) {
                 ForEach(SearchViewModel.SearchTab.allCases, id: \.self) { tab in
                     Text(tab.rawValue).tag(tab)
                 }
             }
             .onSubmit(of: .search) {
                 recentSearches.addTextSearch(searchText)
+                searchTask?.cancel()
                 Task { await viewModel.search(auth: auth.authContext()) }
             }
             .onChange(of: searchText) {
                 viewModel.searchText = searchText
+                searchTask?.cancel()
+                guard !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                    viewModel.clearResults()
+                    return
+                }
+                // As you type, once the text holds still — the way the
+                // Android tab does it. Submit still runs it at once.
+                searchTask = Task {
+                    try? await Task.sleep(for: Self.debounce)
+                    guard !Task.isCancelled else { return }
+                    await viewModel.search(auth: auth.authContext())
+                }
             }
             .onChange(of: viewModel.selectedTab) {
                 if !viewModel.searchText.isEmpty {
@@ -149,6 +185,13 @@ struct SearchView: View {
                 },
                 onDeleted: { uri in viewModel.galleryResults.removeAll { $0.uri == uri } }
             )
+        }
+    }
+
+    private var resultsAreEmpty: Bool {
+        switch viewModel.selectedTab {
+        case .galleries: viewModel.galleryResults.isEmpty
+        case .profiles: viewModel.profileResults.isEmpty
         }
     }
 
@@ -230,4 +273,49 @@ struct SearchView: View {
     SearchView(client: .preview)
         .previewEnvironments()
         .frame(maxHeight: .infinity, alignment: .top)
+}
+
+/// The shape of a gallery card, twice over, while a search is answering.
+private struct SkeletonGalleryCards: View {
+    var body: some View {
+        VStack(spacing: 24) {
+            ForEach(0 ..< 2, id: \.self) { _ in
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 10) {
+                        SkeletonCircle(size: 36)
+                        VStack(alignment: .leading, spacing: 6) {
+                            SkeletonBar(width: 120, height: 12)
+                            SkeletonBar(width: 80, height: 10)
+                        }
+                    }
+                    .padding(.horizontal)
+                    Rectangle()
+                        .fill(Color(.tertiarySystemFill))
+                        .shimmering()
+                        .aspectRatio(4 / 3, contentMode: .fit)
+                    SkeletonBar(width: 200, height: 12)
+                        .padding(.horizontal)
+                }
+            }
+        }
+    }
+}
+
+/// The shape of a profile row, a few times over.
+private struct SkeletonProfileRows: View {
+    var body: some View {
+        VStack(spacing: 16) {
+            ForEach(0 ..< 5, id: \.self) { _ in
+                HStack(spacing: 12) {
+                    SkeletonCircle(size: 40)
+                    VStack(alignment: .leading, spacing: 6) {
+                        SkeletonBar(width: 140, height: 12)
+                        SkeletonBar(width: 90, height: 10)
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal)
+            }
+        }
+    }
 }
