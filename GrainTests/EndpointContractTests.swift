@@ -435,6 +435,25 @@ final class EndpointContractTests: GrainTestCase {
         XCTAssertEqual(cameras.cameras?.first?.id, "Fujifilm X100V")
     }
 
+    /// The index tiles draw from these without a feed request per entry, and
+    /// the map asks for the lean shape by name.
+    func testDiscoveryCarriesThumbnailsAndAsksForPinsByName() async throws {
+        respond(#"{"cameras": [{"camera": "Leica M6", "photoCount": 120, "thumbs": ["https://test.local/1.jpg"]}]}"#)
+        let cameras = try await client.getCameras(auth: auth)
+        XCTAssertEqual(cameras.cameras?.first?.thumbs, ["https://test.local/1.jpg"])
+
+        respond(#"{"locations": [{"name": "Lisboa", "h3Index": "8a2a", "galleryCount": 3, "h3Cells": ["8a2a", "8a2b"], "thumbs": ["https://test.local/2.jpg"]}]}"#)
+        let full = try await client.getLocations(auth: auth)
+        XCTAssertNil(log.lastQueryValue("pins"))
+        XCTAssertEqual(full.locations?.first?.h3Cells, ["8a2a", "8a2b"])
+        XCTAssertEqual(full.locations?.first?.thumbs, ["https://test.local/2.jpg"])
+
+        respond(Fixtures.locations)
+        let pins = try await client.getLocations(pins: true, auth: auth)
+        XCTAssertEqual(log.lastQueryValue("pins"), "true")
+        XCTAssertNil(pins.locations?.first?.thumbs)
+    }
+
     // MARK: - Identity
 
     /// Every list in the app is diffed on these, so a model whose `id` stopped

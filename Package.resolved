@@ -1,5 +1,5 @@
 {
-  "originHash" : "2da38bad5f973ceb21dd9cdca03d806a878c46740b57d15b440b6fd64e3780df",
+  "originHash" : "638480c1a27c846d3c74f5fa569a7fc149599a175f46feef5d9a9c5542e17686",
   "pins" : [
     {
       "identity" : "keychainaccess",
@@ -8,6 +8,15 @@
       "state" : {
         "revision" : "84e546727d66f1adc5439debad16270d0fdd04e7",
         "version" : "4.2.2"
+      }
+    },
+    {
+      "identity" : "maplibre-gl-native-distribution",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/maplibre/maplibre-gl-native-distribution",
+      "state" : {
+        "revision" : "86992aabad3e89ce8818adec2e8b9d03177d69da",
+        "version" : "6.29.0"
       }
     },
     {
@@ -24,8 +33,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/pawelmajcher/SwiftyH3",
       "state" : {
-        "revision" : "d5091720769598f3747f0b86c597f3ff73c18e65",
-        "version" : "0.6.0"
+        "revision" : "6d9b5774cc7cc198597b14aaccf213587947678c",
+        "version" : "0.5.0"
       }
     }
   ],

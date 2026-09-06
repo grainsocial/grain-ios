@@ -57,6 +57,10 @@ final class RoutingTests: GrainTestCase {
             .hashtag("portra"),
             .location(h3Index: "8a2a1072b59ffff", name: "Lisbon"),
             .galleryFavorites(uri: "at://did:plc:a/social.grain.gallery/1"),
+            .camera("Leica M6"),
+            .cameras,
+            .locations(),
+            .locations(cell: "8a2a1072b59ffff", name: "Lisbon", galleryCount: 12),
         ]
         let data = try JSONEncoder().encode(routes)
         XCTAssertEqual(try JSONDecoder().decode([Route].self, from: data), routes)
@@ -65,6 +69,8 @@ final class RoutingTests: GrainTestCase {
     func testRoutesDistinguishTheirPayloads() {
         XCTAssertNotEqual(Route.profile(did: "did:plc:a"), .profile(did: "did:plc:b"))
         XCTAssertNotEqual(Route.gallery(uri: "at://g"), .galleryFavorites(uri: "at://g"))
+        // The index and a place on it are the same screen opened differently.
+        XCTAssertNotEqual(Route.locations(), .locations(cell: "8a2a", name: "Lisbon"))
     }
 
     // MARK: - Deep links and taps agree
@@ -102,6 +108,10 @@ final class RoutingTests: GrainTestCase {
             .hashtag("portra"),
             .location(h3Index: "8a2a1072b59ffff", name: "Lisbon"),
             .galleryFavorites(uri: "at://did:plc:test/social.grain.gallery/1"),
+            .camera("Leica M6"),
+            .cameras,
+            .locations(),
+            .locations(cell: "8a2a1072b59ffff", name: "Lisbon", galleryCount: 12),
         ] {
             ViewRender.render(
                 NavigationStack {

@@ -61,12 +61,21 @@ just sim-local-fresh   # Same as `just sim-local`, but uninstalls first
 just device DEVICE_ID  # Build + install to a plugged-in iOS device
 just test              # Run tests (iPhone 17 Pro Max simulator)
 just generate          # Regenerate Xcode project from project.yml
+just basemap-style     # Regenerate the MapLibre style assets (needs node + npm)
 just format-fix        # Fix formatting in-place
 just lint-fix          # Fix lint violations
 just release           # Bump build, archive, upload to App Store Connect
 ```
 
 The `*-fresh` variants `xcrun simctl uninstall` your app's bundle id before installing, which clears URLCache, UserDefaults, on-disk caches (FeedCache, LabelDefinitionsCache), and Documents/Caches. Pass `SIM_UDID=<udid>` to target a specific simulator (otherwise uses the booted one).
+
+The location screens draw grain's own [Protomaps](https://protomaps.com)
+basemap through MapLibre — the same tiles as grain.social, served from
+`tiles.grain.social`, with no API key. The style ships as two bundle
+resources under `Grain/Resources/Basemap`, generated from the same theme
+package the web uses by `tools/basemap`; the output is committed, so a build
+needs neither node nor npm. Label fonts and sprite icons come from Protomaps'
+public asset host until the tile Worker serves them.
 
 > **Note:** The Xcode project is generated from `project.yml` — run `just generate` after adding or removing Swift files, or after pulling changes that touch `project.yml`.
 

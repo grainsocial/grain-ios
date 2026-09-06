@@ -97,6 +97,16 @@ coverage:
     echo
     xcrun xccov view --report --files-for-target {{bundle_name}}.app "$result"
 
+# Regenerate the MapLibre style assets from the Protomaps theme package
+basemap-style:
+    #!/usr/bin/env bash
+    # Committed output: the app builds without node, and a theme bump is a
+    # reviewable diff rather than a runtime surprise. Mirrors grain-android.
+    set -eu
+    cd tools/basemap
+    npm install --silent
+    npm run generate --silent
+
 # Check formatting (list unformatted files)
 format:
     swiftformat Grain GrainTests --lint

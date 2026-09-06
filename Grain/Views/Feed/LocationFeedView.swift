@@ -1,4 +1,4 @@
-import MapKit
+import CoreLocation
 import SwiftUI
 
 struct LocationFeedView: View {
@@ -11,7 +11,8 @@ struct LocationFeedView: View {
     @Environment(Router.self) private var router
     @State private var zoomState = ImageZoomState()
     @State private var modals = GalleryCardModals()
-    @State private var mapInteractive = false
+    /// Full screen or nothing: a strip is too small to work a map in.
+    @State private var mapFullScreen = false
 
     let client: XRPCClient
     let h3Index: String
@@ -21,6 +22,11 @@ struct LocationFeedView: View {
         "location:\(h3Index)"
     }
 
+    /// Roughly 80km across on a phone: a city and its surroundings. Wider
+    /// than the 20km frame this had, which sat inside the city with only
+    /// district names to read.
+    private static let cityZoom = 9.0
+
     private var coordinate: CLLocationCoordinate2D? {
         LocationServices.h3ToCoordinate(h3Index)
     }
@@ -29,32 +35,51 @@ struct LocationFeedView: View {
         ScrollView {
             LazyVStack(spacing: 0) {
                 if let coord = coordinate {
-                    Map(initialPosition: .region(MKCoordinateRegion(
-                        center: coord,
-                        latitudinalMeters: 20000,
-                        longitudinalMeters: 20000
-                    )))
-                    .mapStyle(.standard(pointsOfInterest: .excludingAll))
-                    .mapControlVisibility(mapInteractive ? .automatic : .hidden)
-                    .frame(height: mapInteractive ? 300 : 150)
+                    // grain's own basemap at city scale, with the place named
+                    // at its point: nothing reaches the strip, and a tap opens
+                    // the same map over the whole screen where there is room
+                    // to work it.
+                    GrainMapView(
+                        marker: MapMarker(coordinate: coord, label: localityOf(locationName)),
+                        initialCenter: (coord, Self.cityZoom),
+                        interactive: false
+                    )
+                    .frame(height: 150)
                     .overlay {
-                        if !mapInteractive {
-                            Color.clear
-                                .contentShape(Rectangle())
-                                .accessibilityLabel("Expand map")
-                                .accessibilityAddTraits(.isButton)
-                                .onTapGesture {
-                                    withAnimation(.easeInOut(duration: 0.25)) { mapInteractive = true }
-                                }
-                        }
+                        Color.clear
+                            .contentShape(Rectangle())
+                            .accessibilityLabel("Expand map")
+                            .accessibilityAddTraits(.isButton)
+                            .onTapGesture { mapFullScreen = true }
                     }
                     .mask(
                         LinearGradient(
-                            colors: mapInteractive ? [.black] : [.black, .black, .clear],
+                            colors: [.black, .black, .clear],
                             startPoint: .top,
                             endPoint: .bottom
                         )
                     )
+                    .fullScreenCover(isPresented: $mapFullScreen) {
+                        ZStack(alignment: .topLeading) {
+                            GrainMapView(
+                                marker: MapMarker(coordinate: coord, label: localityOf(locationName)),
+                                initialCenter: (coord, Self.cityZoom),
+                                interactive: true
+                            )
+                            .ignoresSafeArea()
+                            Button {
+                                mapFullScreen = false
+                            } label: {
+                                Image(systemName: "arrow.left")
+                                    .font(.body.weight(.semibold))
+                                    .frame(width: 40, height: 40)
+                                    .background(.regularMaterial, in: Circle())
+                            }
+                            .buttonStyle(.plain)
+                            .padding(8)
+                            .accessibilityLabel("Close map")
+                        }
+                    }
                 }
 
                 ForEach($galleries) { $gallery in

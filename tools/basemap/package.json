@@ -1,0 +1,12 @@
+{
+  "name": "grain-basemap-style",
+  "private": true,
+  "type": "module",
+  "description": "Generates the MapLibre style JSON the app ships for grain's Protomaps basemap.",
+  "scripts": {
+    "generate": "node generate.mjs"
+  },
+  "dependencies": {
+    "protomaps-themes-base": "^4.5.0"
+  }
+}

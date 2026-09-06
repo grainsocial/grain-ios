@@ -26,10 +26,14 @@ struct SearchView: View {
         NavigationStack(path: $router.path) {
             Group {
                 if viewModel.searchText.isEmpty {
-                    if recentSearches.profiles.isEmpty, recentSearches.textSearches.isEmpty {
-                        ContentUnavailableView("Search", systemImage: "magnifyingglass", description: Text("Search for galleries and profiles"))
-                    } else {
+                    // Recents belong to the field, so they show while it is
+                    // active and give way to explore once it lets go — the
+                    // same tab is a place to browse when you have nothing to
+                    // type, and a place to type when you do.
+                    if searchIsPresented, !recentSearches.profiles.isEmpty || !recentSearches.textSearches.isEmpty {
                         recentSearchesView
+                    } else {
+                        ExploreView(client: client)
                     }
                 } else {
                     ScrollView {
@@ -101,6 +105,12 @@ struct SearchView: View {
                 }
             }
             .navigationTitle("Search")
+            .navigationDestination(for: Route.self) { route in
+                RouteDestination(route: route, client: client)
+            }
+            // Applied outside `navigationDestination` so pushed screens see the
+            // router too, not just the content sitting at the root of the stack.
+            .environment(router)
             .searchable(text: $searchText, isPresented: $searchIsPresented, prompt: "Search galleries & profiles")
             .searchScopes($viewModel.selectedTab, activation: .onSearchPresentation) {
                 ForEach(SearchViewModel.SearchTab.allCases, id: \.self) { tab in

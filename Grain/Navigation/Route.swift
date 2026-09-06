@@ -23,6 +23,16 @@ enum Route: Hashable, Codable {
     /// screen and isn't derivable from the index without a lookup.
     case location(h3Index: String, name: String)
     case galleryFavorites(uri: String)
+    /// Every gallery shot on one camera, by the name the appview normalised.
+    case camera(String)
+    /// The cameras index — every camera the explore chips only show the top of.
+    case cameras
+    /// The locations index: every place on a map, with a sheet over it. With
+    /// a `cell` the sheet opens on that place's galleries, the way a chip on
+    /// explore wants it; without one it opens on the index. `galleryCount`
+    /// rides along for the heading, since the map screen only knows counts
+    /// for the places it has pins for.
+    case locations(cell: String? = nil, name: String? = nil, galleryCount: Int = 0)
 }
 
 /// The view a `Route` names.
@@ -53,6 +63,12 @@ struct RouteDestination: View {
             LocationFeedView(client: client, h3Index: h3Index, locationName: name)
         case let .galleryFavorites(uri):
             FollowListView(client: client, mode: .galleryFavorites(uri))
+        case let .camera(name):
+            CameraFeedView(client: client, camera: name)
+        case .cameras:
+            CamerasView(client: client)
+        case let .locations(cell, name, galleryCount):
+            LocationsView(client: client, initialPlace: LocationsView.InitialPlace(cell: cell, name: name, galleryCount: galleryCount))
         }
     }
 }

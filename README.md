@@ -16,6 +16,7 @@ A photography community built on the [AT Protocol](https://atproto.com). Share y
 - Likes, comments & shares
 - Notifications
 - Search
+- Explore by camera and place, with every place on a map
 - Profiles
 
 ## License

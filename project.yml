@@ -25,6 +25,9 @@ packages:
   SwiftyH3:
     url: https://github.com/pawelmajcher/SwiftyH3
     from: "0.5.0"
+  MapLibre:
+    url: https://github.com/maplibre/maplibre-gl-native-distribution
+    from: "6.29.0"
 
 targets:
   Grain:
@@ -63,6 +66,7 @@ targets:
         product: NukeUI
       - package: KeychainAccess
       - package: SwiftyH3
+      - package: MapLibre
     info:
       path: Grain/Info.plist
       properties:
