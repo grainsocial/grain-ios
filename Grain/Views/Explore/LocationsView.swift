@@ -10,6 +10,10 @@ import SwiftUI
 /// arrow in the sheet brings the index back with the map untouched, and a tap
 /// on another pin just swaps places. A push that came back to a map that had
 /// forgotten where it was made every second look start over.
+///
+/// A gallery opens over the whole screen, as on Android: the sheet steps
+/// aside for the push and comes back when the map does, with the place and
+/// the camera exactly as they were.
 struct LocationsView: View {
     /// A chip on explore names a place; the screen then opens on it, the map
     /// flying there instead of framing the world.
@@ -20,9 +24,8 @@ struct LocationsView: View {
     }
 
     @Environment(AuthManager.self) private var auth
+    @Environment(Router.self) private var router
     @State private var viewModel: LocationsViewModel
-    /// The sheet's own stack, so a gallery opens inside it and the map stays.
-    @State private var sheetRouter = Router()
     @State private var camera: MapCameraRequest?
     @State private var sheetPresented = false
     @State private var fitted = false
@@ -113,28 +116,26 @@ struct LocationsView: View {
         }
     }
 
+    /// The push goes on the tab's stack, so the gallery has the whole
+    /// window; the sheet would otherwise sit over it. `onAppear` brings the
+    /// sheet back when the gallery is popped.
+    private func openGallery(_ uri: String) {
+        router.push(.gallery(uri: uri))
+        sheetPresented = false
+    }
+
     private var sheet: some View {
-        @Bindable var sheetRouter = sheetRouter
-        return NavigationStack(path: $sheetRouter.path) {
-            Group {
-                if let place = viewModel.selected {
-                    PlaceSheet(place: place, onBack: viewModel.clearSelection) { uri in
-                        sheetRouter.push(.gallery(uri: uri))
-                    } onLoadMore: {
-                        await viewModel.loadMoreGalleries(auth: auth.authContext())
-                    }
-                } else {
-                    IndexSheet(viewModel: viewModel) { place in
-                        select(cell: place.h3Index, name: place.name, galleryCount: place.galleryCount)
-                    }
+        Group {
+            if let place = viewModel.selected {
+                PlaceSheet(place: place, onBack: viewModel.clearSelection, onOpenGallery: openGallery) {
+                    await viewModel.loadMoreGalleries(auth: auth.authContext())
+                }
+            } else {
+                IndexSheet(viewModel: viewModel) { place in
+                    select(cell: place.h3Index, name: place.name, galleryCount: place.galleryCount)
                 }
             }
-            .toolbarVisibility(.hidden, for: .navigationBar)
-            .navigationDestination(for: Route.self) { route in
-                RouteDestination(route: route, client: client)
-            }
         }
-        .environment(sheetRouter)
         .presentationDetents([.fraction(Self.peekFraction), .fraction(Self.maxFraction)])
         .presentationBackgroundInteraction(.enabled(upThrough: .fraction(Self.peekFraction)))
         .presentationDragIndicator(.visible)
