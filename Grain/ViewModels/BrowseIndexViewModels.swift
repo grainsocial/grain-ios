@@ -132,7 +132,7 @@ final class LocationsViewModel {
         )
         galleriesTask = Task {
             do {
-                let response = try await client.getFeed(feed: "location", location: cell, auth: auth)
+                let response = try await client.getFeed(feed: "location", location: cell, name: name, auth: auth)
                 guard !Task.isCancelled, selected?.h3Index == cell else { return }
                 galleryCursor = response.cursor
                 selected?.galleries = response.items ?? []
@@ -154,7 +154,7 @@ final class LocationsViewModel {
         guard let place = selected, let cursor = galleryCursor, !place.isLoadingMore, !place.isLoading else { return }
         selected?.isLoadingMore = true
         do {
-            let response = try await client.getFeed(feed: "location", cursor: cursor, location: place.h3Index, auth: auth)
+            let response = try await client.getFeed(feed: "location", cursor: cursor, location: place.h3Index, name: place.name, auth: auth)
             guard selected?.h3Index == place.h3Index else { return }
             galleryCursor = response.cursor
             selected?.galleries.append(contentsOf: response.items ?? [])

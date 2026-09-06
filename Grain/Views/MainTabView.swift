@@ -68,7 +68,7 @@ struct MainTabView: View {
                             .environment(feedRouter)
                     }
 
-                    Tab("Search", systemImage: "magnifyingglass", value: AppTab.search) {
+                    Tab("Explore", systemImage: "magnifyingglass", value: AppTab.search) {
                         SearchView(client: client)
                             .environment(searchRouter)
                     }

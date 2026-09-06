@@ -104,14 +104,24 @@ struct SearchView: View {
                     .modifier(ImageZoomOverlay(zoomState: zoomState))
                 }
             }
-            .navigationTitle("Search")
+            .navigationTitle("Explore")
+            // Inline, with the field always in the bar: the large title and a
+            // field that hid on scroll collapsed and re-expanded as the grid
+            // crossed the threshold, and the header jittered at the top.
+            // Matches the Android tab, where the field is a fixed bar.
+            .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(for: Route.self) { route in
                 RouteDestination(route: route, client: client)
             }
             // Applied outside `navigationDestination` so pushed screens see the
             // router too, not just the content sitting at the root of the stack.
             .environment(router)
-            .searchable(text: $searchText, isPresented: $searchIsPresented, prompt: "Search galleries & profiles")
+            .searchable(
+                text: $searchText,
+                isPresented: $searchIsPresented,
+                placement: .navigationBarDrawer(displayMode: .always),
+                prompt: "Search galleries and profiles"
+            )
             .searchScopes($viewModel.selectedTab, activation: .onSearchPresentation) {
                 ForEach(SearchViewModel.SearchTab.allCases, id: \.self) { tab in
                     Text(tab.rawValue).tag(tab)

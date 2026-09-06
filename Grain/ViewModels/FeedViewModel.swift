@@ -19,6 +19,9 @@ final class FeedViewModel {
     private let actor: String?
     private let camera: String?
     private let location: String?
+    /// The place's display name, sent with `location` so the feed covers every
+    /// cell the index folded into it.
+    private let locationName: String?
     private let tag: String?
     private let cacheKey: String?
 
@@ -28,6 +31,7 @@ final class FeedViewModel {
         actor: String? = nil,
         camera: String? = nil,
         location: String? = nil,
+        locationName: String? = nil,
         tag: String? = nil,
         cacheKey: String? = nil
     ) {
@@ -36,6 +40,7 @@ final class FeedViewModel {
         self.actor = actor
         self.camera = camera
         self.location = location
+        self.locationName = locationName
         self.tag = tag
         self.cacheKey = cacheKey
         if let cacheKey {
@@ -50,6 +55,7 @@ final class FeedViewModel {
             actor: (pinnedFeed.id == "following" || pinnedFeed.id == "foryou") ? userDID : nil,
             camera: pinnedFeed.type == "camera" ? pinnedFeed.feedValue : nil,
             location: pinnedFeed.type == "location" ? pinnedFeed.feedValue : nil,
+            locationName: pinnedFeed.type == "location" ? pinnedFeed.label : nil,
             tag: pinnedFeed.type == "hashtag" ? pinnedFeed.feedValue : nil,
             cacheKey: pinnedFeed.id
         )
@@ -69,6 +75,7 @@ final class FeedViewModel {
                     actor: actor,
                     camera: camera,
                     location: location,
+                    name: locationName,
                     tag: tag,
                     auth: auth
                 )
@@ -107,6 +114,7 @@ final class FeedViewModel {
                 actor: actor,
                 camera: camera,
                 location: location,
+                name: locationName,
                 auth: auth
             )
             galleries.append(contentsOf: response.items ?? [])

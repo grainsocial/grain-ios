@@ -94,6 +94,12 @@ extension XRPCClient {
         actor: String? = nil,
         camera: String? = nil,
         location: String? = nil,
+        // A place's display name, alongside `location`. The index folds
+        // several cells into one place and counts across all of them; the
+        // feed asked for one cell shows only that cell's galleries, so the
+        // name is what makes the feed match the count. The appview unions
+        // every cell sharing it.
+        name: String? = nil,
         tag: String? = nil,
         auth: AuthContext? = nil
     ) async throws -> GetFeedResponse {
@@ -109,6 +115,9 @@ extension XRPCClient {
         }
         if let location {
             params["location"] = location
+        }
+        if let name {
+            params["name"] = name
         }
         if let tag {
             params["tag"] = tag

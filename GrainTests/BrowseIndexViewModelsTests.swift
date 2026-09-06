@@ -143,6 +143,9 @@ final class BrowseIndexViewModelsTests: GrainTestCase {
         XCTAssertNotNil(vm.selected?.coordinate)
         XCTAssertEqual(log.lastQueryValue("feed", onPathContaining: "getFeed"), "location")
         XCTAssertEqual(log.lastQueryValue("location", onPathContaining: "getFeed"), "8a2a1072b59ffff")
+        // The index counts a place across every cell it folded in; the name
+        // is what makes the feed cover the same ground.
+        XCTAssertEqual(log.lastQueryValue("name", onPathContaining: "getFeed"), "Lisboa")
         // The index is still there underneath.
         XCTAssertEqual(vm.places.count, 1)
     }

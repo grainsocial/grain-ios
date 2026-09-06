@@ -173,7 +173,7 @@ struct LocationFeedView: View {
     private func loadInitial() async {
         isLoading = true
         do {
-            let response = try await client.getFeed(feed: "location", location: h3Index, auth: auth.authContext())
+            let response = try await client.getFeed(feed: "location", location: h3Index, name: locationName, auth: auth.authContext())
             galleries = response.items ?? []
             cursor = response.cursor
         } catch {}
@@ -184,7 +184,7 @@ struct LocationFeedView: View {
         guard !isLoading, let cursor else { return }
         isLoading = true
         do {
-            let response = try await client.getFeed(feed: "location", cursor: cursor, location: h3Index, auth: auth.authContext())
+            let response = try await client.getFeed(feed: "location", cursor: cursor, location: h3Index, name: locationName, auth: auth.authContext())
             galleries.append(contentsOf: response.items ?? [])
             self.cursor = response.cursor
         } catch {}
