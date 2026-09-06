@@ -59,6 +59,9 @@ struct LocationFeedView: View {
                             endPoint: .bottom
                         )
                     )
+                    .overlay(alignment: .topTrailing) {
+                        MapAttribution().padding(6)
+                    }
                     .fullScreenCover(isPresented: $mapFullScreen) {
                         ZStack(alignment: .topLeading) {
                             GrainMapView(
@@ -67,6 +70,9 @@ struct LocationFeedView: View {
                                 interactive: true
                             )
                             .ignoresSafeArea()
+                            .overlay(alignment: .topTrailing) {
+                                MapAttribution().padding(12)
+                            }
                             Button {
                                 mapFullScreen = false
                             } label: {

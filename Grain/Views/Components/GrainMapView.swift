@@ -55,9 +55,11 @@ struct GrainMapView: UIViewRepresentable {
         mapView.delegate = context.coordinator
         mapView.logoView.isHidden = true
         mapView.compassView.isHidden = true
-        // ODbL requires attribution wherever the basemap is shown. Top right,
-        // where the sheet can't cover it.
-        mapView.attributionButtonPosition = .topRight
+        // ODbL requires attribution wherever the basemap is shown, and
+        // `MapAttribution` draws it: the SDK's own button is placed relative
+        // to the content insets the sheet imposes, which put it a third of
+        // the way down the screen.
+        mapView.attributionButton.isHidden = true
         mapView.allowsTilting = false
         mapView.allowsRotating = false
         if let initialCenter {
@@ -331,4 +333,20 @@ func localityOf(_ name: String) -> String {
     let locality = name.split(separator: ",", maxSplits: 1, omittingEmptySubsequences: false).first
         .map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
     return locality.isEmpty ? name : locality
+}
+
+/// The attribution ODbL asks for wherever the basemap is shown. Small, out of
+/// the way, and a link to the licence.
+struct MapAttribution: View {
+    var body: some View {
+        Link(destination: URL(string: "https://www.openstreetmap.org/copyright")!) {
+            Text("© OpenStreetMap")
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 4))
+        }
+        .accessibilityLabel("OpenStreetMap copyright")
+    }
 }

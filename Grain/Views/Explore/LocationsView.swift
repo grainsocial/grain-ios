@@ -81,6 +81,12 @@ struct LocationsView: View {
                 }
             )
             .ignoresSafeArea()
+            // Under the bar, where neither the sheet nor the back button is.
+            .overlay(alignment: .topTrailing) {
+                MapAttribution()
+                    .padding(.trailing, 12)
+                    .padding(.top, 6)
+            }
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
