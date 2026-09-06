@@ -29,6 +29,9 @@ struct LocationsView: View {
     @State private var camera: MapCameraRequest?
     @State private var sheetPresented = false
     @State private var fitted = false
+    /// How deep this screen sits in the tab's stack, taken when it first
+    /// appears. The sheet belongs up only while nothing is pushed over it.
+    @State private var depth: Int?
 
     let client: XRPCClient
     let initialPlace: InitialPlace
@@ -81,8 +84,14 @@ struct LocationsView: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
-        .onAppear { sheetPresented = true }
+        // Not `onAppear` alone: a swipe back from a gallery fires it the
+        // moment the gesture starts, with the gallery still on the stack, and
+        // a sheet presented into a pop that might be cancelled fought the
+        // transition and left the screen stuck. The path only changes once a
+        // pop completes, so it is what decides.
+        .onAppear { syncSheet() }
         .onDisappear { sheetPresented = false }
+        .onChange(of: router.path.count) { syncSheet() }
         .sheet(isPresented: $sheetPresented) { sheet }
         .task {
             guard !isPreview else { return }
@@ -117,11 +126,30 @@ struct LocationsView: View {
     }
 
     /// The push goes on the tab's stack, so the gallery has the whole
-    /// window; the sheet would otherwise sit over it. `onAppear` brings the
-    /// sheet back when the gallery is popped.
+    /// window; the sheet would otherwise sit over it. `syncSheet` brings the
+    /// sheet back once the gallery is popped.
     private func openGallery(_ uri: String) {
         router.push(.gallery(uri: uri))
         sheetPresented = false
+    }
+
+    /// Present the sheet when this screen is the top of the stack, and only
+    /// then. Presenting waits a beat for the pop's animation to finish;
+    /// dismissing is immediate.
+    private func syncSheet() {
+        let count = router.path.count
+        if depth == nil {
+            depth = count
+        }
+        guard count == depth else {
+            sheetPresented = false
+            return
+        }
+        Task {
+            try? await Task.sleep(for: .milliseconds(250))
+            guard router.path.count == depth else { return }
+            sheetPresented = true
+        }
     }
 
     private var sheet: some View {
