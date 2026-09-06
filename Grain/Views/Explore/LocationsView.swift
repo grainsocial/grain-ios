@@ -256,8 +256,10 @@ private struct SheetHeading: View {
         }
         .padding(.leading, onBack == nil ? 16 : 6)
         .padding(.trailing, 16)
-        .padding(.top, 14)
-        .padding(.bottom, 10)
+        // Room under the drag indicator and over the grid, so the heading
+        // reads as the sheet's own rather than the first row's.
+        .padding(.top, 26)
+        .padding(.bottom, 18)
     }
 }
 
