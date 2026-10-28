@@ -1,0 +1,35 @@
+# Mirrors main and every v* tag to github.com/grainsocial/grain-ios, which
+# the iOS builds run from. knotless://grain.social/grain-ios is the source of
+# truth: nothing pushes the other way, and main on GitHub only ever
+# fast-forwards.
+#
+# A run pushes the ref it ran for, as knotless has it when the run starts, so
+# a run that a newer push overtakes still leaves GitHub at the newest commit.
+# Tags are fetched as tags, so an annotated tag stays annotated.
+#
+# GITHUB_DEPLOY_KEY is a write deploy key on the GitHub repository, granted to
+# pushes to main and v* tags in the runner's secrets file on
+# runner.knotless.dev (/etc/knotless/run-secrets.json, under
+# did:plc:e7rftrdyz5e2rw4y6ocszew2/grain-ios).
+on:
+  push:
+    refs: [refs/heads/main, refs/tags/v*]
+image: alpine:3.22
+secrets: [GITHUB_DEPLOY_KEY]
+env:
+  SOURCE: https://knotless.dev/grain.social/grain-ios.git
+  MIRROR: git@github.com:grainsocial/grain-ios.git
+steps:
+  - name: tools
+    run: |
+      apk add --no-cache git openssh-client
+      mkdir -p ~/.ssh && chmod 700 ~/.ssh
+      printf '%s\n' "$GITHUB_DEPLOY_KEY" > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
+      # GitHub's published host key (api.github.com/meta), pinned.
+      echo 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' > ~/.ssh/known_hosts
+  - name: mirror
+    run: |
+      git init -q --bare /mirror && cd /mirror
+      git fetch -q "$SOURCE" "+$KNOTLESS_RUN_REF:$KNOTLESS_RUN_REF"
+      echo "$KNOTLESS_RUN_REF is at $(git rev-parse "$KNOTLESS_RUN_REF")"
+      git push "$MIRROR" "$KNOTLESS_RUN_REF:$KNOTLESS_RUN_REF"
