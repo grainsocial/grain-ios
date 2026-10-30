@@ -7,14 +7,15 @@
 # a run that a newer push overtakes still leaves GitHub at the newest commit.
 # Tags are fetched as tags, so an annotated tag stays annotated.
 #
-# GITHUB_DEPLOY_KEY is a write deploy key on the GitHub repository, granted to
-# pushes to main and v* tags in the runner's secrets file on
-# runner.knotless.dev (/etc/knotless/run-secrets.json, under
-# did:plc:e7rftrdyz5e2rw4y6ocszew2/grain-ios).
+# GITHUB_DEPLOY_KEY is a write deploy key on the GitHub repository, sealed to
+# ci.knotless.dev, the runner on knotless.dev's own host, for pushes to main
+# and v* tags (`knotless secret knotless://grain.social/grain-ios set
+# GITHUB_DEPLOY_KEY --runner ci.knotless.dev`). The workflow runs there alone.
 on:
   push:
     refs: [refs/heads/main, refs/tags/v*]
 image: alpine:3.22
+runners: [ci.knotless.dev]
 secrets: [GITHUB_DEPLOY_KEY]
 env:
   SOURCE: https://knotless.dev/grain.social/grain-ios.git
