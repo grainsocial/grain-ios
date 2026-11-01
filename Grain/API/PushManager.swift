@@ -5,7 +5,7 @@ import UserNotifications
 
 private let logger = Logger(subsystem: "social.grain.grain", category: "Push")
 
-/// Manages push notification registration and token delivery to the hatk server.
+/// Manages push notification registration and token delivery to grain-serve.
 @Observable
 @MainActor
 final class PushManager: NSObject {
@@ -68,8 +68,8 @@ final class PushManager: NSObject {
         let client = XRPCClient(baseURL: AuthManager.serverURL)
         do {
             try await client.procedure(
-                "dev.hatk.push.unregisterToken",
-                input: UnregisterTokenInput(token: token),
+                "social.grain.notification.unregisterPush",
+                input: PushDevice(token: token),
                 auth: auth
             )
             logger.info("Push token unregistered from server")
@@ -96,8 +96,8 @@ final class PushManager: NSObject {
         let client = authManager.makeClient()
         do {
             try await client.procedure(
-                "dev.hatk.push.registerToken",
-                input: RegisterTokenInput(token: token, platform: "apns"),
+                "social.grain.notification.registerPush",
+                input: PushDevice(token: token),
                 auth: auth
             )
             logger.info("Push token registered with server")
@@ -107,11 +107,19 @@ final class PushManager: NSObject {
     }
 }
 
-private struct RegisterTokenInput: Encodable {
+/// A device, as `social.grain.notification.registerPush` and
+/// `unregisterPush` name it: the service that pushes to it (grain-serve),
+/// its APNs token, and the app it runs.
+struct PushDevice: Encodable {
+    let serviceDid: String
     let token: String
     let platform: String
-}
+    let appId: String
 
-private struct UnregisterTokenInput: Encodable {
-    let token: String
+    init(token: String) {
+        serviceDid = AuthManager.appviewDID
+        self.token = token
+        platform = "ios"
+        appId = Bundle.main.bundleIdentifier ?? "social.grain.grain"
+    }
 }

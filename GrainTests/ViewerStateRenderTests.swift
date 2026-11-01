@@ -62,7 +62,7 @@ final class ViewerStateRenderTests: GrainTestCase {
         ]
 
         for viewer in relationships {
-            MockURLProtocol.respondByPath(["getActorProfile": Self.profile(viewer: viewer)], fallback: "{}")
+            MockURLProtocol.respondByPath(["actor.getProfile": Self.profile(viewer: viewer)], fallback: "{}")
             let env = TestEnvironment()
             ViewRender.render(
                 ProfileView(client: env.client, did: "did:plc:someone", isRoot: false)
@@ -77,7 +77,7 @@ final class ViewerStateRenderTests: GrainTestCase {
     /// A profile still has to render for someone with no account — just
     /// without follow, block or report.
     func testAProfileRendersWhileSignedOut() {
-        MockURLProtocol.respondByPath(["getActorProfile": Self.profile(viewer: "{}")], fallback: "{}")
+        MockURLProtocol.respondByPath(["actor.getProfile": Self.profile(viewer: "{}")], fallback: "{}")
         let env = TestEnvironment(authenticated: false)
 
         ViewRender.render(

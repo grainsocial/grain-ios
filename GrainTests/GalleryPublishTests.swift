@@ -165,7 +165,7 @@ final class GalleryPublishTests: GrainTestCase {
                 }
                 return respond(#"{"results":[]}"#)
             }
-            if path.hasSuffix("dev.hatk.getRecord") {
+            if path.hasSuffix("com.atproto.repo.getRecord") {
                 return galleryExists
                     ? respond(#"{"uri":"at://did:plc:test/social.grain.gallery/abc","cid":"bafycid"}"#)
                     : respond(#"{"error":"NotFound"}"#, status: 404)
@@ -278,7 +278,7 @@ final class GalleryPublishTests: GrainTestCase {
 
         XCTAssertTrue(published, "the gallery is on the PDS, so this is a success")
         XCTAssertEqual(log.count("com.atproto.repo.applyWrites"), 1, "no second commit attempt")
-        XCTAssertEqual(log.count("dev.hatk.getRecord"), 1, "we asked whether it landed")
+        XCTAssertEqual(log.count("com.atproto.repo.getRecord"), 1, "we asked whether it landed")
         XCTAssertTrue(store.loadAll().isEmpty)
     }
 

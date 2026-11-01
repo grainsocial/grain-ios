@@ -223,9 +223,11 @@ final class NetworkSideEffectTests: GrainTestCase {
         manager.didRegisterForRemoteNotifications(deviceToken: Data([0xDE, 0xAD, 0xBE, 0xEF]))
         await waitForRequest()
 
-        XCTAssertEqual(log.paths.last, "/xrpc/dev.hatk.push.registerToken")
+        XCTAssertEqual(log.paths.last, "/xrpc/social.grain.notification.registerPush")
         XCTAssertEqual(log.lastBody?["token"] as? String, "deadbeef")
-        XCTAssertEqual(log.lastBody?["platform"] as? String, "apns")
+        XCTAssertEqual(log.lastBody?["platform"] as? String, "ios")
+        XCTAssertEqual(log.lastBody?["serviceDid"] as? String, AuthManager.appviewDID)
+        XCTAssertEqual(log.lastBody?["appId"] as? String, Bundle.main.bundleIdentifier)
     }
 
     /// Signing out has to withdraw the token, or the device keeps getting the
@@ -245,8 +247,9 @@ final class NetworkSideEffectTests: GrainTestCase {
         }
         await manager.unregisterToken(auth: context)
 
-        XCTAssertEqual(log.paths.last, "/xrpc/dev.hatk.push.unregisterToken")
+        XCTAssertEqual(log.paths.last, "/xrpc/social.grain.notification.unregisterPush")
         XCTAssertEqual(log.lastBody?["token"] as? String, "0102")
+        XCTAssertEqual(log.lastBody?["platform"] as? String, "ios")
     }
 
     /// A registration the server rejects is swallowed — there is nothing the
@@ -260,7 +263,7 @@ final class NetworkSideEffectTests: GrainTestCase {
         manager.didRegisterForRemoteNotifications(deviceToken: Data([0x01]))
         await waitForRequest()
 
-        XCTAssertEqual(log.paths.last, "/xrpc/dev.hatk.push.registerToken")
+        XCTAssertEqual(log.paths.last, "/xrpc/social.grain.notification.registerPush")
     }
 
     /// The manager only holds its `AuthManager` weakly, so a token arriving

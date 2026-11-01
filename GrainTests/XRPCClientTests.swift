@@ -48,9 +48,9 @@ final class XRPCClientTests: GrainTestCase {
         let seen = Recorder()
         respond { seen.record($0) }
 
-        _ = try await makeClient().query("social.grain.unspecced.getFeed", as: Echo.self)
+        _ = try await makeClient().query("social.grain.feed.getFeed", as: Echo.self)
 
-        XCTAssertEqual(seen.url?.path, "/xrpc/social.grain.unspecced.getFeed")
+        XCTAssertEqual(seen.url?.path, "/xrpc/social.grain.feed.getFeed")
         XCTAssertEqual(seen.method, "GET")
     }
 
@@ -59,7 +59,7 @@ final class XRPCClientTests: GrainTestCase {
         respond { seen.record($0) }
 
         _ = try await makeClient().query(
-            "social.grain.unspecced.getFeed",
+            "social.grain.feed.getFeed",
             params: ["feed": "recent", "limit": "30"],
             as: Echo.self
         )
@@ -76,7 +76,7 @@ final class XRPCClientTests: GrainTestCase {
         respond { seen.record($0) }
 
         _ = try await makeClient().query(
-            "social.grain.unspecced.searchGalleries", params: ["q": "café film"], as: Echo.self
+            "social.grain.gallery.searchGalleries", params: ["q": "café film"], as: Echo.self
         )
 
         XCTAssertFalse(try XCTUnwrap(seen.url?.absoluteString.contains("café")), "The raw term should be percent-encoded")
@@ -89,7 +89,7 @@ final class XRPCClientTests: GrainTestCase {
         respond { seen.record($0) }
 
         _ = try await makeClient().procedure(
-            "dev.hatk.putPreference", input: Input(key: "includeExif"), as: Echo.self
+            "social.grain.notification.updateSeen", input: Input(key: "includeExif"), as: Echo.self
         )
 
         XCTAssertEqual(seen.method, "POST")
@@ -116,7 +116,7 @@ final class XRPCClientTests: GrainTestCase {
     func testASuccessfulQueryDecodesItsBody() async throws {
         respond(body: #"{"value": "decoded"}"#)
 
-        let result = try await makeClient().query("dev.hatk.thing", as: Echo.self)
+        let result = try await makeClient().query("social.grain.feed.describeFeeds", as: Echo.self)
 
         XCTAssertEqual(result, Echo(value: "decoded"))
     }
@@ -127,7 +127,7 @@ final class XRPCClientTests: GrainTestCase {
         respond(body: #"{"unexpected": true}"#)
 
         do {
-            _ = try await makeClient().query("dev.hatk.thing", as: Echo.self)
+            _ = try await makeClient().query("social.grain.feed.describeFeeds", as: Echo.self)
             XCTFail("Expected a decoding error")
         } catch XRPCError.decodingError {
             // expected
@@ -140,7 +140,7 @@ final class XRPCClientTests: GrainTestCase {
         respond(status: 503, body: #"{"error": "Unavailable"}"#)
 
         do {
-            _ = try await makeClient().query("dev.hatk.thing", as: Echo.self)
+            _ = try await makeClient().query("social.grain.feed.describeFeeds", as: Echo.self)
             XCTFail("Expected an HTTP error")
         } catch let XRPCError.httpError(statusCode, body) {
             XCTAssertEqual(statusCode, 503)
@@ -155,7 +155,7 @@ final class XRPCClientTests: GrainTestCase {
         respond(status: 401)
 
         do {
-            _ = try await makeClient().query("dev.hatk.thing", as: Echo.self)
+            _ = try await makeClient().query("social.grain.feed.describeFeeds", as: Echo.self)
             XCTFail("Expected unauthorized")
         } catch XRPCError.unauthorized {
             // expected
@@ -191,7 +191,7 @@ final class XRPCClientTests: GrainTestCase {
             return AuthContext(accessToken: "fresh-token", dpop: dpop, did: "did:plc:test", pds: URL(string: "https://test.local")!)
         }
 
-        let result = try await client.query("dev.hatk.thing", as: Echo.self)
+        let result = try await client.query("social.grain.feed.describeFeeds", as: Echo.self)
 
         XCTAssertEqual(result, Echo(value: "after refresh"))
         XCTAssertEqual(refreshed.count, 1)
@@ -207,7 +207,7 @@ final class XRPCClientTests: GrainTestCase {
         }
 
         do {
-            _ = try await client.query("dev.hatk.thing", as: Echo.self)
+            _ = try await client.query("social.grain.feed.describeFeeds", as: Echo.self)
             XCTFail("Expected unauthorized")
         } catch XRPCError.unauthorized {
             // expected
@@ -228,7 +228,7 @@ final class XRPCClientTests: GrainTestCase {
         let client = XRPCClient(baseURL: baseURL, session: MockURLProtocol.mockSession()) { () -> AuthContext? in nil }
 
         do {
-            _ = try await client.query("dev.hatk.thing", as: Echo.self)
+            _ = try await client.query("social.grain.feed.describeFeeds", as: Echo.self)
             XCTFail("Expected unauthorized")
         } catch XRPCError.unauthorized {
             XCTAssertEqual(attempts.count, 1)
@@ -251,7 +251,7 @@ final class XRPCClientTests: GrainTestCase {
         let seen = Recorder()
         respond { seen.record($0) }
 
-        _ = try await makeClient().query("dev.hatk.thing", auth: auth, as: Echo.self)
+        _ = try await makeClient().query("social.grain.feed.describeFeeds", auth: auth, as: Echo.self)
 
         XCTAssertEqual(seen.headers?["Authorization"], "DPoP token")
         XCTAssertFalse(seen.headers?["DPoP"]?.isEmpty ?? true, "Every authenticated request needs a fresh proof")
@@ -276,7 +276,7 @@ final class XRPCClientTests: GrainTestCase {
             return (Data(#"{"value": "with nonce"}"#.utf8), response)
         }
 
-        let result = try await makeClient().query("dev.hatk.thing", auth: auth, as: Echo.self)
+        let result = try await makeClient().query("social.grain.feed.describeFeeds", auth: auth, as: Echo.self)
 
         XCTAssertEqual(result, Echo(value: "with nonce"))
         XCTAssertEqual(attempts.count, 2)
@@ -305,7 +305,7 @@ final class XRPCClientTests: GrainTestCase {
             return (Data(#"{"value": "recovered"}"#.utf8), response)
         }
 
-        let result = try await makeClient().query("dev.hatk.thing", auth: auth, as: Echo.self)
+        let result = try await makeClient().query("social.grain.feed.describeFeeds", auth: auth, as: Echo.self)
 
         XCTAssertEqual(result, Echo(value: "recovered"))
     }
@@ -315,7 +315,7 @@ final class XRPCClientTests: GrainTestCase {
         respond(status: 400, body: #"{"error": "InvalidRequest"}"#)
 
         do {
-            _ = try await makeClient().query("dev.hatk.thing", as: Echo.self)
+            _ = try await makeClient().query("social.grain.feed.describeFeeds", as: Echo.self)
             XCTFail("Expected an HTTP error")
         } catch let XRPCError.httpError(statusCode, _) {
             XCTAssertEqual(statusCode, 400)
@@ -329,14 +329,14 @@ final class XRPCClientTests: GrainTestCase {
     func testAVoidProcedureSucceedsOnA2xx() async throws {
         respond(status: 204, body: "")
 
-        try await makeClient().procedure("dev.hatk.putPreference", input: Input(key: "k"))
+        try await makeClient().procedure("social.grain.notification.updateSeen", input: Input(key: "k"))
     }
 
     func testAVoidProcedureThrowsOnAServerError() async {
         respond(status: 500, body: "")
 
         do {
-            try await makeClient().procedure("dev.hatk.putPreference", input: Input(key: "k"))
+            try await makeClient().procedure("social.grain.notification.updateSeen", input: Input(key: "k"))
             XCTFail("Expected an HTTP error")
         } catch let XRPCError.httpError(statusCode, _) {
             XCTAssertEqual(statusCode, 500)
@@ -359,7 +359,7 @@ final class XRPCClientTests: GrainTestCase {
             return (status == 400 ? Data(#"{"error": "use_dpop_nonce"}"#.utf8) : Data(), response)
         }
 
-        try await makeClient().procedure("dev.hatk.putPreference", input: Input(key: "k"), auth: auth)
+        try await makeClient().procedure("social.grain.notification.updateSeen", input: Input(key: "k"), auth: auth)
 
         XCTAssertEqual(attempts.count, 2)
     }
@@ -376,7 +376,7 @@ final class XRPCClientTests: GrainTestCase {
         }
         let client = XRPCClient(baseURL: baseURL, session: MockURLProtocol.mockSession()) { () -> AuthContext? in auth }
 
-        try await client.procedure("dev.hatk.putPreference", input: Input(key: "k"))
+        try await client.procedure("social.grain.notification.updateSeen", input: Input(key: "k"))
 
         XCTAssertEqual(attempts.count, 2)
     }
@@ -385,7 +385,7 @@ final class XRPCClientTests: GrainTestCase {
         respond(status: 401, body: "")
 
         do {
-            try await makeClient().procedure("dev.hatk.putPreference", input: Input(key: "k"))
+            try await makeClient().procedure("social.grain.notification.updateSeen", input: Input(key: "k"))
             XCTFail("Expected unauthorized")
         } catch XRPCError.unauthorized {
             // expected

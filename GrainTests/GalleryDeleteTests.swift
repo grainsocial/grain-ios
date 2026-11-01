@@ -46,7 +46,8 @@ struct GalleryDeleteTests {
             let auth = AuthManager(session: MockURLProtocol.mockSession())
             await account.activate(auth)
 
-            MockURLProtocol.respondWithJSON("{}")
+            // An empty repo to list, and an empty answer to each write.
+            MockURLProtocol.respondWithJSON(#"{"records": []}"#)
             defer { MockURLProtocol.handler = nil }
 
             let result = await GalleryService.delete(

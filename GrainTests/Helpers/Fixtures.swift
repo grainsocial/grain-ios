@@ -195,23 +195,13 @@ extension Fixtures {
     """
 
     static let preferences = """
-    {"preferences": {
-      "pinnedFeeds": [
+    {"preferences": [
+      {"$type": "social.grain.actor.defs#pinnedFeedsPref", "items": [
         {"id": "recent", "label": "Recent", "type": "feed", "path": "/"},
         {"id": "following", "label": "Following", "type": "feed", "path": "/feeds/following"},
         {"id": "camera:Leica M6", "label": "Leica M6", "type": "camera", "path": "/c/leica"}
-      ],
-      "includeExif": true,
-      "includeLocation": true
-    }}
-    """
-
-    static let labelDefinitions = """
-    {"definitions": [
-      {"identifier": "nudity", "blurs": "media", "defaultSetting": "warn",
-       "locales": [{"name": "Nudity"}]},
-      {"identifier": "spoiler", "blurs": "content", "defaultSetting": "warn",
-       "locales": [{"name": "Spoiler"}]}
+      ]},
+      {"$type": "social.grain.actor.defs#photoMetadataPref", "includeExif": true, "includeLocation": true}
     ]}
     """
 
@@ -241,29 +231,28 @@ extension Fixtures {
         [
             "getFeed": feed,
             "getGallery": galleryResponse,
-            "getCommentThread": commentThread,
+            "comment.getThread": commentThread,
             "getPreferences": preferences,
             "getLocations": locations,
             "getCameras": cameras,
             "searchGalleries": feed,
-            "searchProfiles": actorList,
+            "actor.searchActors": actorList,
             "searchActorsTypeahead": #"{"actors": []}"#,
-            "getActorProfile": profileDetailed,
-            "getProfile": profileDetailed,
-            "getStoryAuthors": storyAuthors,
-            "getStoryArchive": stories,
+            "actor.getProfile": profileDetailed,
+            "story.getAuthors": storyAuthors,
+            "story.getArchive": stories,
             "getStories": stories,
             "getStory": #"{"story": null}"#,
-            "getNotifications": notifications,
-            "describeLabels": labelDefinitions,
+            "listNotifications": notifications,
+            "getUnreadCount": #"{"count": 0}"#,
             "getKnownFollowers": actorList,
-            "getGalleryFavorites": actorList,
+            "gallery.getFavorites": actorList,
             "getFollowers": actorList,
             "getFollowing": actorList,
             "getSuggestedFollows": suggestedFollows,
             "getBlocks": blockList,
             "getMutes": muteList,
-            "getActorFavorites": feed,
+            "actor.getFavorites": feed,
             "getActorGalleries": feed,
         ]
     }

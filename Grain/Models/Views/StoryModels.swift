@@ -36,7 +36,7 @@ struct StoryViewerState: Codable, Sendable {
     var viewed: Bool?
 }
 
-/// social.grain.unspecced.getStoryAuthors#storyAuthor
+/// social.grain.story.defs#storyAuthor
 struct GrainStoryAuthor: Codable, Sendable, Identifiable {
     let profile: GrainProfile
     let storyCount: Int

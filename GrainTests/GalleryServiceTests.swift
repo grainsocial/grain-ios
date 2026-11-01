@@ -2,13 +2,12 @@ import CryptoKit
 @testable import Grain
 import XCTest
 
-/// Pins the endpoint a gallery delete goes to.
+/// Pins what a gallery delete removes from the account's repo.
 ///
 /// Deleting the `social.grain.gallery` record on its own leaves the photos,
-/// gallery items, exif records, and comments behind — which is what shipped
-/// from six of the seven delete actions until 2026-08-14. The bug is invisible
-/// from the client (the record does disappear), so it's worth asserting the
-/// request lands on the endpoint that walks the whole graph.
+/// gallery items, exif records, and comments behind. The bug is invisible
+/// from the client (the record does disappear), so it's worth asserting
+/// every record that goes with the gallery is deleted with it.
 final class GalleryServiceTests: GrainTestCase {
     private var recorder: Recorder!
 
@@ -17,18 +16,53 @@ final class GalleryServiceTests: GrainTestCase {
         super.tearDown()
     }
 
+    private static let gallery = "at://did:plc:test/social.grain.gallery/g1"
+
+    /// What the account's repo holds, by collection, as `listRecords` pages.
+    private static let repo: [String: String] = [
+        "social.grain.gallery.item": #"""
+        {"records": [
+          {"uri": "at://did:plc:test/social.grain.gallery.item/i1", "value": {"gallery": "at://did:plc:test/social.grain.gallery/g1", "item": "at://did:plc:test/social.grain.photo/p1"}},
+          {"uri": "at://did:plc:test/social.grain.gallery.item/i2", "value": {"gallery": "at://did:plc:test/social.grain.gallery/g1", "item": "at://did:plc:test/social.grain.photo/p2"}},
+          {"uri": "at://did:plc:test/social.grain.gallery.item/i3", "value": {"gallery": "at://did:plc:test/social.grain.gallery/other", "item": "at://did:plc:test/social.grain.photo/p2"}}
+        ]}
+        """#,
+        "social.grain.photo.exif": #"""
+        {"records": [
+          {"uri": "at://did:plc:test/social.grain.photo.exif/e1", "value": {"photo": "at://did:plc:test/social.grain.photo/p1"}},
+          {"uri": "at://did:plc:test/social.grain.photo.exif/e2", "value": {"photo": "at://did:plc:test/social.grain.photo/p2"}}
+        ]}
+        """#,
+        "social.grain.favorite": #"""
+        {"records": [
+          {"uri": "at://did:plc:test/social.grain.favorite/f1", "value": {"subject": "at://did:plc:test/social.grain.gallery/g1"}},
+          {"uri": "at://did:plc:test/social.grain.favorite/f2", "value": {"subject": "at://did:plc:else/social.grain.gallery/x"}}
+        ]}
+        """#,
+        "social.grain.comment": #"""
+        {"records": [
+          {"uri": "at://did:plc:test/social.grain.comment/c1", "value": {"subject": "at://did:plc:test/social.grain.gallery/g1", "text": "hi"}}
+        ]}
+        """#,
+    ]
+
     private func makeClient(status: Int = 200) -> XRPCClient {
         let recorder = Recorder()
         self.recorder = recorder
         MockURLProtocol.handler = { request in
             recorder.record(path: request.url!.path, body: Self.body(of: request))
+            let collection = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?
+                .queryItems?.first { $0.name == "collection" }?.value
+            let body = request.url!.path.hasSuffix("listRecords")
+                ? Self.repo[collection ?? ""] ?? #"{"records": []}"#
+                : "{}"
             let response = HTTPURLResponse(
                 url: request.url!,
                 statusCode: status,
                 httpVersion: nil,
                 headerFields: ["Content-Type": "application/json"]
             )!
-            return (Data("{}".utf8), response)
+            return (Data(body.utf8), response)
         }
         return XRPCClient(baseURL: URL(string: "https://example.test")!, session: MockURLProtocol.mockSession())
     }
@@ -37,39 +71,58 @@ final class GalleryServiceTests: GrainTestCase {
         AuthContext(accessToken: "test-token", dpop: DPoP(privateKey: P256.Signing.PrivateKey()), did: "did:plc:test", pds: URL(string: "https://test.local")!)
     }
 
+    /// The deletes the one commit carried, as `collection/rkey`.
+    private func deleted() throws -> [String] {
+        let index = try XCTUnwrap(recorder.paths.firstIndex { $0.hasSuffix("com.atproto.repo.applyWrites") })
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: recorder.bodies[recorder.bodyIndex(ofPath: index)]) as? [String: Any])
+        let writes = try XCTUnwrap(json["writes"] as? [[String: Any]])
+        XCTAssertTrue(writes.allSatisfy { $0["$type"] as? String == "com.atproto.repo.applyWrites#delete" })
+        return writes.map { "\($0["collection"] as? String ?? "")/\($0["rkey"] as? String ?? "")" }
+    }
+
     // MARK: - Tests
 
-    func testDeleteCallsTheCascadingEndpointNotAPlainRecordDelete() async throws {
+    /// The exif of the photos it alone places, its items, those photos, the
+    /// account's favorites and comments on it, then the gallery: children
+    /// first, in one commit.
+    func testDeleteRemovesTheGalleryAndWhatGoesWithItInOneCommit() async throws {
         let client = makeClient()
 
-        try await GalleryService.delete(
-            galleryUri: "at://did:plc:test/social.grain.gallery/3jzfcijpj2z2a",
-            client: client,
-            auth: makeAuth()
-        )
+        try await GalleryService.delete(galleryUri: Self.gallery, client: client, auth: makeAuth())
 
-        XCTAssertEqual(recorder.paths.count, 1)
-        XCTAssertTrue(
-            recorder.paths[0].hasSuffix("social.grain.unspecced.deleteGallery"),
-            "expected the cascading endpoint, got \(recorder.paths[0])"
-        )
+        XCTAssertEqual(try deleted(), [
+            "social.grain.photo.exif/e1",
+            "social.grain.gallery.item/i1",
+            "social.grain.gallery.item/i2",
+            "social.grain.photo/p1",
+            "social.grain.favorite/f1",
+            "social.grain.comment/c1",
+            "social.grain.gallery/g1",
+        ])
         XCTAssertFalse(
             recorder.paths.contains { $0.hasSuffix("com.atproto.repo.deleteRecord") },
             "deleteRecord orphans the gallery's photos, items, exif, and comments"
         )
     }
 
-    func testDeleteSendsTheRecordKeyFromTheUri() async throws {
+    /// A photo another gallery also places stays, with its exif.
+    func testAPhotoAnotherGalleryPlacesIsKept() async throws {
         let client = makeClient()
 
-        try await GalleryService.delete(
-            galleryUri: "at://did:plc:test/social.grain.gallery/3jzfcijpj2z2a",
-            client: client,
-            auth: makeAuth()
-        )
+        try await GalleryService.delete(galleryUri: Self.gallery, client: client, auth: makeAuth())
 
-        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: recorder.bodies[0]) as? [String: Any])
-        XCTAssertEqual(json["rkey"] as? String, "3jzfcijpj2z2a")
+        let going = try deleted()
+        XCTAssertFalse(going.contains("social.grain.photo/p2"))
+        XCTAssertFalse(going.contains("social.grain.photo.exif/e2"))
+    }
+
+    /// The deletes are then indexed, so the gallery leaves the feeds at once.
+    func testTheDeletesAreIndexed() async throws {
+        let client = makeClient()
+
+        try await GalleryService.delete(galleryUri: Self.gallery, client: client, auth: makeAuth())
+
+        XCTAssertTrue(recorder.paths.last?.hasSuffix("social.grain.sync.indexRecords") ?? false)
     }
 
     /// Callers use `try?` and drop the error, so the failure has to at least
@@ -78,11 +131,7 @@ final class GalleryServiceTests: GrainTestCase {
         let client = makeClient(status: 500)
 
         do {
-            try await GalleryService.delete(
-                galleryUri: "at://did:plc:test/social.grain.gallery/3jzfcijpj2z2a",
-                client: client,
-                auth: makeAuth()
-            )
+            try await GalleryService.delete(galleryUri: Self.gallery, client: client, auth: makeAuth())
             XCTFail("expected the failure to propagate")
         } catch {
             // expected
@@ -96,14 +145,25 @@ private final class Recorder: @unchecked Sendable {
     private let lock = NSLock()
     private var storedPaths: [String] = []
     private var storedBodies: [Data] = []
+    private var bodyIndices: [Int?] = []
 
     func record(path: String, body: Data?) {
         lock.lock()
         defer { lock.unlock() }
         storedPaths.append(path)
         if let body {
+            bodyIndices.append(storedBodies.count)
             storedBodies.append(body)
+        } else {
+            bodyIndices.append(nil)
         }
+    }
+
+    /// Where in `bodies` the body of the request at `index` is.
+    func bodyIndex(ofPath index: Int) -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return bodyIndices[index] ?? 0
     }
 
     var paths: [String] {

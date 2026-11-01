@@ -1,10 +1,14 @@
 import Foundation
 
-/// social.grain.unspecced.getNotifications#notificationItem
+/// social.grain.notification.defs#notificationItem
 struct GrainNotification: Codable, Sendable, Identifiable {
     let uri: String
     let reason: String
     let createdAt: String
+    /// When the index first held it: what the list is ordered by.
+    var indexedAt: String?
+    /// Whether the viewer had marked their notifications seen since it came in.
+    var isRead: Bool?
     let author: GrainProfile
     var galleryUri: String?
     var galleryTitle: String?

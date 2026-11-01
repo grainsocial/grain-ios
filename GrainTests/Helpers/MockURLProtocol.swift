@@ -74,10 +74,10 @@ extension MockURLProtocol {
     /// and a single canned body means every call but one fails to decode — so
     /// the screen settles on its error branch rather than the loaded one this
     /// is meant to exercise. Keys are matched as substrings of the request
-    /// path, so `"getFeed"` matches `/xrpc/dev.hatk.getFeed`.
+    /// path, so `"getFeed"` matches `/xrpc/social.grain.feed.getFeed`.
     ///
-    /// Longest key first, so `getStoryAuthors` isn't answered by the route for
-    /// `getStory` — dictionary order would otherwise decide it at random.
+    /// Longest key first, so `searchActorsTypeahead` isn't answered by the route for
+    /// `searchActors` — dictionary order would otherwise decide it at random.
     static func respondByPath(_ routes: [String: String], fallback: String = "{}") {
         let ordered = routes.sorted { $0.key.count > $1.key.count }
         handler = { request in

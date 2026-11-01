@@ -52,10 +52,10 @@ final class PDSCallTests: GrainTestCase {
         let seen = Recorder()
         respond { seen.record($0) }
 
-        _ = try await makeClient().query("social.grain.unspecced.getFeed", params: ["feed": "recent"], auth: auth, as: Echo.self)
+        _ = try await makeClient().query("social.grain.feed.getFeed", params: ["feed": "recent"], auth: auth, as: Echo.self)
 
         XCTAssertEqual(seen.url?.host, "pds.example")
-        XCTAssertEqual(seen.url?.path, "/xrpc/social.grain.unspecced.getFeed")
+        XCTAssertEqual(seen.url?.path, "/xrpc/social.grain.feed.getFeed")
         XCTAssertEqual(seen.headers?["atproto-proxy"], "\(AuthManager.appviewDID)#grain_appview")
         XCTAssertEqual(seen.headers?["Authorization"], "DPoP token")
     }
@@ -77,7 +77,7 @@ final class PDSCallTests: GrainTestCase {
         let seen = Recorder()
         respond { seen.record($0) }
 
-        _ = try await makeClient().query("social.grain.unspecced.getFeed", as: Echo.self)
+        _ = try await makeClient().query("social.grain.feed.getFeed", as: Echo.self)
 
         XCTAssertEqual(seen.url?.host, "test.local")
         XCTAssertNil(seen.headers?["Authorization"])
@@ -92,11 +92,11 @@ final class PDSCallTests: GrainTestCase {
         let seen = Recorder()
         respond { seen.record($0) }
 
-        _ = try await makeClient().query("social.grain.unspecced.getFeed", params: ["limit": "3"], auth: auth, as: Echo.self)
+        _ = try await makeClient().query("social.grain.feed.getFeed", params: ["limit": "3"], auth: auth, as: Echo.self)
 
         let claims = try proofClaims(of: seen.headers?["DPoP"])
         XCTAssertEqual(claims["htm"] as? String, "GET")
-        XCTAssertEqual(claims["htu"] as? String, "https://proof.example/xrpc/social.grain.unspecced.getFeed")
+        XCTAssertEqual(claims["htu"] as? String, "https://proof.example/xrpc/social.grain.feed.getFeed")
         XCTAssertEqual(claims["ath"] as? String, OAuthClient.challenge(for: "token"))
     }
 
@@ -118,8 +118,8 @@ final class PDSCallTests: GrainTestCase {
             return (Data(#"{"value": "ok"}"#.utf8), response)
         }
 
-        _ = try await makeClient().query("social.grain.unspecced.getFeed", auth: auth, as: Echo.self)
-        _ = try await makeClient().query("social.grain.unspecced.getFeed", auth: auth, as: Echo.self)
+        _ = try await makeClient().query("social.grain.feed.getFeed", auth: auth, as: Echo.self)
+        _ = try await makeClient().query("social.grain.feed.getFeed", auth: auth, as: Echo.self)
 
         let all = proofs.all
         XCTAssertEqual(all.count, 3)
@@ -149,7 +149,7 @@ final class PDSCallTests: GrainTestCase {
             return AuthContext(accessToken: "new", dpop: auth.dpop, did: auth.did, pds: auth.pds)
         }
 
-        _ = try await client.query("social.grain.unspecced.getFeed", auth: auth, as: Echo.self)
+        _ = try await client.query("social.grain.feed.getFeed", auth: auth, as: Echo.self)
 
         XCTAssertEqual(refreshed.count, 1)
         XCTAssertEqual(attempts.count, 2)
@@ -165,7 +165,7 @@ final class PDSCallTests: GrainTestCase {
             return (Data(#"{"error": "InvalidRequest"}"#.utf8), response)
         }
 
-        _ = try? await makeClient().query("social.grain.unspecced.getFeed", auth: auth, as: Echo.self)
+        _ = try? await makeClient().query("social.grain.feed.getFeed", auth: auth, as: Echo.self)
 
         XCTAssertEqual(attempts.count, 1)
     }

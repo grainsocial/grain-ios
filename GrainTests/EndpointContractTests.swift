@@ -116,13 +116,13 @@ final class EndpointContractTests: GrainTestCase {
     func testFetchingBlocksAndMutes() async throws {
         respond(Fixtures.blockList)
         let blocks = try await client.getBlocks(auth: auth)
-        XCTAssertEqual(log.lastPath, "/xrpc/social.grain.unspecced.getBlocks")
+        XCTAssertEqual(log.lastPath, "/xrpc/social.grain.graph.getBlocks")
         XCTAssertEqual(blocks.items?.map(\.did), ["did:plc:a", "did:plc:b"])
         XCTAssertEqual(blocks.items?.first?.id, "did:plc:a")
 
         respond(Fixtures.muteList)
         let mutes = try await client.getMutes(auth: auth)
-        XCTAssertEqual(log.lastPath, "/xrpc/social.grain.unspecced.getMutes")
+        XCTAssertEqual(log.lastPath, "/xrpc/social.grain.graph.getMutes")
         XCTAssertEqual(mutes.items?.map(\.did), ["did:plc:a", "did:plc:b"])
         XCTAssertEqual(mutes.items?.first?.id, "did:plc:a")
     }
@@ -167,7 +167,7 @@ final class EndpointContractTests: GrainTestCase {
     }
 
     func testReportingCarriesTheSubjectAsAStrongRef() async throws {
-        respond("{}")
+        respond(#"{"id": 1, "reasonType": "com.atproto.moderation.defs#reasonSpam", "subject": {}, "reportedBy": "did:plc:me", "createdAt": "2026-01-01T00:00:00Z"}"#)
 
         try await client.createReport(
             subjectUri: "at://did:plc:test/social.grain.gallery/1",
@@ -177,13 +177,25 @@ final class EndpointContractTests: GrainTestCase {
             auth: auth
         )
 
-        XCTAssertEqual(log.lastPath, "/xrpc/dev.hatk.createReport")
-        XCTAssertEqual(log.lastBody?["label"] as? String, "spam")
+        XCTAssertEqual(log.lastPath, "/xrpc/com.atproto.moderation.createReport")
+        XCTAssertEqual(log.lastBody?["reasonType"] as? String, "com.atproto.moderation.defs#reasonSpam")
+        XCTAssertNil(log.lastBody?["label"])
         XCTAssertEqual(log.lastBody?["reason"] as? String, "Repeated posting")
         let subject = log.lastBody?["subject"] as? [String: Any]
         XCTAssertEqual(subject?["$type"] as? String, "com.atproto.repo.strongRef")
         XCTAssertEqual(subject?["uri"] as? String, "at://did:plc:test/social.grain.gallery/1")
         XCTAssertEqual(subject?["cid"] as? String, "bafygallery")
+    }
+
+    /// A report is grain's to file, so the PDS forwards it to grain's
+    /// AppView rather than to its own moderation service.
+    func testAReportIsProxiedToGrain() async throws {
+        respond("{}")
+
+        try await client.createReport(subjectUri: "at://did:plc:test/social.grain.gallery/1", subjectCid: "c", label: "copyright", auth: auth)
+
+        XCTAssertEqual(log.last?.value(forHTTPHeaderField: "atproto-proxy"), "\(AuthManager.appviewDID)#grain_appview")
+        XCTAssertEqual(log.lastBody?["reasonType"] as? String, "social.grain.moderation.defs#reasonCopyright")
     }
 
     func testAReportWithNoReasonOmitsIt() async throws {
@@ -197,14 +209,6 @@ final class EndpointContractTests: GrainTestCase {
         )
 
         XCTAssertNil(log.lastBody?["reason"])
-    }
-
-    func testLabelDefinitionsFallBackToEmptyWhenTheServerSendsNone() async throws {
-        respond("{}")
-        let definitions = try await client.describeLabels(auth: auth)
-
-        XCTAssertEqual(log.lastPath, "/xrpc/dev.hatk.describeLabels")
-        XCTAssertTrue(definitions.isEmpty)
     }
 
     // MARK: - Favorites
@@ -253,24 +257,24 @@ final class EndpointContractTests: GrainTestCase {
     func testStoryEndpointsNameTheRightParameters() async throws {
         respond(Fixtures.stories)
         _ = try await client.getStories(actor: "did:plc:test", auth: auth)
-        XCTAssertEqual(log.lastPath, "/xrpc/social.grain.unspecced.getStories")
+        XCTAssertEqual(log.lastPath, "/xrpc/social.grain.story.getStories")
         XCTAssertEqual(log.lastQueryValue("actor"), "did:plc:test")
 
         respond(#"{"story": null}"#)
         _ = try await client.getStory(uri: "at://did:plc:test/social.grain.story/1", auth: auth)
-        XCTAssertEqual(log.lastPath, "/xrpc/social.grain.unspecced.getStory")
+        XCTAssertEqual(log.lastPath, "/xrpc/social.grain.story.getStory")
         XCTAssertEqual(log.lastQueryValue("story"), "at://did:plc:test/social.grain.story/1")
 
         respond(#"{"stories": [], "cursor": "next"}"#)
         let archive = try await client.getStoryArchive(actor: "did:plc:test", limit: 12, cursor: "here", auth: auth)
-        XCTAssertEqual(log.lastPath, "/xrpc/social.grain.unspecced.getStoryArchive")
+        XCTAssertEqual(log.lastPath, "/xrpc/social.grain.story.getArchive")
         XCTAssertEqual(log.lastQueryValue("limit"), "12")
         XCTAssertEqual(log.lastQueryValue("cursor"), "here")
         XCTAssertEqual(archive.cursor, "next")
 
         respond(Fixtures.storyAuthors)
         let authors = try await client.getStoryAuthors(auth: auth)
-        XCTAssertEqual(log.lastPath, "/xrpc/social.grain.unspecced.getStoryAuthors")
+        XCTAssertEqual(log.lastPath, "/xrpc/social.grain.story.getAuthors")
         XCTAssertEqual(authors.authors.count, 2)
     }
 
@@ -286,29 +290,27 @@ final class EndpointContractTests: GrainTestCase {
 
     // MARK: - Profile lists
 
-    func testFollowListEndpointsCarryTheViewer() async throws {
+    func testFollowListEndpointsHitTheirMethods() async throws {
         respond(Fixtures.actorList)
-        _ = try await client.getFollowers(actor: "did:plc:test", viewer: "did:plc:me", auth: auth)
-        XCTAssertEqual(log.lastPath, "/xrpc/social.grain.unspecced.getFollowers")
-        XCTAssertEqual(log.lastQueryValue("viewer"), "did:plc:me")
+        _ = try await client.getFollowers(actor: "did:plc:test", auth: auth)
+        XCTAssertEqual(log.lastPath, "/xrpc/social.grain.graph.getFollowers")
 
         respond(Fixtures.actorList)
-        _ = try await client.getFollowing(actor: "did:plc:test", viewer: "did:plc:me", auth: auth)
-        XCTAssertEqual(log.lastPath, "/xrpc/social.grain.unspecced.getFollowing")
+        _ = try await client.getFollowing(actor: "did:plc:test", auth: auth)
+        XCTAssertEqual(log.lastPath, "/xrpc/social.grain.graph.getFollowing")
 
         respond(Fixtures.actorList)
-        _ = try await client.getKnownFollowers(actor: "did:plc:test", viewer: "did:plc:me", auth: auth)
-        XCTAssertEqual(log.lastPath, "/xrpc/social.grain.unspecced.getKnownFollowers")
+        _ = try await client.getKnownFollowers(actor: "did:plc:test", auth: auth)
+        XCTAssertEqual(log.lastPath, "/xrpc/social.grain.graph.getKnownFollowers")
 
         respond(Fixtures.actorList)
-        _ = try await client.getGalleryFavorites(gallery: "at://g/1", viewer: "did:plc:me", auth: auth)
-        XCTAssertEqual(log.lastPath, "/xrpc/social.grain.unspecced.getGalleryFavorites")
+        _ = try await client.getGalleryFavorites(gallery: "at://g/1", auth: auth)
+        XCTAssertEqual(log.lastPath, "/xrpc/social.grain.gallery.getFavorites")
         XCTAssertEqual(log.lastQueryValue("gallery"), "at://g/1")
     }
 
-    /// Signed out there is no viewer to send, and the parameter has to be left
-    /// off rather than sent empty.
-    func testAViewerlessRequestOmitsTheParameter() async throws {
+    /// The viewer is whoever the call is signed as, so no request names one.
+    func testAListRequestNamesNoViewer() async throws {
         respond(Fixtures.actorList)
 
         _ = try await client.getFollowers(actor: "did:plc:test", auth: auth)
@@ -322,51 +324,66 @@ final class EndpointContractTests: GrainTestCase {
 
         let response = try await client.getSuggestedFollows(actor: "did:plc:test", auth: auth)
 
-        XCTAssertEqual(log.lastPath, "/xrpc/social.grain.unspecced.getSuggestedFollows")
+        XCTAssertEqual(log.lastPath, "/xrpc/social.grain.actor.getSuggestedFollows")
         XCTAssertEqual(response.items?.map(\.did), ["did:plc:a", "did:plc:b"])
         XCTAssertEqual(response.items?.first?.id, "did:plc:a")
         XCTAssertEqual(response.items?.first?.followersCount, 120)
     }
 
-    func testAProfileRequestCanCarryAViewer() async throws {
+    func testAProfileRequestNamesOnlyTheActor() async throws {
         respond(Fixtures.profileDetailed)
 
-        let profile = try await client.getActorProfile(actor: "did:plc:test", viewer: "did:plc:me", auth: auth)
+        let profile = try await client.getActorProfile(actor: "did:plc:test", auth: auth)
 
-        XCTAssertEqual(log.lastPath, "/xrpc/social.grain.unspecced.getActorProfile")
-        XCTAssertEqual(log.lastQueryValue("viewer"), "did:plc:me")
+        XCTAssertEqual(log.lastPath, "/xrpc/social.grain.actor.getProfile")
+        XCTAssertNil(log.lastQueryValue("viewer"))
         XCTAssertEqual(profile.handle, "tester.grain.social")
         XCTAssertEqual(profile.id, "did:plc:test")
     }
 
     // MARK: - Records
 
-    func testDeletingAGalleryUsesTheCascadingEndpoint() async throws {
-        respond("{}")
-
-        try await client.deleteGallery(rkey: "3jzfcijpj2z2a", auth: auth)
-
-        XCTAssertEqual(log.lastPath, "/xrpc/social.grain.unspecced.deleteGallery")
-        XCTAssertEqual(log.lastBody?["rkey"] as? String, "3jzfcijpj2z2a")
-    }
-
-    func testDeletingTheAccountSendsAnEmptyBody() async throws {
-        respond("{}")
-
-        try await client.deleteAccount(auth: auth)
-
-        XCTAssertEqual(log.lastPath, "/xrpc/social.grain.unspecced.deleteAccount")
-        XCTAssertEqual(log.lastBody?.isEmpty, true)
-    }
-
-    func testFetchingARecordByURI() async throws {
-        respond(#"{"uri": "at://did:plc:test/social.grain.gallery/1", "cid": "bafy", "record": {"title": "A"}}"#)
+    func testFetchingARecordReadsItFromTheRepo() async throws {
+        respond(#"{"uri": "at://did:plc:test/social.grain.gallery/1", "cid": "bafy", "value": {"title": "A"}}"#)
 
         let response = try await client.getRecord(uri: "at://did:plc:test/social.grain.gallery/1", auth: auth)
 
-        XCTAssertEqual(log.lastPath, "/xrpc/dev.hatk.getRecord")
-        XCTAssertEqual(log.lastQueryValue("uri"), "at://did:plc:test/social.grain.gallery/1")
-        XCTAssertEqual(response.record?.dictValue?["title"]?.stringValue, "A")
+        XCTAssertEqual(log.lastPath, "/xrpc/com.atproto.repo.getRecord")
+        XCTAssertEqual(log.lastQueryValue("repo"), "did:plc:test")
+        XCTAssertEqual(log.lastQueryValue("collection"), "social.grain.gallery")
+        XCTAssertEqual(log.lastQueryValue("rkey"), "1")
+        XCTAssertNil(log.last?.value(forHTTPHeaderField: "atproto-proxy"))
+        XCTAssertEqual(response.value?.dictValue?["title"]?.stringValue, "A")
+    }
+
+    /// The account's grain records go at its own PDS first, grain's
+    /// collections only, and grain-serve is then asked to forget it.
+    func testDeletingTheAccountDeletesItsGrainRecordsThenAsksToBeForgotten() async throws {
+        let log = try XCTUnwrap(log)
+        let did = did
+        MockURLProtocol.handler = { request in
+            log.record(request)
+            let path = request.url?.path ?? ""
+            let body = if path.hasSuffix("describeRepo") {
+                #"{"collections": ["app.bsky.feed.post", "social.grain.gallery"]}"#
+            } else if path.hasSuffix("listRecords") {
+                #"{"records": [{"uri": "at://\#(did)/social.grain.gallery/a"}, {"uri": "at://\#(did)/social.grain.gallery/b"}]}"#
+            } else if path.hasSuffix("deleteAccount") {
+                #"{"deleted": 0, "done": true}"#
+            } else {
+                "{}"
+            }
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (Data(body.utf8), response)
+        }
+
+        try await client.deleteAccount(auth: auth)
+
+        XCTAssertEqual(log.lastPath, "/xrpc/social.grain.server.deleteAccount")
+        XCTAssertEqual(log.lastBody?["did"] as? String, did)
+        XCTAssertEqual(log.last?.value(forHTTPHeaderField: "atproto-proxy"), "\(AuthManager.appviewDID)#grain_appview")
+        XCTAssertEqual(log.count, 4, "describeRepo, one collection listed, one commit, deleteAccount")
+        XCTAssertTrue(log.indexRequests.isEmpty, "an account being forgotten has nothing to index")
     }
 
     /// A cross-post is written with `putRecord` so a resumed publish overwrites
@@ -501,50 +518,18 @@ final class EndpointContractTests: GrainTestCase {
         XCTAssertNil(log.last?.value(forHTTPHeaderField: "atproto-proxy"))
     }
 
-    // MARK: - Preferences
-
-    func testTogglingTheLocationPreference() async throws {
-        respond("{}")
-
-        try await client.putIncludeLocation(false, auth: auth)
-
-        XCTAssertEqual(log.lastPath, "/xrpc/dev.hatk.putPreference")
-        XCTAssertEqual(log.lastBody?["key"] as? String, "includeLocation")
-        XCTAssertEqual(log.lastBody?["value"] as? Bool, false)
-    }
-
-    func testTogglingTheExifPreference() async throws {
-        respond("{}")
-
-        try await client.putIncludeExif(true, auth: auth)
-
-        XCTAssertEqual(log.lastBody?["key"] as? String, "includeExif")
-        XCTAssertEqual(log.lastBody?["value"] as? Bool, true)
-    }
-
-    func testPinnedFeedsAreSentUnderTheirOwnKey() async throws {
-        respond("{}")
-
-        try await client.putPinnedFeeds(PinnedFeed.defaults, auth: auth)
-
-        XCTAssertEqual(log.lastBody?["key"] as? String, "pinnedFeeds")
-        let feeds = log.lastBody?["value"] as? [[String: Any]]
-        XCTAssertEqual(feeds?.count, 3)
-        XCTAssertEqual(feeds?.first?["id"] as? String, "recent")
-    }
-
     // MARK: - Discovery
 
     func testDiscoveryEndpointsDecodeTheirLists() async throws {
         respond(Fixtures.locations)
         let locations = try await client.getLocations(auth: auth)
-        XCTAssertEqual(log.lastPath, "/xrpc/social.grain.unspecced.getLocations")
+        XCTAssertEqual(log.lastPath, "/xrpc/social.grain.gallery.getLocations")
         XCTAssertEqual(locations.locations?.map(\.name), ["Lisboa", "Porto"])
         XCTAssertEqual(locations.locations?.first?.id, "8a2a1072b59ffff")
 
         respond(Fixtures.cameras)
         let cameras = try await client.getCameras(auth: auth)
-        XCTAssertEqual(log.lastPath, "/xrpc/social.grain.unspecced.getCameras")
+        XCTAssertEqual(log.lastPath, "/xrpc/social.grain.gallery.getCameras")
         XCTAssertEqual(cameras.cameras?.map(\.camera), ["Fujifilm X100V", "Leica M6"])
         XCTAssertEqual(cameras.cameras?.first?.id, "Fujifilm X100V")
     }
@@ -618,5 +603,111 @@ final class EndpointContractTests: GrainTestCase {
     func testATooShortLocationSearchNeverHitsTheNetwork() async {
         let results = await LocationServices.searchLocation(query: " a ")
         XCTAssertTrue(results.isEmpty)
+    }
+}
+
+/// Preferences and feeds, which grain-serve takes in its own shapes.
+extension EndpointContractTests {
+    // MARK: - Preferences
+
+    /// Serve the set `current` to a read and record what is written back.
+    private func respondWithPreferences(_ current: String) {
+        let log = log!
+        MockURLProtocol.handler = { request in
+            log.record(request)
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            let body = request.httpMethod == "GET" ? #"{"preferences": \#(current)}"# : "{}"
+            return (Data(body.utf8), response)
+        }
+    }
+
+    /// The written set, by `$type`.
+    private var writtenPreferences: [String: [String: Any]] {
+        let items = log.lastBody?["preferences"] as? [[String: Any]] ?? []
+        return Dictionary(items.map { ($0["$type"] as? String ?? "", $0) }, uniquingKeysWith: { first, _ in first })
+    }
+
+    /// One kind changes; the others, the web's theme among them, are written
+    /// back as they were read.
+    func testTogglingTheLocationPreferenceWritesTheWholeSetBack() async throws {
+        respondWithPreferences(#"""
+        [
+          {"$type": "social.grain.actor.defs#pinnedFeedsPref", "items": [{"id": "recent", "label": "Recent", "type": "feed", "path": "/"}]},
+          {"$type": "social.grain.actor.defs#photoMetadataPref", "includeExif": true, "includeLocation": true},
+          {"$type": "social.grain.actor.defs#themePref", "theme": "dark"}
+        ]
+        """#)
+
+        try await client.putIncludeLocation(false, auth: auth)
+
+        XCTAssertEqual(log.count, 2, "read, then write")
+        XCTAssertEqual(log.lastPath, "/xrpc/social.grain.actor.putPreferences")
+        let written = writtenPreferences
+        XCTAssertEqual(written.count, 3)
+        XCTAssertEqual(written["social.grain.actor.defs#photoMetadataPref"]?["includeLocation"] as? Bool, false)
+        XCTAssertEqual(written["social.grain.actor.defs#photoMetadataPref"]?["includeExif"] as? Bool, true)
+        XCTAssertEqual(written["social.grain.actor.defs#themePref"]?["theme"] as? String, "dark")
+        XCTAssertEqual((written["social.grain.actor.defs#pinnedFeedsPref"]?["items"] as? [[String: Any]])?.first?["id"] as? String, "recent")
+    }
+
+    func testTogglingTheExifPreference() async throws {
+        respondWithPreferences("[]")
+
+        try await client.putIncludeExif(true, auth: auth)
+
+        XCTAssertEqual(writtenPreferences["social.grain.actor.defs#photoMetadataPref"]?["includeExif"] as? Bool, true)
+        XCTAssertNil(writtenPreferences["social.grain.actor.defs#photoMetadataPref"]?["includeLocation"])
+    }
+
+    func testPinnedFeedsAreSentAsTheirOwnKind() async throws {
+        respondWithPreferences("[]")
+
+        try await client.putPinnedFeeds(PinnedFeed.defaults, auth: auth)
+
+        let feeds = writtenPreferences["social.grain.actor.defs#pinnedFeedsPref"]?["items"] as? [[String: Any]]
+        XCTAssertEqual(feeds?.count, 3)
+        XCTAssertEqual(feeds?.first?["id"] as? String, "recent")
+    }
+
+    func testNotificationPreferencesCarryTheirKindsBesideTheirType() async throws {
+        respondWithPreferences("[]")
+
+        try await client.putNotificationPrefs(NotificationPrefs(follows: NotifPref(push: false, inApp: true, from: "follows")), auth: auth)
+
+        let prefs = writtenPreferences["social.grain.actor.defs#notificationsPref"]
+        let follows = prefs?["follows"] as? [String: Any]
+        XCTAssertEqual(follows?["push"] as? Bool, false)
+        XCTAssertEqual(follows?["from"] as? String, "follows")
+        XCTAssertNil(prefs?["favorites"])
+    }
+
+    func testPreferencesDecodeFromTheirKinds() throws {
+        let json = #"""
+        {"preferences": [
+          {"$type": "social.grain.actor.defs#notificationsPref", "comments": {"push": true, "inApp": false, "from": "all"}},
+          {"$type": "social.grain.actor.defs#photoMetadataPref", "includeExif": false},
+          {"$type": "social.grain.actor.defs#somethingNew", "x": 1}
+        ]}
+        """#
+        let prefs = try JSONDecoder().decode(GetPreferencesResponse.self, from: Data(json.utf8)).preferences
+
+        XCTAssertEqual(prefs.includeExif, false)
+        XCTAssertNil(prefs.includeLocation)
+        XCTAssertNil(prefs.pinnedFeeds)
+        XCTAssertEqual(prefs.notificationPrefs?.comments, NotifPref(push: true, inApp: false, from: "all"))
+    }
+
+    // MARK: - Feeds
+
+    /// A feed is named by its URI on grain-serve's DID, its name the last
+    /// segment.
+    func testAFeedIsAskedForByItsURI() async throws {
+        respond(Fixtures.feed)
+
+        _ = try await client.getFeed(feed: "camera", camera: "Leica M6", auth: auth)
+
+        XCTAssertEqual(log.lastPath, "/xrpc/social.grain.feed.getFeed")
+        XCTAssertEqual(log.lastQueryValue("feed"), "at://\(AuthManager.appviewDID)/social.grain.feed.generator/camera")
+        XCTAssertEqual(log.lastQueryValue("camera"), "Leica M6")
     }
 }

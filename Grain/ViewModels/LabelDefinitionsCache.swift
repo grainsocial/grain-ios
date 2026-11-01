@@ -1,18 +1,13 @@
 import Foundation
 
+/// The label definitions every card resolves a gallery's labels against:
+/// grain's own, which the app carries.
 @Observable
 @MainActor
 final class LabelDefinitionsCache {
-    private(set) var definitions: [LabelDefinition] = []
-    private var hasLoaded = false
+    let definitions: [LabelDefinition]
 
-    func loadIfNeeded(client: XRPCClient, auth: AuthContext?) async {
-        guard !hasLoaded else { return }
-        do {
-            definitions = try await client.describeLabels(auth: auth)
-            hasLoaded = true
-        } catch {
-            // Use empty definitions — fallbacks will handle well-known labels
-        }
+    init(definitions: [LabelDefinition] = LabelDefinition.all) {
+        self.definitions = definitions
     }
 }

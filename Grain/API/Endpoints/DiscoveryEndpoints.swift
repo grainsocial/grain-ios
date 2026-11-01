@@ -57,7 +57,7 @@ extension XRPCClient {
     /// asks for the lean one.
     func getLocations(pins: Bool = false, auth: AuthContext? = nil) async throws -> GetLocationsResponse {
         try await query(
-            "social.grain.unspecced.getLocations",
+            "social.grain.gallery.getLocations",
             params: pins ? ["pins": "true"] : [:],
             auth: auth,
             as: GetLocationsResponse.self
@@ -66,6 +66,6 @@ extension XRPCClient {
 
     /// The top thirty cameras by photo count, each with a few thumbnails.
     func getCameras(auth: AuthContext? = nil) async throws -> GetCamerasResponse {
-        try await query("social.grain.unspecced.getCameras", auth: auth, as: GetCamerasResponse.self)
+        try await query("social.grain.gallery.getCameras", auth: auth, as: GetCamerasResponse.self)
     }
 }

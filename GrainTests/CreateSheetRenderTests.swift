@@ -152,7 +152,7 @@ final class CreateSheetRenderTests: GrainTestCase {
     /// A tab whose fetch fails shows its own empty state rather than blanking
     /// the whole profile.
     func testRendersAProfileTabWhoseContentFailsToLoad() {
-        MockURLProtocol.respondByPath(["getActorProfile": Fixtures.profileDetailed], fallback: "{}")
+        MockURLProtocol.respondByPath(["actor.getProfile": Fixtures.profileDetailed], fallback: "{}")
         let env = TestEnvironment()
 
         for mode in ProfileViewMode.allCases {

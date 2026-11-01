@@ -95,53 +95,41 @@ struct ProfileSearchResult: Codable, Sendable, Identifiable {
 // MARK: - Convenience Extensions
 
 extension XRPCClient {
-    func getActorProfile(actor: String, viewer: String? = nil, auth: AuthContext? = nil) async throws -> GrainProfileDetailed {
-        var params = ["actor": actor]
-        if let viewer {
-            params["viewer"] = viewer
-        }
-        return try await query("social.grain.unspecced.getActorProfile", params: params, auth: auth, as: GrainProfileDetailed.self)
+    func getActorProfile(actor: String, auth: AuthContext? = nil) async throws -> GrainProfileDetailed {
+        try await query("social.grain.actor.getProfile", params: ["actor": actor], auth: auth, as: GrainProfileDetailed.self)
     }
 
-    func getFollowers(actor: String, viewer: String? = nil, limit: Int = 50, cursor: String? = nil, auth: AuthContext? = nil) async throws -> GetFollowersResponse {
+    func getFollowers(actor: String, limit: Int = 50, cursor: String? = nil, auth: AuthContext? = nil) async throws -> GetFollowersResponse {
         var params = ["actor": actor, "limit": String(limit)]
-        if let viewer {
-            params["viewer"] = viewer
-        }
         if let cursor {
             params["cursor"] = cursor
         }
-        return try await query("social.grain.unspecced.getFollowers", params: params, auth: auth, as: GetFollowersResponse.self)
+        return try await query("social.grain.graph.getFollowers", params: params, auth: auth, as: GetFollowersResponse.self)
     }
 
-    func getFollowing(actor: String, viewer: String? = nil, limit: Int = 50, cursor: String? = nil, auth: AuthContext? = nil) async throws -> GetFollowingResponse {
+    func getFollowing(actor: String, limit: Int = 50, cursor: String? = nil, auth: AuthContext? = nil) async throws -> GetFollowingResponse {
         var params = ["actor": actor, "limit": String(limit)]
-        if let viewer {
-            params["viewer"] = viewer
-        }
         if let cursor {
             params["cursor"] = cursor
         }
-        return try await query("social.grain.unspecced.getFollowing", params: params, auth: auth, as: GetFollowingResponse.self)
+        return try await query("social.grain.graph.getFollowing", params: params, auth: auth, as: GetFollowingResponse.self)
     }
 
-    func getKnownFollowers(actor: String, viewer: String, auth: AuthContext? = nil) async throws -> GetKnownFollowersResponse {
-        try await query("social.grain.unspecced.getKnownFollowers", params: ["actor": actor, "viewer": viewer], auth: auth, as: GetKnownFollowersResponse.self)
+    /// The accounts the signed-in viewer follows that follow `actor`.
+    func getKnownFollowers(actor: String, auth: AuthContext? = nil) async throws -> GetKnownFollowersResponse {
+        try await query("social.grain.graph.getKnownFollowers", params: ["actor": actor], auth: auth, as: GetKnownFollowersResponse.self)
     }
 
-    func getGalleryFavorites(gallery: String, viewer: String? = nil, limit: Int = 50, cursor: String? = nil, auth: AuthContext? = nil) async throws -> GetGalleryFavoritesResponse {
+    func getGalleryFavorites(gallery: String, limit: Int = 50, cursor: String? = nil, auth: AuthContext? = nil) async throws -> GetGalleryFavoritesResponse {
         var params = ["gallery": gallery, "limit": String(limit)]
-        if let viewer {
-            params["viewer"] = viewer
-        }
         if let cursor {
             params["cursor"] = cursor
         }
-        return try await query("social.grain.unspecced.getGalleryFavorites", params: params, auth: auth, as: GetGalleryFavoritesResponse.self)
+        return try await query("social.grain.gallery.getFavorites", params: params, auth: auth, as: GetGalleryFavoritesResponse.self)
     }
 
     func getSuggestedFollows(actor: String, limit: Int = 10, auth: AuthContext? = nil) async throws -> GetSuggestedFollowsResponse {
-        try await query("social.grain.unspecced.getSuggestedFollows", params: ["actor": actor, "limit": String(limit)], auth: auth, as: GetSuggestedFollowsResponse.self)
+        try await query("social.grain.actor.getSuggestedFollows", params: ["actor": actor, "limit": String(limit)], auth: auth, as: GetSuggestedFollowsResponse.self)
     }
 
     func searchProfiles(query queryString: String, limit: Int = 30, cursor: String? = nil, auth: AuthContext? = nil) async throws -> SearchProfilesResponse {
@@ -149,6 +137,6 @@ extension XRPCClient {
         if let cursor {
             params["cursor"] = cursor
         }
-        return try await query("social.grain.unspecced.searchProfiles", params: params, auth: auth, as: SearchProfilesResponse.self)
+        return try await query("social.grain.actor.searchActors", params: params, auth: auth, as: SearchProfilesResponse.self)
     }
 }

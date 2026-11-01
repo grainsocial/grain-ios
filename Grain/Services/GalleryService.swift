@@ -2,17 +2,14 @@ import Foundation
 
 /// Shared helpers for `social.grain.gallery` records.
 ///
-/// Deleting a gallery goes through `social.grain.unspecced.deleteGallery`, not
-/// a plain `deleteRecord` on the collection. A gallery is the head of a small
-/// graph — photos, the gallery items linking them, exif records, and comments —
-/// and only the unspecced endpoint walks it. Deleting the gallery record on its
-/// own leaves all of that orphaned in the repo while the UI, which promises
-/// "this will permanently delete this gallery and all its photos", looks like
-/// it worked.
-///
-/// That's not hypothetical: six of the seven places you can delete a gallery
-/// used `deleteRecord` directly until 2026-08-14. Everything routes through
-/// here now so there's one decision to get wrong instead of seven.
+/// Deleting a gallery goes through `XRPCClient.deleteGallery`, not a plain
+/// `deleteRecord` on the collection. A gallery is the head of a small graph:
+/// photos, the gallery items linking them, exif records, and the account's
+/// own favorites and comments on it. Deleting the gallery record on its own
+/// leaves all of that orphaned in the repo while the UI, which promises
+/// "this will permanently delete this gallery and all its photos", looks
+/// like it worked. Every place a gallery is deleted routes through here, so
+/// there is one decision to get wrong.
 enum GalleryService {
     static let collection = "social.grain.gallery"
 

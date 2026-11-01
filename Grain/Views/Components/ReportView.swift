@@ -8,8 +8,8 @@ struct ReportView: View {
     let subjectUri: String
     let subjectCid: String
 
-    @State private var labelDefs: [LabelDefinition] = []
-    @State private var selectedLabel = ""
+    private let labelDefs = LabelDefinition.all
+    @State private var selectedLabel = LabelDefinition.all.first?.identifier ?? ""
     @State private var reason = ""
     @State private var isSubmitting = false
     @State private var isSubmitted = false
@@ -27,17 +27,13 @@ struct ReportView: View {
                 } else {
                     Form {
                         Section("Category") {
-                            if labelDefs.isEmpty {
-                                ProgressView()
-                            } else {
-                                Picker("Category", selection: $selectedLabel) {
-                                    ForEach(labelDefs) { def in
-                                        Text(def.displayName).tag(def.identifier)
-                                    }
+                            Picker("Category", selection: $selectedLabel) {
+                                ForEach(labelDefs) { def in
+                                    Text(def.displayName).tag(def.identifier)
                                 }
-                                .pickerStyle(.inline)
-                                .labelsHidden()
                             }
+                            .pickerStyle(.inline)
+                            .labelsHidden()
                         }
 
                         Section("Details (optional)") {
@@ -72,20 +68,6 @@ struct ReportView: View {
                     }
                 }
             }
-            .task {
-                await loadLabels()
-            }
-        }
-    }
-
-    private func loadLabels() async {
-        do {
-            labelDefs = try await client.describeLabels(auth: auth.authContext())
-            if let first = labelDefs.first {
-                selectedLabel = first.identifier
-            }
-        } catch {
-            self.error = "Failed to load report categories."
         }
     }
 

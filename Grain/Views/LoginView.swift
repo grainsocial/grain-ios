@@ -396,7 +396,7 @@ struct LoginView: View {
             return
         }
 
-        var components = URLComponents(url: AuthManager.serverURL.appendingPathComponent("xrpc/social.grain.unspecced.searchActorsTypeahead"), resolvingAgainstBaseURL: false)!
+        var components = URLComponents(url: AuthManager.serverURL.appendingPathComponent("xrpc/social.grain.actor.searchActorsTypeahead"), resolvingAgainstBaseURL: false)!
         components.queryItems = [
             URLQueryItem(name: "q", value: trimmed),
             URLQueryItem(name: "limit", value: "5"),

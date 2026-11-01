@@ -10,7 +10,6 @@ private enum AppTab: Hashable {
 
 struct MainTabView: View {
     @Environment(AuthManager.self) private var auth
-    @Environment(LabelDefinitionsCache.self) private var labelDefsCache
     @Environment(StoryStatusCache.self) private var storyStatusCache
     @Environment(ViewedStoryStorage.self) private var viewedStories
     @Environment(GalleryUploadCenter.self) private var uploadCenter
@@ -158,15 +157,11 @@ struct MainTabView: View {
             // Resolve auth context once (may refresh token) while avatar is in flight
             let ctx = await auth.authContext()
 
-            // Kick off notifications + label defs in parallel now that we have ctx
+            // Kick off notifications now that we have ctx
             let notifSpid = launchSignposter.makeSignpostID()
-            let labelsSpid = launchSignposter.makeSignpostID()
             let notifState = launchSignposter.beginInterval("NotificationsFetch", id: notifSpid)
             launchLogger.debug("[NotificationsFetch] begin")
-            let labelsState = launchSignposter.beginInterval("LabelDefsFetch", id: labelsSpid)
-            launchLogger.debug("[LabelDefsFetch] begin")
             async let notifFetch: Void = notificationsVM.fetchUnseenCount(auth: ctx)
-            async let labelsFetch: Void = labelDefsCache.loadIfNeeded(client: newClient, auth: ctx)
 
             await avatarFetch
             launchSignposter.endInterval("AvatarFetch", avatarState)
@@ -175,10 +170,6 @@ struct MainTabView: View {
             await notifFetch
             launchSignposter.endInterval("NotificationsFetch", notifState)
             launchLogger.debug("[NotificationsFetch] end")
-
-            await labelsFetch
-            launchSignposter.endInterval("LabelDefsFetch", labelsState)
-            launchLogger.debug("[LabelDefsFetch] end")
 
             launchSignposter.endInterval("MainTabLaunch", taskState)
             launchLogger.debug("[MainTabLaunch] end")
@@ -201,7 +192,6 @@ struct MainTabView: View {
                     // Anything watched while offline goes up now.
                     await viewedStories.flushPending()
                     if let client {
-                        await labelDefsCache.loadIfNeeded(client: client, auth: auth.authContext())
                         // Coming back to the app is the most likely moment for
                         // the connection to have recovered.
                         await uploadCenter.resumePending(client: client, auth: auth)
