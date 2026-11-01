@@ -5,7 +5,7 @@ import UserNotifications
 
 private let logger = Logger(subsystem: "social.grain.grain", category: "Push")
 
-/// Manages push notification registration and token delivery to the hatk server.
+/// Manages push notification registration and token delivery to the server.
 @Observable
 @MainActor
 final class PushManager: NSObject {
@@ -67,11 +67,19 @@ final class PushManager: NSObject {
         currentToken = nil
         let client = XRPCClient(baseURL: AuthManager.serverURL)
         do {
-            try await client.procedure(
-                "dev.hatk.push.unregisterToken",
-                input: UnregisterTokenInput(token: token),
-                auth: auth
-            )
+            do {
+                try await client.procedure(
+                    "social.grain.notification.unregisterPush",
+                    input: PushRegistrationInput(token: token),
+                    auth: auth
+                )
+            } catch let error where Self.isMethodMissing(error) {
+                try await client.procedure(
+                    "dev.hatk.push.unregisterToken",
+                    input: UnregisterTokenInput(token: token),
+                    auth: auth
+                )
+            }
             logger.info("Push token unregistered from server")
         } catch {
             logger.error("Failed to unregister push token: \(error)")
@@ -95,15 +103,60 @@ final class PushManager: NSObject {
 
         let client = authManager.makeClient()
         do {
-            try await client.procedure(
-                "dev.hatk.push.registerToken",
-                input: RegisterTokenInput(token: token, platform: "apns"),
-                auth: auth
-            )
+            do {
+                try await client.procedure(
+                    "social.grain.notification.registerPush",
+                    input: PushRegistrationInput(token: token),
+                    auth: auth
+                )
+            } catch let error where Self.isMethodMissing(error) {
+                try await client.procedure(
+                    "dev.hatk.push.registerToken",
+                    input: RegisterTokenInput(token: token, platform: "apns"),
+                    auth: auth
+                )
+            }
             logger.info("Push token registered with server")
         } catch {
             logger.error("Failed to register push token: \(error)")
         }
+    }
+
+    /// Whether the server answered that it does not serve the method at all,
+    /// as a server without `social.grain.notification.registerPush` does. Only
+    /// then is the older `registerToken` call tried; any other failure, such as
+    /// a 401 or a rejected input, is the answer.
+    nonisolated static func isMethodMissing(_ error: Error) -> Bool {
+        guard case let XRPCError.httpError(statusCode, body) = error else { return false }
+        if statusCode == 404 || statusCode == 501 {
+            return true
+        }
+        guard let body,
+              let object = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+              let name = object["error"] as? String
+        else { return false }
+        return name == "MethodNotImplemented" || name == "MethodNotFound"
+    }
+}
+
+/// The input of `social.grain.notification.registerPush` and `unregisterPush`,
+/// shaped as Bluesky's `app.bsky.notification.registerPush`.
+struct PushRegistrationInput: Encodable, Equatable {
+    /// The service that sends the pushes.
+    static let grainServiceDid = "did:web:grain.social"
+    /// The bundle id APNs pushes are addressed to.
+    static let grainAppId = "social.grain.grain"
+
+    let serviceDid: String
+    let token: String
+    let platform: String
+    let appId: String
+
+    init(token: String) {
+        serviceDid = Self.grainServiceDid
+        self.token = token
+        platform = "ios"
+        appId = Self.grainAppId
     }
 }
 
