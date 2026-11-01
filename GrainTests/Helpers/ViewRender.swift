@@ -188,6 +188,7 @@ final class TestAccount {
             expiresAt: Date().addingTimeInterval(3600),
             scope: AuthManager.requiredScopes.joined(separator: " ")
         )
+        TokenStorage.storeServer(.test, for: did)
         TokenStorage.upsertAccount(StoredAccount(did: did, handle: handle, avatar: nil))
 
         // Making it the active account is what matters: `AuthManager.init`

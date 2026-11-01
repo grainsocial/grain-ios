@@ -5,9 +5,27 @@ import XCTest
 private final class RequestLog: @unchecked Sendable {
     private let lock = NSLock()
     private var requests: [URLRequest] = []
+    private var indexCalls: [URLRequest] = []
 
+    /// The `indexRecords` call that follows each write is kept apart, so
+    /// `last` is the call under test.
     func record(_ request: URLRequest) {
-        lock.withLock { requests.append(request) }
+        lock.withLock {
+            if request.url?.path.hasSuffix("social.grain.sync.indexRecords") == true {
+                indexCalls.append(request)
+            } else {
+                requests.append(request)
+            }
+        }
+    }
+
+    var indexRequests: [URLRequest] {
+        lock.withLock { indexCalls }
+    }
+
+    /// The URIs each `indexRecords` call named, in order.
+    var indexed: [[String]] {
+        indexRequests.map { (Self.json($0)?["uris"] as? [String]) ?? [] }
     }
 
     var count: Int {
@@ -36,7 +54,10 @@ private final class RequestLog: @unchecked Sendable {
     /// URLProtocol replaces `httpBody` with a stream, so read it back the way
     /// the loading system does.
     var lastBody: [String: Any]? {
-        guard let request = last else { return nil }
+        last.flatMap(Self.json)
+    }
+
+    static func json(_ request: URLRequest) -> [String: Any]? {
         var data = request.httpBody
         if data == nil, let stream = request.httpBodyStream {
             stream.open()
@@ -71,7 +92,7 @@ final class EndpointContractTests: GrainTestCase {
         try await super.setUp()
         did = "did:plc:endpoint-\(UUID().uuidString)"
         client = XRPCClient(baseURL: URL(string: "https://test.local")!, session: MockURLProtocol.mockSession())
-        auth = try AuthContext(accessToken: "token", dpop: DPoP.loadOrCreate(for: did))
+        auth = try AuthContext(accessToken: "token", dpop: DPoP.loadOrCreate(for: did), did: did, pds: URL(string: "https://test.local")!)
         log = RequestLog()
     }
 
@@ -113,7 +134,7 @@ final class EndpointContractTests: GrainTestCase {
 
         let result = try await client.blockActor(did: "did:plc:someone", auth: auth)
 
-        XCTAssertEqual(log.lastPath, "/xrpc/dev.hatk.createRecord")
+        XCTAssertEqual(log.lastPath, "/xrpc/com.atproto.repo.createRecord")
         XCTAssertEqual(log.lastMethod, "POST")
         XCTAssertEqual(log.lastBody?["collection"] as? String, "social.grain.graph.block")
         let record = log.lastBody?["record"] as? [String: Any]
@@ -128,7 +149,7 @@ final class EndpointContractTests: GrainTestCase {
 
         try await client.unblockActor(blockUri: "at://did:plc:test/social.grain.graph.block/3jzfcijpj2z2a", auth: auth)
 
-        XCTAssertEqual(log.lastPath, "/xrpc/dev.hatk.deleteRecord")
+        XCTAssertEqual(log.lastPath, "/xrpc/com.atproto.repo.deleteRecord")
         XCTAssertEqual(log.lastBody?["collection"] as? String, "social.grain.graph.block")
         XCTAssertEqual(log.lastBody?["rkey"] as? String, "3jzfcijpj2z2a")
     }
@@ -197,7 +218,7 @@ final class EndpointContractTests: GrainTestCase {
             subject: "at://did:plc:test/social.grain.gallery/1", client: client, auth: auth
         )
 
-        XCTAssertEqual(log.lastPath, "/xrpc/dev.hatk.createRecord")
+        XCTAssertEqual(log.lastPath, "/xrpc/com.atproto.repo.createRecord")
         XCTAssertEqual(log.lastBody?["collection"] as? String, "social.grain.favorite")
         let record = log.lastBody?["record"] as? [String: Any]
         XCTAssertEqual(record?["subject"] as? String, "at://did:plc:test/social.grain.gallery/1")
@@ -212,7 +233,7 @@ final class EndpointContractTests: GrainTestCase {
             favoriteUri: "at://did:plc:test/social.grain.favorite/3jzfcijpj2z2a", client: client, auth: auth
         )
 
-        XCTAssertEqual(log.lastPath, "/xrpc/dev.hatk.deleteRecord")
+        XCTAssertEqual(log.lastPath, "/xrpc/com.atproto.repo.deleteRecord")
         XCTAssertEqual(log.lastBody?["collection"] as? String, FavoriteService.collection)
         XCTAssertEqual(log.lastBody?["rkey"] as? String, "3jzfcijpj2z2a")
     }
@@ -361,7 +382,7 @@ final class EndpointContractTests: GrainTestCase {
             auth: auth
         )
 
-        XCTAssertEqual(log.lastPath, "/xrpc/dev.hatk.putRecord")
+        XCTAssertEqual(log.lastPath, "/xrpc/com.atproto.repo.putRecord")
         XCTAssertEqual(log.lastBody?["collection"] as? String, "app.bsky.feed.post")
         XCTAssertEqual(log.lastBody?["rkey"] as? String, "3jzfcijpj2z2a")
         XCTAssertEqual(log.lastBody?["repo"] as? String, "did:plc:test")
@@ -379,12 +400,105 @@ final class EndpointContractTests: GrainTestCase {
         let response = try await client.applyWrites(writes, auth: auth)
 
         XCTAssertEqual(log.count, 1, "The batch must be one commit, not one request per record")
-        XCTAssertEqual(log.lastPath, "/xrpc/dev.hatk.applyWrites")
+        XCTAssertEqual(log.lastPath, "/xrpc/com.atproto.repo.applyWrites")
         let sent = log.lastBody?["writes"] as? [[String: Any]]
         XCTAssertEqual(sent?.count, 2)
-        XCTAssertEqual(sent?.first?["$type"] as? String, "dev.hatk.applyWrites#create")
+        XCTAssertEqual(sent?.first?["$type"] as? String, "com.atproto.repo.applyWrites#create")
         XCTAssertEqual(sent?.first?["rkey"] as? String, "p1")
         XCTAssertEqual(response.results?.count, 2)
+    }
+
+    // MARK: - Writes at the PDS
+
+    /// A write names the account's own repo and goes to its PDS unproxied;
+    /// the AppView is then asked to index it, through the proxy.
+    func testACreateGoesToTheRepoThenIsIndexed() async throws {
+        respond(#"{"uri": "at://\#(did)/social.grain.favorite/1", "cid": "bafy"}"#)
+
+        _ = try await client.createRecord(collection: "social.grain.favorite", repo: did, record: AnyCodable(["subject": "x"]), auth: auth)
+
+        XCTAssertEqual(log.lastPath, "/xrpc/com.atproto.repo.createRecord")
+        XCTAssertEqual(log.lastBody?["repo"] as? String, did)
+        XCTAssertNil(log.last?.value(forHTTPHeaderField: "atproto-proxy"))
+        XCTAssertEqual(log.indexed, [["at://\(did)/social.grain.favorite/1"]])
+        XCTAssertEqual(
+            log.indexRequests.first?.value(forHTTPHeaderField: "atproto-proxy"),
+            "\(AuthManager.appviewDID)#grain_appview"
+        )
+    }
+
+    /// A delete is indexed too, so the AppView drops it at once.
+    func testADeleteNamesTheRepoAndIndexesTheDeletedURI() async throws {
+        respond("{}")
+
+        try await client.deleteRecord(collection: "social.grain.comment", rkey: "c1", auth: auth)
+
+        XCTAssertEqual(log.lastBody?["repo"] as? String, did)
+        XCTAssertEqual(log.indexed, [["at://\(did)/social.grain.comment/c1"]])
+    }
+
+    /// A gallery's batch is indexed by the URIs its writes name, 25 at a time.
+    func testAppliedWritesAreIndexedInBatchesOf25() async throws {
+        respond(#"{"results": []}"#)
+        let writes = (0 ..< 30).map {
+            ApplyWrite.create(collection: "social.grain.photo", rkey: "p\($0)", value: AnyCodable(["alt": "x"]))
+        }
+
+        _ = try await client.applyWrites(writes, auth: auth)
+
+        XCTAssertEqual(log.lastBody?["repo"] as? String, did)
+        XCTAssertEqual(log.indexed.map(\.count), [25, 5])
+        XCTAssertEqual(log.indexed.first?.first, "at://\(did)/social.grain.photo/p0")
+    }
+
+    /// An update and a delete in a batch carry atproto's own `$type`s.
+    func testApplyWritesTypesAreAtprotos() throws {
+        let update = try JSONSerialization.jsonObject(with: JSONEncoder().encode(
+            ApplyWrite.update(collection: "social.grain.gallery", rkey: "g", value: AnyCodable(["title": "B"]))
+        )) as? [String: Any]
+        let delete = try JSONSerialization.jsonObject(with: JSONEncoder().encode(
+            ApplyWrite.delete(collection: "social.grain.gallery", rkey: "g")
+        )) as? [String: Any]
+
+        XCTAssertEqual(update?["$type"] as? String, "com.atproto.repo.applyWrites#update")
+        XCTAssertEqual(delete?["$type"] as? String, "com.atproto.repo.applyWrites#delete")
+        XCTAssertNil(delete?["value"])
+    }
+
+    /// The write landed; the AppView failing to index it must not undo that
+    /// in the user's eyes.
+    func testAFailedIndexDoesNotFailTheWrite() async throws {
+        let log = try XCTUnwrap(log)
+        MockURLProtocol.handler = { request in
+            log.record(request)
+            let indexing = request.url?.path.hasSuffix("indexRecords") == true
+            let response = HTTPURLResponse(url: request.url!, statusCode: indexing ? 500 : 200, httpVersion: nil, headerFields: nil)!
+            return (Data(#"{"uri": "at://did:plc:x/social.grain.favorite/1", "cid": "c"}"#.utf8), response)
+        }
+
+        let result = try await client.createRecord(collection: "social.grain.favorite", repo: did, record: AnyCodable(["subject": "x"]), auth: auth)
+
+        XCTAssertEqual(result.uri, "at://did:plc:x/social.grain.favorite/1")
+        XCTAssertEqual(log.indexRequests.count, 1)
+    }
+
+    /// A Bluesky cross-post is not the AppView's to index.
+    func testABlueskyPostIsNotIndexed() async throws {
+        respond(#"{"uri": "at://did:plc:test/app.bsky.feed.post/1", "cid": "bafy"}"#)
+
+        _ = try await client.putRecord(collection: "app.bsky.feed.post", rkey: "1", record: AnyCodable(["text": "hi"]), auth: auth)
+
+        XCTAssertEqual(log.lastBody?["repo"] as? String, did, "repo defaults to the signed-in account")
+        XCTAssertTrue(log.indexRequests.isEmpty)
+    }
+
+    func testABlobGoesToTheRepo() async throws {
+        respond(#"{"blob": {"$type": "blob", "ref": {"$link": "bafyblob"}, "mimeType": "image/jpeg", "size": 3}}"#)
+
+        _ = try await client.uploadBlob(data: Data([1, 2, 3]), mimeType: "image/jpeg", auth: auth)
+
+        XCTAssertEqual(log.lastPath, "/xrpc/com.atproto.repo.uploadBlob")
+        XCTAssertNil(log.last?.value(forHTTPHeaderField: "atproto-proxy"))
     }
 
     // MARK: - Preferences

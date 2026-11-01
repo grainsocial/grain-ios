@@ -159,7 +159,7 @@ struct StoryRecordTests {
 struct StoryPublishTests {
     private let log = PublishLog()
     private let client = XRPCClient(baseURL: URL(string: "https://test.local")!, session: MockURLProtocol.mockSession())
-    private let context = AuthContext(accessToken: "test-token", dpop: DPoP(privateKey: P256.Signing.PrivateKey()))
+    private let context = AuthContext(accessToken: "test-token", dpop: DPoP(privateKey: P256.Signing.PrivateKey()), did: "did:plc:test", pds: URL(string: "https://test.local")!)
 
     /// A server that accepts everything. `uploadStatus` and `blueskyStatus`
     /// let a test make one step fail.
@@ -179,11 +179,11 @@ struct StoryPublishTests {
                 return (Data(json.utf8), response)
             }
 
-            if path.hasSuffix("dev.hatk.uploadBlob") {
+            if path.hasSuffix("com.atproto.repo.uploadBlob") {
                 guard uploadStatus == 200 else { return respond(#"{"error":"PayloadTooLarge"}"#, status: uploadStatus) }
                 return respond(#"{"blob":{"$type":"blob","ref":{"$link":"bafyuploaded"},"mimeType":"image/jpeg","size":1234}}"#)
             }
-            if path.hasSuffix("dev.hatk.createRecord") {
+            if path.hasSuffix("com.atproto.repo.createRecord") {
                 let collection = body
                     .flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }?["collection"] as? String
                 if collection == "app.bsky.feed.post", blueskyStatus != 200 {
@@ -196,11 +196,11 @@ struct StoryPublishTests {
     }
 
     private func storyRecords() -> [[String: Any]] {
-        log.bodies("dev.hatk.createRecord").filter { $0["collection"] as? String == "social.grain.story" }
+        log.bodies("com.atproto.repo.createRecord").filter { $0["collection"] as? String == "social.grain.story" }
     }
 
     private func blueskyRecords() -> [[String: Any]] {
-        log.bodies("dev.hatk.createRecord").filter { $0["collection"] as? String == "app.bsky.feed.post" }
+        log.bodies("com.atproto.repo.createRecord").filter { $0["collection"] as? String == "app.bsky.feed.post" }
     }
 
     @Test func publishingUploadsThePhotoThenWritesTheStory() async throws {
@@ -210,7 +210,7 @@ struct StoryPublishTests {
         let result = try await StoryService.publish(StoryDraft(image: makeImage()), client: client, repo: "did:plc:test", auth: context)
 
         #expect(result.uri == "at://did:plc:test/social.grain.story/story1")
-        #expect(log.count("dev.hatk.uploadBlob") == 1)
+        #expect(log.count("com.atproto.repo.uploadBlob") == 1)
         let write = try #require(storyRecords().first)
         #expect(write["repo"] as? String == "did:plc:test")
         let record = try #require(write["record"] as? [String: Any])
@@ -263,7 +263,7 @@ struct StoryPublishTests {
         let embed = try #require(record["embed"] as? [String: Any])
         let images = try #require(embed["images"] as? [[String: Any]])
         #expect(((images.first?["image"] as? [String: Any])?["ref"] as? [String: Any])?["$link"] as? String == "bafyuploaded", "the cross-post reuses the uploaded blob rather than uploading again")
-        #expect(log.count("dev.hatk.uploadBlob") == 1)
+        #expect(log.count("com.atproto.repo.uploadBlob") == 1)
     }
 
     /// The story is already live by the time Bluesky is asked. A failed
@@ -348,7 +348,7 @@ struct StoryPublishTests {
             }
             #expect(error as? StoryPublishError == .notSignedIn)
             #expect(!StoryService.message(for: error).isEmpty, "the composer has to have something to show")
-            #expect(log.count("dev.hatk.uploadBlob") == 0, "no point spending an upload without credentials")
+            #expect(log.count("com.atproto.repo.uploadBlob") == 0, "no point spending an upload without credentials")
         }
     }
 }

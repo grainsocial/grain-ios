@@ -31,7 +31,7 @@ private final class StubAuth: AuthContextProviding {
 
     init(signedIn: Bool = true) {
         context = signedIn
-            ? AuthContext(accessToken: "test-token", dpop: DPoP(privateKey: P256.Signing.PrivateKey()))
+            ? AuthContext(accessToken: "test-token", dpop: DPoP(privateKey: P256.Signing.PrivateKey()), did: "did:plc:test", pds: URL(string: "https://test.local")!)
             : nil
     }
 
@@ -147,17 +147,17 @@ final class CrossPostPublishTests: GrainTestCase {
 
         XCTAssertTrue(published)
         XCTAssertEqual(center.stage, .finished)
-        XCTAssertEqual(log.count("dev.hatk.putRecord"), 0, "Nothing should have been posted to Bluesky")
-        XCTAssertEqual(log.count("dev.hatk.applyWrites"), 1, "The gallery itself still commits")
+        XCTAssertEqual(log.count("com.atproto.repo.putRecord"), 0, "Nothing should have been posted to Bluesky")
+        XCTAssertEqual(log.count("com.atproto.repo.applyWrites"), 1, "The gallery itself still commits")
     }
 
     func testAGalleryWithCrossPostingOnAlsoPostsToBluesky() async {
         let published = await center.publish(draft(postToBluesky: true), client: client, auth: StubAuth())
 
         XCTAssertTrue(published)
-        XCTAssertEqual(log.count("dev.hatk.putRecord"), 1)
+        XCTAssertEqual(log.count("com.atproto.repo.putRecord"), 1)
 
-        let record = log.bodies("dev.hatk.putRecord").first?["record"] as? [String: Any]
+        let record = log.bodies("com.atproto.repo.putRecord").first?["record"] as? [String: Any]
         XCTAssertEqual((record?["tags"] as? [String]), ["grainsocial"])
         let text = record?["text"] as? String ?? ""
         XCTAssertTrue(text.contains("Golden hour"), "The gallery's title should carry over: \(text)")
@@ -171,7 +171,7 @@ final class CrossPostPublishTests: GrainTestCase {
 
         _ = await center.publish(outgoing, client: client, auth: StubAuth())
 
-        let body = log.bodies("dev.hatk.putRecord").first
+        let body = log.bodies("com.atproto.repo.putRecord").first
         XCTAssertEqual(body?["rkey"] as? String, outgoing.blueskyRkey)
         XCTAssertEqual(body?["collection"] as? String, "app.bsky.feed.post")
         XCTAssertEqual(body?["repo"] as? String, "did:plc:test")
@@ -182,7 +182,7 @@ final class CrossPostPublishTests: GrainTestCase {
     func testTheCrossPostEmbedsTheBlobTheGalleryAlreadyUploaded() async {
         _ = await center.publish(draft(postToBluesky: true), client: client, auth: StubAuth())
 
-        let record = log.bodies("dev.hatk.putRecord").first?["record"] as? [String: Any]
+        let record = log.bodies("com.atproto.repo.putRecord").first?["record"] as? [String: Any]
         let embed = record?["embed"] as? [String: Any]
         XCTAssertEqual(embed?["$type"] as? String, "app.bsky.embed.images")
 
@@ -203,7 +203,7 @@ final class CrossPostPublishTests: GrainTestCase {
 
         _ = await center.publish(located, client: client, auth: StubAuth())
 
-        let record = log.bodies("dev.hatk.putRecord").first?["record"] as? [String: Any]
+        let record = log.bodies("com.atproto.repo.putRecord").first?["record"] as? [String: Any]
         XCTAssertTrue((record?["text"] as? String ?? "").contains("Lisboa"))
     }
 
@@ -213,8 +213,8 @@ final class CrossPostPublishTests: GrainTestCase {
 
         _ = await center.publish(bare, client: client, auth: StubAuth())
 
-        XCTAssertEqual(log.count("dev.hatk.putRecord"), 1)
-        let record = log.bodies("dev.hatk.putRecord").first?["record"] as? [String: Any]
+        XCTAssertEqual(log.count("com.atproto.repo.putRecord"), 1)
+        let record = log.bodies("com.atproto.repo.putRecord").first?["record"] as? [String: Any]
         XCTAssertFalse((record?["text"] as? String ?? "").isEmpty)
     }
 
@@ -229,12 +229,12 @@ final class CrossPostPublishTests: GrainTestCase {
         MockURLProtocol.handler = { request in
             let path = request.url?.path ?? ""
             log.record(path: path, body: bodyData(of: request))
-            if path.hasSuffix("dev.hatk.applyWrites") {
+            if path.hasSuffix("com.atproto.repo.applyWrites") {
                 seenCommit = true
                 let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
                 return (Data(#"{"results": []}"#.utf8), response)
             }
-            if path.hasSuffix("dev.hatk.putRecord") {
+            if path.hasSuffix("com.atproto.repo.putRecord") {
                 let response = HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!
                 return (Data("bluesky is down".utf8), response)
             }
@@ -257,7 +257,7 @@ final class CrossPostPublishTests: GrainTestCase {
         let published = await center.publish(draft(postToBluesky: true), client: client, auth: StubAuth(signedIn: false))
 
         XCTAssertFalse(published)
-        XCTAssertEqual(log.count("dev.hatk.applyWrites"), 0)
+        XCTAssertEqual(log.count("com.atproto.repo.applyWrites"), 0)
         if case .failed = center.stage {
             // expected
         } else {

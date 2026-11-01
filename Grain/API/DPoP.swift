@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import os
 import Security
 
 /// DPoP (Demonstration of Proof-of-Possession) proof generator using ES256.
@@ -26,24 +27,25 @@ final class DPoP: Sendable {
             "y": yCoord.base64URLEncoded(),
         ]
 
-        // JWK thumbprint (RFC 7638) — lexicographic JSON of required members
+        // JWK thumbprint (RFC 7638): lexicographic JSON of required members
         let thumbprintInput = #"{"crv":"P-256","kty":"EC","x":"\#(xCoord.base64URLEncoded())","y":"\#(yCoord.base64URLEncoded())"}"#
         let hash = SHA256.hash(data: Data(thumbprintInput.utf8))
         thumbprint = Data(hash).base64URLEncoded()
     }
 
-    /// Create a DPoP proof JWT.
+    /// Create a DPoP proof JWT for one request: `htm` and `htu` (the URL
+    /// without query or fragment), `ath` when it carries an access token, and
+    /// the nonce the request's origin last sent.
     func createProof(
         httpMethod: String,
         url: URL,
-        accessToken: String? = nil,
-        nonce: String? = nil
+        accessToken: String? = nil
     ) async throws -> String {
-        // Normalize URL: scheme + host + path (no query)
         var components = URLComponents(url: url, resolvingAgainstBaseURL: false)!
         components.query = nil
         components.fragment = nil
         let htu = components.url!.absoluteString
+        let nonce = DPoPNonces.shared.nonce(for: url)
 
         // Header
         let header: [String: Any] = [
@@ -76,6 +78,42 @@ final class DPoP: Sendable {
         let signature = try privateKey.signature(for: Data(signingInput.utf8))
 
         return signingInput + "." + signature.rawRepresentation.base64URLEncoded()
+    }
+}
+
+// MARK: - Nonces
+
+/// The DPoP nonce each server last sent, by origin. An account's
+/// authorization server and its PDS are different origins with different
+/// nonces, and a proof carries the one for the origin it is sent to. Held in
+/// memory only: a server hands out a fresh one on the first refusal.
+final class DPoPNonces: Sendable {
+    static let shared = DPoPNonces()
+
+    private let nonces = OSAllocatedUnfairLock<[String: String]>(initialState: [:])
+
+    static func origin(of url: URL) -> String {
+        let scheme = url.scheme?.lowercased() ?? ""
+        let host = url.host?.lowercased() ?? ""
+        let port = url.port.map { ":\($0)" } ?? ""
+        return "\(scheme)://\(host)\(port)"
+    }
+
+    func nonce(for url: URL) -> String? {
+        let origin = Self.origin(of: url)
+        return nonces.withLock { $0[origin] }
+    }
+
+    /// Keep the nonce `response` to a request for `url` carries, if any.
+    func keep(from response: HTTPURLResponse, for url: URL) {
+        guard let nonce = response.value(forHTTPHeaderField: "DPoP-Nonce"), !nonce.isEmpty else { return }
+        let origin = Self.origin(of: url)
+        nonces.withLock { $0[origin] = nonce }
+    }
+
+    func set(_ nonce: String?, for url: URL) {
+        let origin = Self.origin(of: url)
+        nonces.withLock { $0[origin] = nonce }
     }
 }
 

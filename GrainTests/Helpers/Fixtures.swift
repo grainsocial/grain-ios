@@ -268,3 +268,14 @@ extension Fixtures {
         ]
     }
 }
+
+extension AccountServer {
+    /// Where a test account's tokens came from: a PDS that is its own
+    /// authorization server, as a self-hosted one is.
+    static let test = AccountServer(
+        pds: URL(string: "https://pds.test")!,
+        issuer: "https://pds.test",
+        tokenEndpoint: URL(string: "https://pds.test/oauth/token")!,
+        revocationEndpoint: URL(string: "https://pds.test/oauth/revoke")!
+    )
+}

@@ -65,7 +65,7 @@ final class BlueskyCrossPostTests: GrainTestCase {
         try await super.setUp()
         did = "did:plc:bsky-\(UUID().uuidString)"
         client = XRPCClient(baseURL: URL(string: "https://test.local")!, session: MockURLProtocol.mockSession())
-        auth = try AuthContext(accessToken: "token", dpop: DPoP.loadOrCreate(for: did))
+        auth = try AuthContext(accessToken: "token", dpop: DPoP.loadOrCreate(for: did), did: did, pds: URL(string: "https://test.local")!)
         log = PostLog()
 
         let log = log!
@@ -133,7 +133,7 @@ final class BlueskyCrossPostTests: GrainTestCase {
     func testAKeyedCrossPostOverwritesRatherThanPostsAgain() async throws {
         try await post(options(), rkey: "3jzfcijpj2z2a")
 
-        XCTAssertEqual(log.lastPath, "/xrpc/dev.hatk.putRecord")
+        XCTAssertEqual(log.lastPath, "/xrpc/com.atproto.repo.putRecord")
         XCTAssertEqual(log.lastBody?["rkey"] as? String, "3jzfcijpj2z2a")
         XCTAssertEqual(log.lastBody?["collection"] as? String, "app.bsky.feed.post")
         XCTAssertEqual(log.lastBody?["repo"] as? String, "did:plc:test")
@@ -142,7 +142,7 @@ final class BlueskyCrossPostTests: GrainTestCase {
     func testAnUnkeyedCrossPostCreatesANewRecord() async throws {
         try await post(options())
 
-        XCTAssertEqual(log.lastPath, "/xrpc/dev.hatk.createRecord")
+        XCTAssertEqual(log.lastPath, "/xrpc/com.atproto.repo.createRecord")
         XCTAssertEqual(log.lastBody?["collection"] as? String, "app.bsky.feed.post")
     }
 

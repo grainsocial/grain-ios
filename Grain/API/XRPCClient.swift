@@ -8,8 +8,7 @@ enum XRPCError: Error, LocalizedError {
     case httpError(statusCode: Int, body: Data?)
     case decodingError(Error)
     case unauthorized
-    case dpopNonceRequired(nonce: String)
-    /// The PDS rejected the authorization — usually the user tapping "Deny".
+    /// The authorization server refused the request, usually the user tapping "Deny".
     case authorizationDenied
     /// Any other OAuth error handed back on the callback URL.
     case authorizationFailed(code: String, description: String?)
@@ -20,14 +19,19 @@ enum XRPCError: Error, LocalizedError {
         case let .httpError(code, _): "HTTP error \(code)"
         case let .decodingError(error): "Decoding error: \(error.localizedDescription)"
         case .unauthorized: "Unauthorized"
-        case .dpopNonceRequired: "DPoP nonce required"
         case .authorizationDenied: "Sign-in canceled"
         case let .authorizationFailed(code, description): description ?? "Sign-in failed (\(code))"
         }
     }
 }
 
-/// XRPC client for communicating with the hatk server.
+/// XRPC client for Grain's calls.
+///
+/// A call without an auth context goes to `baseURL`, Grain's AppView, as is.
+/// A call with one goes to the account's PDS, with a DPoP-bound token and a
+/// proof per request; every method outside `com.atproto.*` also carries an
+/// `atproto-proxy` header, so the PDS forwards it to the AppView with a
+/// service token, as Bluesky's apps reach their AppView.
 final class XRPCClient: Sendable {
     let baseURL: URL
     private let session: URLSession
@@ -50,16 +54,17 @@ final class XRPCClient: Sendable {
         auth: AuthContext? = nil,
         as type: T.Type
     ) async throws -> T {
-        var components = URLComponents(url: baseURL.appendingPathComponent("xrpc/\(nsid)"), resolvingAgainstBaseURL: false)!
-        if !params.isEmpty {
-            components.queryItems = params.map { URLQueryItem(name: $0.key, value: $0.value) }
+        let data = try await perform(nsid, auth: auth) { base in
+            var components = URLComponents(url: base.appendingPathComponent("xrpc/\(nsid)"), resolvingAgainstBaseURL: false)!
+            if !params.isEmpty {
+                components.queryItems = params.map { URLQueryItem(name: $0.key, value: $0.value) }
+            }
+            guard let url = components.url else { throw XRPCError.invalidURL }
+            var request = URLRequest(url: url)
+            request.httpMethod = "GET"
+            return request
         }
-        guard let url = components.url else { throw XRPCError.invalidURL }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-
-        return try await executeWithRetry(request, auth: auth, as: type)
+        return try decode(type, from: data)
     }
 
     /// Execute an XRPC procedure (POST request).
@@ -69,13 +74,11 @@ final class XRPCClient: Sendable {
         auth: AuthContext? = nil,
         as type: O.Type
     ) async throws -> O {
-        let url = baseURL.appendingPathComponent("xrpc/\(nsid)")
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try encoder.encode(input)
-
-        return try await executeWithRetry(request, auth: auth, as: type)
+        let body = try encoder.encode(input)
+        let data = try await perform(nsid, auth: auth) { base in
+            Self.post(base, nsid, body: body, contentType: "application/json")
+        }
+        return try decode(type, from: data)
     }
 
     /// Execute an XRPC procedure with no response body.
@@ -84,132 +87,118 @@ final class XRPCClient: Sendable {
         input: some Encodable,
         auth: AuthContext? = nil
     ) async throws {
-        let url = baseURL.appendingPathComponent("xrpc/\(nsid)")
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try encoder.encode(input)
-
-        try await executeVoidWithRetry(request, auth: auth)
+        let body = try encoder.encode(input)
+        _ = try await perform(nsid, auth: auth) { base in
+            Self.post(base, nsid, body: body, contentType: "application/json")
+        }
     }
 
-    /// Upload a blob (binary data).
+    /// Upload a blob to the account's PDS.
     func uploadBlob(
         data: Data,
         mimeType: String,
         auth: AuthContext? = nil
     ) async throws -> UploadBlobResponse {
-        let url = baseURL.appendingPathComponent("xrpc/dev.hatk.uploadBlob")
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue(mimeType, forHTTPHeaderField: "Content-Type")
-        request.httpBody = data
+        let nsid = "com.atproto.repo.uploadBlob"
+        let response = try await perform(nsid, auth: auth) { base in
+            Self.post(base, nsid, body: data, contentType: mimeType)
+        }
+        return try decode(UploadBlobResponse.self, from: response)
+    }
 
-        return try await executeWithRetry(request, auth: auth, as: UploadBlobResponse.self)
+    /// The `atproto-proxy` value a signed-in call to `nsid` carries, if any.
+    static func proxy(for nsid: String) -> String? {
+        nsid.hasPrefix("com.atproto.") ? nil : AuthManager.appviewService
     }
 
     // MARK: - Private
 
-    private func executeWithRetry<T: Decodable>(
-        _ request: URLRequest,
-        auth: AuthContext?,
-        as type: T.Type,
-        retryCount: Int = 0
-    ) async throws -> T {
-        var req = request
-        try await applyAuth(&req, auth: auth)
+    private static func post(_ base: URL, _ nsid: String, body: Data, contentType: String) -> URLRequest {
+        var request = URLRequest(url: base.appendingPathComponent("xrpc/\(nsid)"))
+        request.httpMethod = "POST"
+        request.setValue(contentType, forHTTPHeaderField: "Content-Type")
+        request.httpBody = body
+        return request
+    }
 
+    private func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
         do {
-            return try await execute(req, as: type)
-        } catch let XRPCError.dpopNonceRequired(nonce) where retryCount < 2 {
-            logger.info("DPoP nonce required, retrying with nonce")
-            var updatedAuth = auth
-            updatedAuth?.nonce = nonce
-            var retryReq = request
-            try await applyAuth(&retryReq, auth: updatedAuth)
-            return try await execute(retryReq, as: type)
-        } catch XRPCError.unauthorized where retryCount < 1 {
-            if let onUnauthorized {
-                do {
-                    if let newAuth = try await onUnauthorized() {
-                        logger.info("Token refreshed, retrying request")
-                        return try await executeWithRetry(request, auth: newAuth, as: type, retryCount: retryCount + 1)
-                    }
-                } catch {
-                    logger.error("Token refresh failed: \(error)")
-                }
-            }
-            throw XRPCError.unauthorized
+            return try decoder.decode(type, from: data)
+        } catch {
+            throw XRPCError.decodingError(error)
         }
     }
 
-    private func executeVoidWithRetry(
-        _ request: URLRequest,
-        auth: AuthContext?,
-        retryCount: Int = 0
-    ) async throws {
-        var req = request
-        try await applyAuth(&req, auth: auth)
+    /// Send the request `build` makes against the base URL a context calls
+    /// for, and return the body of a 2xx answer.
+    ///
+    /// A DPoP nonce refusal (401 with `use_dpop_nonce` in `WWW-Authenticate`,
+    /// or 400 with it as the error) is sent again once with the nonce. Any
+    /// other 401 asks `onUnauthorized` for a renewed context once and sends
+    /// the request again with it.
+    private func perform(
+        _ nsid: String,
+        auth initial: AuthContext?,
+        build: (URL) throws -> URLRequest
+    ) async throws -> Data {
+        var auth = initial
+        var refreshed = false
+        var nonceRetried = false
 
-        let (data, response) = try await send(req)
-        guard let httpResponse = response as? HTTPURLResponse else { return }
+        while true {
+            var request = try build(auth?.pds ?? baseURL)
+            try await applyAuth(&request, nsid: nsid, auth: auth)
 
-        if httpResponse.statusCode == 400,
-           let nonce = httpResponse.value(forHTTPHeaderField: "DPoP-Nonce"),
-           retryCount < 2
-        {
-            logger.info("DPoP nonce required (void), retrying")
-            var updatedAuth = auth
-            updatedAuth?.nonce = nonce
-            var retryReq = request
-            try await applyAuth(&retryReq, auth: updatedAuth)
-            let (_, retryResponse) = try await send(retryReq)
-            guard let retryHttp = retryResponse as? HTTPURLResponse else { return }
-            if retryHttp.statusCode == 401 {
+            let (data, response) = try await send(request)
+            guard let http = response as? HTTPURLResponse else {
+                throw XRPCError.httpError(statusCode: 0, body: data)
+            }
+            if let url = request.url {
+                DPoPNonces.shared.keep(from: http, for: url)
+            }
+
+            if auth != nil, !nonceRetried, Self.isNonceRefusal(http, body: data) {
+                logger.info("DPoP nonce required, retrying with nonce")
+                nonceRetried = true
+                continue
+            }
+
+            if http.statusCode == 401 {
+                let wwwAuth = http.value(forHTTPHeaderField: "WWW-Authenticate")
+                logger.error("401 \(nsid, privacy: .public): wwwAuth=\(wwwAuth ?? "nil", privacy: .public)")
+                if !refreshed, let onUnauthorized {
+                    refreshed = true
+                    do {
+                        if let renewed = try await onUnauthorized() {
+                            logger.info("Token refreshed, retrying request")
+                            auth = renewed
+                            nonceRetried = false
+                            continue
+                        }
+                    } catch {
+                        logger.error("Token refresh failed: \(error)")
+                    }
+                }
                 throw XRPCError.unauthorized
             }
-            guard (200 ... 299).contains(retryHttp.statusCode) else {
-                throw XRPCError.httpError(statusCode: retryHttp.statusCode, body: nil)
-            }
-            return
-        }
 
-        if httpResponse.statusCode == 401 {
-            // Try once more with DPoP-Nonce from response if present
-            if let nonce = httpResponse.value(forHTTPHeaderField: "DPoP-Nonce"), retryCount < 2 {
-                logger.info("401 with nonce, retrying")
-                var updatedAuth = auth
-                updatedAuth?.nonce = nonce
-                var retryReq = request
-                try await applyAuth(&retryReq, auth: updatedAuth)
-                let (_, retryResponse) = try await send(retryReq)
-                guard let retryHttp = retryResponse as? HTTPURLResponse else { return }
-                if retryHttp.statusCode == 401 {
-                    throw XRPCError.unauthorized
-                }
-                guard (200 ... 299).contains(retryHttp.statusCode) else {
-                    throw XRPCError.httpError(statusCode: retryHttp.statusCode, body: nil)
-                }
-                return
+            guard (200 ... 299).contains(http.statusCode) else {
+                logger.error("HTTP \(http.statusCode): \(String(data: data, encoding: .utf8) ?? "")")
+                throw XRPCError.httpError(statusCode: http.statusCode, body: data)
             }
-            // Try token refresh
-            if retryCount < 1, let onUnauthorized {
-                do {
-                    if let newAuth = try await onUnauthorized() {
-                        logger.info("Token refreshed, retrying void request")
-                        try await executeVoidWithRetry(request, auth: newAuth, retryCount: retryCount + 1)
-                        return
-                    }
-                } catch {
-                    logger.error("Token refresh failed: \(error)")
-                }
-            }
-            throw XRPCError.unauthorized
+            return data
         }
+    }
 
-        guard (200 ... 299).contains(httpResponse.statusCode) else {
-            logger.error("HTTP \(httpResponse.statusCode): \(String(data: data, encoding: .utf8) ?? "")")
-            throw XRPCError.httpError(statusCode: httpResponse.statusCode, body: data)
+    static func isNonceRefusal(_ response: HTTPURLResponse, body: Data) -> Bool {
+        switch response.statusCode {
+        case 401:
+            return response.value(forHTTPHeaderField: "WWW-Authenticate")?.contains("use_dpop_nonce") ?? false
+        case 400:
+            struct Refusal: Decodable { let error: String? }
+            return (try? JSONDecoder().decode(Refusal.self, from: body))?.error == "use_dpop_nonce"
+        default:
+            return false
         }
     }
 
@@ -222,60 +211,30 @@ final class XRPCClient: Sendable {
         return try await session.data(for: request)
     }
 
-    private func execute<T: Decodable>(_ request: URLRequest, as type: T.Type) async throws -> T {
-        let (data, response) = try await send(request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw XRPCError.httpError(statusCode: 0, body: data)
-        }
-
-        // Check for DPoP nonce requirement
-        if httpResponse.statusCode == 400,
-           let nonce = httpResponse.value(forHTTPHeaderField: "DPoP-Nonce")
-        {
-            throw XRPCError.dpopNonceRequired(nonce: nonce)
-        }
-
-        if httpResponse.statusCode == 401 {
-            let body = String(data: data, encoding: .utf8) ?? ""
-            let nonce = httpResponse.value(forHTTPHeaderField: "DPoP-Nonce")
-            let wwwAuth = httpResponse.value(forHTTPHeaderField: "WWW-Authenticate")
-            logger.error("401: body=\(body), nonce=\(nonce ?? "nil"), wwwAuth=\(wwwAuth ?? "nil")")
-            if let nonce {
-                throw XRPCError.dpopNonceRequired(nonce: nonce)
-            }
-            throw XRPCError.unauthorized
-        }
-
-        guard (200 ... 299).contains(httpResponse.statusCode) else {
-            logger.error("HTTP \(httpResponse.statusCode): \(String(data: data, encoding: .utf8) ?? "")")
-            throw XRPCError.httpError(statusCode: httpResponse.statusCode, body: data)
-        }
-
-        do {
-            return try decoder.decode(type, from: data)
-        } catch {
-            throw XRPCError.decodingError(error)
-        }
-    }
-
-    private func applyAuth(_ request: inout URLRequest, auth: AuthContext?) async throws {
-        guard let auth else { return }
+    private func applyAuth(_ request: inout URLRequest, nsid: String, auth: AuthContext?) async throws {
+        guard let auth, let url = request.url else { return }
         request.setValue("DPoP \(auth.accessToken)", forHTTPHeaderField: "Authorization")
         let proof = try await auth.dpop.createProof(
             httpMethod: request.httpMethod ?? "GET",
-            url: request.url!,
-            accessToken: auth.accessToken,
-            nonce: auth.nonce
+            url: url,
+            accessToken: auth.accessToken
         )
         request.setValue(proof, forHTTPHeaderField: "DPoP")
+        if let proxy = Self.proxy(for: nsid) {
+            request.setValue(proxy, forHTTPHeaderField: "atproto-proxy")
+        }
     }
 }
 
-/// Context for authenticated requests.
+/// Context for authenticated requests: the active account's token, its DPoP
+/// key, and where its repo lives.
 struct AuthContext: Sendable {
     let accessToken: String
     let dpop: DPoP
-    var nonce: String?
+    /// The account's DID, the repo its writes go to.
+    let did: String
+    /// The account's PDS, where every call carrying this context goes.
+    let pds: URL
 }
 
 struct UploadBlobResponse: Codable, Sendable {

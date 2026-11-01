@@ -39,7 +39,7 @@ private final class StubAuth: AuthContextProviding {
 
     init(signedIn: Bool = true) {
         context = signedIn
-            ? AuthContext(accessToken: "test-token", dpop: DPoP(privateKey: P256.Signing.PrivateKey()))
+            ? AuthContext(accessToken: "test-token", dpop: DPoP(privateKey: P256.Signing.PrivateKey()), did: "did:plc:test", pds: URL(string: "https://test.local")!)
             : nil
     }
 
@@ -153,13 +153,13 @@ final class GalleryPublishTests: GrainTestCase {
                 return (Data(json.utf8), response)
             }
 
-            if path.hasSuffix("dev.hatk.uploadBlob") {
-                if let failUploadsAfter, log.count("dev.hatk.uploadBlob") > failUploadsAfter {
+            if path.hasSuffix("com.atproto.repo.uploadBlob") {
+                if let failUploadsAfter, log.count("com.atproto.repo.uploadBlob") > failUploadsAfter {
                     return respond(#"{"error":"PayloadTooLarge"}"#, status: 413)
                 }
                 return respond(#"{"blob":{"$type":"blob","ref":{"$link":"bafyuploaded"},"mimeType":"image/jpeg","size":1234}}"#)
             }
-            if path.hasSuffix("dev.hatk.applyWrites") {
+            if path.hasSuffix("com.atproto.repo.applyWrites") {
                 if applyWritesStatus != 200 {
                     return respond(#"{"error":"InvalidRequest","message":"Record already exists"}"#, status: applyWritesStatus)
                 }
@@ -192,7 +192,7 @@ final class GalleryPublishTests: GrainTestCase {
         XCTAssertEqual(writes.count { $0.collection == "social.grain.photo.exif" }, 3)
         XCTAssertEqual(writes.count { $0.collection == "social.grain.gallery" }, 1)
         XCTAssertEqual(writes.count { $0.collection == "social.grain.gallery.item" }, 3)
-        XCTAssertTrue(writes.allSatisfy { $0.type == "dev.hatk.applyWrites#create" })
+        XCTAssertTrue(writes.allSatisfy { $0.type == "com.atproto.repo.applyWrites#create" })
         XCTAssertTrue(writes.allSatisfy { TID.isValid($0.rkey) })
     }
 
@@ -242,8 +242,8 @@ final class GalleryPublishTests: GrainTestCase {
         let published = await center.publish(draft, client: makeClient(), auth: StubAuth())
 
         XCTAssertTrue(published)
-        XCTAssertEqual(log.count("dev.hatk.uploadBlob"), 3)
-        XCTAssertEqual(log.count("dev.hatk.applyWrites"), 1)
+        XCTAssertEqual(log.count("com.atproto.repo.uploadBlob"), 3)
+        XCTAssertEqual(log.count("com.atproto.repo.applyWrites"), 1)
         XCTAssertEqual(center.stage, .finished)
         XCTAssertNil(center.activeDraft)
         XCTAssertTrue(store.loadAll().isEmpty, "a published draft is cleaned off disk")
@@ -259,7 +259,7 @@ final class GalleryPublishTests: GrainTestCase {
         let published = await center.publish(draft, client: makeClient(), auth: StubAuth())
 
         XCTAssertTrue(published)
-        XCTAssertEqual(log.count("dev.hatk.uploadBlob"), 2, "the three finished uploads must not repeat")
+        XCTAssertEqual(log.count("com.atproto.repo.uploadBlob"), 2, "the three finished uploads must not repeat")
     }
 
     /// The duplicate-gallery case. A commit that actually landed but came back
@@ -277,7 +277,7 @@ final class GalleryPublishTests: GrainTestCase {
         )
 
         XCTAssertTrue(published, "the gallery is on the PDS, so this is a success")
-        XCTAssertEqual(log.count("dev.hatk.applyWrites"), 1, "no second commit attempt")
+        XCTAssertEqual(log.count("com.atproto.repo.applyWrites"), 1, "no second commit attempt")
         XCTAssertEqual(log.count("dev.hatk.getRecord"), 1, "we asked whether it landed")
         XCTAssertTrue(store.loadAll().isEmpty)
     }
@@ -312,14 +312,14 @@ final class GalleryPublishTests: GrainTestCase {
 
         let first = await center.publish(draft, client: makeClient(applyWritesStatus: 400), auth: auth)
         XCTAssertFalse(first)
-        XCTAssertEqual(log.count("dev.hatk.uploadBlob"), 3)
+        XCTAssertEqual(log.count("com.atproto.repo.uploadBlob"), 3)
 
         let second = await center.retry(client: makeClient(), auth: auth)
 
         XCTAssertTrue(second)
-        XCTAssertEqual(log.count("dev.hatk.uploadBlob"), 3, "the retry must not re-upload a single photo")
+        XCTAssertEqual(log.count("com.atproto.repo.uploadBlob"), 3, "the retry must not re-upload a single photo")
 
-        let commits = log.bodies("dev.hatk.applyWrites")
+        let commits = log.bodies("com.atproto.repo.applyWrites")
         XCTAssertEqual(commits.count, 2)
         XCTAssertEqual(try recordKeys(commits[0]), try recordKeys(commits[1]), "both attempts address the same records")
 
@@ -336,7 +336,7 @@ final class GalleryPublishTests: GrainTestCase {
         let published = await center.publish(draft, client: makeClient(), auth: StubAuth(signedIn: false))
 
         XCTAssertFalse(published)
-        XCTAssertEqual(log.count("dev.hatk.uploadBlob"), 0)
+        XCTAssertEqual(log.count("com.atproto.repo.uploadBlob"), 0)
     }
 
     @MainActor
@@ -350,7 +350,7 @@ final class GalleryPublishTests: GrainTestCase {
 
         await center.resumePending(client: makeClient(), auth: StubAuth())
 
-        XCTAssertEqual(log.count("dev.hatk.applyWrites"), 1)
+        XCTAssertEqual(log.count("com.atproto.repo.applyWrites"), 1)
         XCTAssertTrue(center.pending.isEmpty)
         XCTAssertTrue(store.loadAll().isEmpty)
     }
@@ -396,7 +396,7 @@ final class GalleryPublishTests: GrainTestCase {
 
         await center.resumePending(client: makeClient(), auth: StubAuth())
 
-        XCTAssertEqual(log.count("dev.hatk.applyWrites"), 2, "both drafts published")
+        XCTAssertEqual(log.count("com.atproto.repo.applyWrites"), 2, "both drafts published")
         XCTAssertEqual(refreshes, 1, "one feed rebuild, not one per draft")
     }
 
@@ -422,7 +422,7 @@ final class GalleryPublishTests: GrainTestCase {
 
         let first = await center.publish(draft, client: makeClient(failUploadsAfter: 2), auth: auth)
         XCTAssertFalse(first)
-        XCTAssertEqual(log.count("dev.hatk.uploadBlob"), 3, "two succeeded, the third failed")
+        XCTAssertEqual(log.count("com.atproto.repo.uploadBlob"), 3, "two succeeded, the third failed")
         XCTAssertEqual(center.activeDraft?.uploadedPhotoCount, 2, "progress is remembered")
         XCTAssertEqual(store.load(draft.id)?.uploadedPhotoCount, 2, "and checkpointed to disk")
 
@@ -430,10 +430,10 @@ final class GalleryPublishTests: GrainTestCase {
 
         XCTAssertTrue(second)
         XCTAssertEqual(
-            log.count("dev.hatk.uploadBlob"), 6,
+            log.count("com.atproto.repo.uploadBlob"), 6,
             "the retry uploads the remaining three photos, not all five again"
         )
-        XCTAssertEqual(log.count("dev.hatk.applyWrites"), 1)
+        XCTAssertEqual(log.count("com.atproto.repo.applyWrites"), 1)
     }
 
     /// A background resume and a tap on Post can land together; the two must
@@ -451,7 +451,7 @@ final class GalleryPublishTests: GrainTestCase {
         let results = await [firstPublish, secondPublish]
 
         XCTAssertEqual(results, [true, true])
-        XCTAssertEqual(log.count("dev.hatk.applyWrites"), 2)
+        XCTAssertEqual(log.count("com.atproto.repo.applyWrites"), 2)
         XCTAssertNil(center.activeDraft)
         XCTAssertTrue(store.loadAll().isEmpty)
     }
