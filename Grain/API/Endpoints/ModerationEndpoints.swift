@@ -29,8 +29,9 @@ extension LabelDefinition {
 
     /// The labels grain gives out, as grain-serve defines them
     /// (`grain::labels::DEFINITIONS`), in its order: the reasons a report
-    /// names and the warnings a gallery carries. grain-serve publishes them
-    /// only to its admins, so the app carries them, as the web does.
+    /// names and the warnings a gallery carries. The app reads them from
+    /// `social.grain.moderation.describeLabels`; this copy is what it uses
+    /// until that answers, and when it cannot.
     static let all: [LabelDefinition] = [
         grain("copyright", "content", "hide", "Copyright Violation", "Content that infringes on copyright or intellectual property."),
         grain("csae", "content", "hide", "Child Safety", "Sexual content involving a minor, or the exploitation, grooming or endangerment of a child."),
@@ -63,6 +64,19 @@ extension LabelDefinition {
     static func reasonType(for label: String) -> String {
         reportReasons[label] ?? reportReasons["other"]!
     }
+}
+
+/// `social.grain.moderation.describeLabels`' answer: the labels grain-serve
+/// gives out, as a Bluesky labeler's service record has them.
+struct DescribeLabelsResponse: Codable, Sendable {
+    struct Policies: Codable, Sendable {
+        var labelValues: [String]?
+        var labelValueDefinitions: [LabelDefinition]?
+    }
+
+    /// The labeler, as its labels name it in `src`.
+    var did: String?
+    let policies: Policies
 }
 
 /// `com.atproto.moderation.createReport`'s input.
@@ -137,6 +151,12 @@ extension XRPCClient {
     }
 
     static let createReportMethod = "com.atproto.moderation.createReport"
+
+    /// The labels grain-serve gives out and what each means.
+    func describeLabels(auth: AuthContext? = nil) async throws -> [LabelDefinition] {
+        let response = try await query("social.grain.moderation.describeLabels", auth: auth, as: DescribeLabelsResponse.self)
+        return response.policies.labelValueDefinitions ?? []
+    }
 
     // MARK: - Blocks
 

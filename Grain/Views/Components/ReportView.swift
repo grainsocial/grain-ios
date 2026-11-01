@@ -8,8 +8,13 @@ struct ReportView: View {
     let subjectUri: String
     let subjectCid: String
 
-    private let labelDefs = LabelDefinition.all
-    @State private var selectedLabel = LabelDefinition.all.first?.identifier ?? ""
+    @Environment(LabelDefinitionsCache.self) private var labelDefsCache
+    @State private var selectedLabel = ""
+
+    private var labelDefs: [LabelDefinition] {
+        labelDefsCache.definitions
+    }
+
     @State private var reason = ""
     @State private var isSubmitting = false
     @State private var isSubmitted = false
@@ -34,6 +39,11 @@ struct ReportView: View {
                             }
                             .pickerStyle(.inline)
                             .labelsHidden()
+                            .onAppear {
+                                if selectedLabel.isEmpty {
+                                    selectedLabel = labelDefs.first?.identifier ?? ""
+                                }
+                            }
                         }
 
                         Section("Details (optional)") {

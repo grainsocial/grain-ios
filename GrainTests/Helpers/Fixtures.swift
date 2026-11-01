@@ -245,6 +245,7 @@ extension Fixtures {
             "getStory": #"{"story": null}"#,
             "listNotifications": notifications,
             "getUnreadCount": #"{"count": 0}"#,
+            "describeLabels": #"{"policies": {"labelValues": [], "labelValueDefinitions": []}}"#,
             "getKnownFollowers": actorList,
             "gallery.getFavorites": actorList,
             "getFollowers": actorList,
