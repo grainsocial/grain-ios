@@ -82,8 +82,18 @@ final class AuthManager {
         // asserts create *and* update for that call.
         "repo:app.bsky.feed.post?action=create&action=update",
         // Every Grain method, through the PDS's proxy to the AppView.
-        "rpc:*?aud=\(appviewDID)%23grain_appview",
+        rpcScope(audience: appviewService),
     ]
+
+    /// `rpc:*` for the service `audience`, which goes into the scope as a
+    /// query value: the PDS URL-decodes it, so `%` (a `did:web` port) is
+    /// escaped first, then `#`.
+    nonisolated static func rpcScope(audience: String) -> String {
+        let escaped = audience
+            .replacingOccurrences(of: "%", with: "%25")
+            .replacingOccurrences(of: "#", with: "%23")
+        return "rpc:*?aud=\(escaped)"
+    }
 
     nonisolated static var scope: String {
         requiredScopes.joined(separator: " ")

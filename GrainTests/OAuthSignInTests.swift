@@ -242,6 +242,19 @@ final class OAuthSignInTests: GrainTestCase {
         XCTAssertEqual(AuthManager.appviewService, "did:web:grain.social#grain_appview")
     }
 
+    /// The PDS URL-decodes the audience, so a `did:web` port's `%3A` is
+    /// escaped again, while the proxy header carries it as it is.
+    func testTheRPCScopeEscapesAPortedAudience() {
+        XCTAssertEqual(
+            AuthManager.rpcScope(audience: "did:web:localhost%3A3000#grain_appview"),
+            "rpc:*?aud=did:web:localhost%253A3000%23grain_appview"
+        )
+        XCTAssertEqual(
+            AuthManager.rpcScope(audience: "did:web:grain.social#grain_appview"),
+            "rpc:*?aud=did:web:grain.social%23grain_appview"
+        )
+    }
+
     func testSigningInPushesTheRequestToTheAccountsOwnServer() async throws {
         serveAlice()
         let auth = AuthManager()
