@@ -6,6 +6,7 @@ private let logger = Logger(subsystem: "social.grain.grain", category: "Records"
 struct CreateRecordInput: Codable, Sendable {
     let collection: String
     let repo: String
+    var rkey: String?
     let record: AnyCodable
 }
 
@@ -19,6 +20,8 @@ struct PutRecordInput: Codable, Sendable {
     let rkey: String
     let record: AnyCodable
     let repo: String
+    /// The CID the record must still have for the put to land.
+    var swapRecord: String?
 }
 
 struct DeleteRecordInput: Codable, Sendable {
@@ -131,10 +134,11 @@ extension XRPCClient {
         )
     }
 
-    func createRecord(collection: String, repo: String, record: AnyCodable, auth: AuthContext? = nil) async throws -> CreateRecordResponse {
+    /// Create a record, at `rkey` if one is given.
+    func createRecord(collection: String, repo: String, rkey: String? = nil, record: AnyCodable, auth: AuthContext? = nil) async throws -> CreateRecordResponse {
         let response = try await procedure(
             "com.atproto.repo.createRecord",
-            input: CreateRecordInput(collection: collection, repo: repo, record: record),
+            input: CreateRecordInput(collection: collection, repo: repo, rkey: rkey, record: record),
             auth: auth,
             as: CreateRecordResponse.self
         )
@@ -143,12 +147,13 @@ extension XRPCClient {
     }
 
     /// Create or overwrite the record at `rkey`. `repo` defaults to the
-    /// signed-in account's.
-    func putRecord(collection: String, rkey: String, record: AnyCodable, repo: String? = nil, auth: AuthContext? = nil) async throws -> CreateRecordResponse {
+    /// signed-in account's. With `swapRecord`, only if the record there
+    /// still has that CID.
+    func putRecord(collection: String, rkey: String, record: AnyCodable, repo: String? = nil, swapRecord: String? = nil, auth: AuthContext? = nil) async throws -> CreateRecordResponse {
         let repo = repo ?? auth?.did ?? ""
         let response = try await procedure(
             "com.atproto.repo.putRecord",
-            input: PutRecordInput(collection: collection, rkey: rkey, record: record, repo: repo),
+            input: PutRecordInput(collection: collection, rkey: rkey, record: record, repo: repo, swapRecord: swapRecord),
             auth: auth,
             as: CreateRecordResponse.self
         )

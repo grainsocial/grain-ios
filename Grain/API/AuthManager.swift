@@ -228,6 +228,10 @@ final class AuthManager {
         let callback = try await presentAuthorization(pending.url)
         let signedIn = try await oauth.redeem(pending, callback: callback)
         store(signedIn)
+        if let auth = await authContext() {
+            let client = makeClient()
+            Task.detached { await ProfileSeed.run(client: client, auth: auth) }
+        }
         await fetchAndStoreAvatar()
     }
 
