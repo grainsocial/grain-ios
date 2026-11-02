@@ -29,7 +29,7 @@ struct GrainApp: App {
         Task.detached(priority: .userInitiated) {
             let spid = appSignposter.makeSignpostID()
             let state = appSignposter.beginInterval("ConnectionPreheat", id: spid)
-            var req = URLRequest(url: AuthManager.serverURL.appendingPathComponent("_health"))
+            var req = URLRequest(url: AuthManager.serverURL.appendingPathComponent("xrpc/_health"))
             req.httpMethod = "GET"
             req.timeoutInterval = 5
             _ = try? await NetworkEnvironment.session.data(for: req)

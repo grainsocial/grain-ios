@@ -553,6 +553,23 @@ final class EndpointContractTests: GrainTestCase {
         XCTAssertNil(pins.locations?.first?.thumbs)
     }
 
+    /// grain-serve answers getProfile for an account with no grain profile
+    /// indexed, such as one signing in for the first time, with no `cid`.
+    func testAProfileWithNoRecordDecodes() throws {
+        let body = #"{"did":"did:plc:a","handle":"handle.invalid","followersCount":0,"followsCount":0,"galleryCount":0}"#
+        let profile = try JSONDecoder().decode(GrainProfileDetailed.self, from: Data(body.utf8))
+        XCTAssertNil(profile.cid)
+        XCTAssertEqual(profile.did, "did:plc:a")
+    }
+
+    /// A notification from such an account names it with no `cid` either,
+    /// and the whole list is lost if one does not decode.
+    func testANotificationFromAnAccountWithNoProfileDecodes() throws {
+        let body = #"{"notifications":[{"author":{"did":"did:plc:a","handle":"handle.invalid"},"createdAt":"2026-11-02T00:45:28.470Z","indexedAt":"2026-11-02T00:45:28.470Z","isRead":false,"reason":"follow","uri":"at://did:plc:a/social.grain.graph.follow/3mzc3v7xfjkd4"}]}"#
+        let response = try JSONDecoder().decode(GetNotificationsResponse.self, from: Data(body.utf8))
+        XCTAssertNil(response.notifications.first?.author.cid)
+    }
+
     // MARK: - Identity
 
     /// Every list in the app is diffed on these, so a model whose `id` stopped
