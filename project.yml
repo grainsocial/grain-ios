@@ -11,6 +11,9 @@ settings:
     SWIFT_VERSION: "6.0"
     DEVELOPMENT_TEAM: ${APPLE_TEAM_ID}
     PRODUCT_NAME: ${BUNDLE_NAME}
+    # The OAuth callback scheme Info.plist registers. `just sim-next` sets
+    # it to social.grain.next, beside NEXT_API.
+    GRAIN_OAUTH_SCHEME: social.grain
   configs:
     Debug:
       SWIFT_ACTIVE_COMPILATION_CONDITIONS: "DEBUG PRODUCTION_API"
@@ -78,7 +81,7 @@ targets:
               - grain
           - CFBundleURLName: social.grain.oauth
             CFBundleURLSchemes:
-              - social.grain
+              - $(GRAIN_OAUTH_SCHEME)
         CFBundleIconName: AppIcon
         ITSAppUsesNonExemptEncryption: false
         UISupportedInterfaceOrientations:

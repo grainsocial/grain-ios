@@ -31,23 +31,33 @@ final class AuthManager {
     /// The OAuth flow currently on screen, if any. At most one at a time.
     private var loginTask: Task<Void, Error>?
 
-    #if PRODUCTION_API || !targetEnvironment(simulator)
+    #if NEXT_API
+        /// next.grain.social, the grain-serve deploy beside production.
+        nonisolated static let serverURL = URL(string: "https://next.grain.social")!
+        nonisolated static let signUpPDS = URL(string: "https://selfhosted.social")!
+        nonisolated static let callbackScheme = "social.grain.next"
+    #elseif PRODUCTION_API || !targetEnvironment(simulator)
         nonisolated static let serverURL = URL(string: "https://grain.social")!
         /// Where the sign-up button makes an account.
         nonisolated static let signUpPDS = URL(string: "https://selfhosted.social")!
+        /// The server's host reversed, the private-use scheme atproto OAuth
+        /// asks of a native client. Info.plist registers it as
+        /// `GRAIN_OAUTH_SCHEME`, which project.yml and the justfile set to
+        /// match.
+        nonisolated static let callbackScheme = "social.grain"
     #else
         nonisolated static let serverURL = URL(string: "http://127.0.0.1:3000")!
         nonisolated static let signUpPDS = URL(string: "http://localhost:2583")!
+        nonisolated static let callbackScheme = "social.grain"
     #endif
 
     /// The client metadata document grain-serve publishes for the apps. A PDS
     /// fetches it, so it must be https: a dev build signing in against a
     /// local server needs that server behind an https tunnel.
     nonisolated static let clientID = serverURL.appendingPathComponent("oauth/app-client-metadata.json").absoluteString
-    /// The app's bundle id reversed into a URL scheme, with one slash, as
-    /// atproto OAuth asks of a native client.
-    nonisolated static let redirectURI = "social.grain:/oauth/callback"
-    nonisolated static let callbackScheme = "social.grain"
+    /// The callback scheme with one slash, as atproto OAuth asks of a
+    /// native client.
+    nonisolated static let redirectURI = "\(callbackScheme):/oauth/callback"
 
     /// The server's `did:web`, port and all (`:` as `%3A`).
     nonisolated static let appviewDID: String = {
