@@ -8,7 +8,9 @@
 # SwiftLint is its Linux release, pinned by version and SHA-256, so a
 # release's new rules land on purpose rather than with an unrelated push.
 # Its own image will not do, for format.yml's reason: its entrypoint is
-# swiftlint. The download is kept between runs.
+# swiftlint. The release's `swiftlint-static` is the one that runs on a
+# bare Debian: `swiftlint` wants libxml2 and the Swift runtime. The
+# download is kept between runs.
 image: debian:trixie-slim
 on:
   push: { refs: [refs/heads/main] }
@@ -28,11 +30,10 @@ steps:
         curl -fsSL -o /tmp/swiftlint.zip "https://github.com/realm/SwiftLint/releases/download/$SWIFTLINT_VERSION/swiftlint_linux_amd64.zip"
         echo "$SWIFTLINT_SHA256  /tmp/swiftlint.zip" | sha256sum -c -
         unzip -q /tmp/swiftlint.zip -d /opt/swiftlint
-        ls -la /opt/swiftlint
         echo "$SWIFTLINT_VERSION" > /opt/swiftlint/.version
       fi
   - name: lint
     timeout: 10
     run: |
-      /opt/swiftlint/swiftlint version
-      /opt/swiftlint/swiftlint lint Grain GrainTests
+      /opt/swiftlint/swiftlint-static version
+      /opt/swiftlint/swiftlint-static lint Grain GrainTests
