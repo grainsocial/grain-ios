@@ -7,13 +7,36 @@
 # the runner is Linux, and xcodebuild runs on macOS alone. SwiftFormat and
 # SwiftLint (lint.yml) are what has a Linux build.
 #
-# The image is SwiftFormat's own, pinned, so a release's new rules land on
-# purpose rather than with an unrelated push.
-image: ghcr.io/nicklockwood/swiftformat:0.64.5
+# SwiftFormat is its Linux release, pinned by version and SHA-256, so a
+# release's new rules land on purpose rather than with an unrelated push.
+# Its own image will not do: the runner starts the image with
+# `tail -f /dev/null` to run each step in, and the image's entrypoint is
+# swiftformat. The download is kept between runs.
+image: debian:trixie-slim
 on:
   push: { refs: [refs/heads/main] }
   pull: { base: [refs/heads/main] }
+cache: [/opt/swiftformat]
+env:
+  SWIFTFORMAT_VERSION: 0.64.5
+  SWIFTFORMAT_SHA256: 56c50d955903cfedbe28996a70e7551a873cdb6dfa5e416d9332925c455ab365
 steps:
   - name: swiftformat
     timeout: 10
-    run: swiftformat --version && swiftformat Grain GrainTests --lint
+    run: |
+      if [ "$(cat /opt/swiftformat/.version 2>/dev/null)" != "$SWIFTFORMAT_VERSION" ]; then
+        apt-get update -qq
+        apt-get install -y -qq --no-install-recommends ca-certificates curl unzip >/dev/null
+        find /opt/swiftformat -mindepth 1 -delete
+        curl -fsSL -o /tmp/swiftformat.zip "https://github.com/nicklockwood/SwiftFormat/releases/download/$SWIFTFORMAT_VERSION/swiftformat_linux.zip"
+        echo "$SWIFTFORMAT_SHA256  /tmp/swiftformat.zip" | sha256sum -c -
+        unzip -q /tmp/swiftformat.zip -d /opt/swiftformat
+        bin=$(find /opt/swiftformat -type f -name 'swiftformat*' ! -name '*.zip' | head -1)
+        chmod +x "$bin" && ln -sf "$bin" /opt/swiftformat/swiftformat-bin
+        echo "$SWIFTFORMAT_VERSION" > /opt/swiftformat/.version
+      fi
+  - name: format
+    timeout: 10
+    run: |
+      /opt/swiftformat/swiftformat-bin --version
+      /opt/swiftformat/swiftformat-bin Grain GrainTests --lint
