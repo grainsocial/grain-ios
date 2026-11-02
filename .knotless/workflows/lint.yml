@@ -23,7 +23,7 @@ steps:
     run: |
       if [ "$(cat /opt/swiftlint/.version 2>/dev/null)" != "$SWIFTLINT_VERSION" ]; then
         apt-get update -qq
-        apt-get install -y -qq --no-install-recommends ca-certificates curl unzip >/dev/null
+        DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends ca-certificates curl unzip >/dev/null
         find /opt/swiftlint -mindepth 1 -delete
         curl -fsSL -o /tmp/swiftlint.zip "https://github.com/realm/SwiftLint/releases/download/$SWIFTLINT_VERSION/swiftlint_linux_amd64.zip"
         echo "$SWIFTLINT_SHA256  /tmp/swiftlint.zip" | sha256sum -c -

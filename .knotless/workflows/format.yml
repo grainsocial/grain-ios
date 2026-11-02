@@ -9,6 +9,9 @@
 #
 # SwiftFormat is its Linux release, pinned by version and SHA-256, so a
 # release's new rules land on purpose rather than with an unrelated push.
+# 0.62.1 is the version the code is formatted with: 0.64.5 adds rules
+# (repeatedGuard, nestedIf, extensionAttributes) that main does not pass,
+# and a bump here comes with `just format-fix` run on that version.
 # Its own image will not do: the runner starts the image with
 # `tail -f /dev/null` to run each step in, and the image's entrypoint is
 # swiftformat. The download is kept between runs.
@@ -18,15 +21,15 @@ on:
   pull: { base: [refs/heads/main] }
 cache: [/opt/swiftformat]
 env:
-  SWIFTFORMAT_VERSION: 0.64.5
-  SWIFTFORMAT_SHA256: 56c50d955903cfedbe28996a70e7551a873cdb6dfa5e416d9332925c455ab365
+  SWIFTFORMAT_VERSION: 0.62.1
+  SWIFTFORMAT_SHA256: 61ff55f3581e2144a4ad114831167102c38be853df75c1477d20b40a8e8120aa
 steps:
   - name: swiftformat
     timeout: 10
     run: |
       if [ "$(cat /opt/swiftformat/.version 2>/dev/null)" != "$SWIFTFORMAT_VERSION" ]; then
         apt-get update -qq
-        apt-get install -y -qq --no-install-recommends ca-certificates curl unzip >/dev/null
+        DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends ca-certificates curl unzip >/dev/null
         find /opt/swiftformat -mindepth 1 -delete
         curl -fsSL -o /tmp/swiftformat.zip "https://github.com/nicklockwood/SwiftFormat/releases/download/$SWIFTFORMAT_VERSION/swiftformat_linux.zip"
         echo "$SWIFTFORMAT_SHA256  /tmp/swiftformat.zip" | sha256sum -c -
