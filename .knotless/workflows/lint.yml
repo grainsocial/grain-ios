@@ -1,0 +1,17 @@
+# SwiftLint, as `just lint` runs it: over Grain and GrainTests with the
+# repository's .swiftlint.yml, on pushes to main and pulls into it. An
+# error fails the step; warnings are reported and pass, as they do locally.
+#
+# Xcode does not run on the Linux runner, so the build and the tests are
+# not here: see format.yml.
+#
+# The image is SwiftLint's own, pinned, so a release's new rules land on
+# purpose rather than with an unrelated push.
+image: ghcr.io/realm/swiftlint:0.65.1
+on:
+  push: { refs: [refs/heads/main] }
+  pull: { base: [refs/heads/main] }
+steps:
+  - name: swiftlint
+    timeout: 10
+    run: swiftlint version && swiftlint lint Grain GrainTests

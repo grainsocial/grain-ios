@@ -1,0 +1,19 @@
+# Formatting, as `just format` checks it: `swiftformat --lint` over Grain
+# and GrainTests with the repository's .swiftformat, on pushes to main and
+# pulls into it. It lists each file it would change and fails if there is
+# one; `just format-fix` changes them.
+#
+# The build and the tests are not here, nor anything else that needs Xcode:
+# the runner is Linux, and xcodebuild runs on macOS alone. SwiftFormat and
+# SwiftLint (lint.yml) are what has a Linux build.
+#
+# The image is SwiftFormat's own, pinned, so a release's new rules land on
+# purpose rather than with an unrelated push.
+image: ghcr.io/nicklockwood/swiftformat:0.64.5
+on:
+  push: { refs: [refs/heads/main] }
+  pull: { base: [refs/heads/main] }
+steps:
+  - name: swiftformat
+    timeout: 10
+    run: swiftformat --version && swiftformat Grain GrainTests --lint
