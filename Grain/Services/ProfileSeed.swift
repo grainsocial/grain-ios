@@ -3,19 +3,22 @@ import os
 
 private let logger = Logger(subsystem: "social.grain.grain", category: "ProfileSeed")
 
-/// A grain profile made from the account's Bluesky profile once it signs
-/// in, as grain-serve makes one for the web (`login/profile.rs`). The app
-/// signs in at the account's own PDS, so grain-serve never sees the
-/// sign-in: the app does it, in the background, so a sign-in never waits
-/// on it and never fails by it.
+/// A grain profile made for the account once it signs in, from its Bluesky
+/// profile when it has one, as grain-serve makes one for the web
+/// (`login/profile.rs`). The app signs in at the account's own PDS, so
+/// grain-serve never sees the sign-in: the app does it, in the background,
+/// so a sign-in never waits on it and never fails by it.
 ///
 /// An account whose `social.grain.actor.profile` has a `displayName` is
 /// left as it is. Otherwise its `app.bsky.actor.profile` gives the grain
 /// profile its `displayName`, `description` and `avatar` (the blob as the
 /// Bluesky profile names it), with the `createdAt` of the grain profile
 /// there is, or now. One there is is put over, swapped on its CID; else one
-/// is made at `self`. Both are read from the account's PDS, and the write
-/// is then indexed.
+/// is made at `self`. An account with no Bluesky profile and no grain
+/// profile gets a bare one, its `createdAt` alone, so every account that
+/// signs in has the profile that makes grain-serve track it; one with an
+/// unnamed grain profile and no Bluesky profile is left as it is. Both are
+/// read from the account's PDS, and the write is then indexed.
 enum ProfileSeed {
     static let grain = "social.grain.actor.profile"
     static let bluesky = "app.bsky.actor.profile"
@@ -24,9 +27,10 @@ enum ProfileSeed {
     enum Outcome: Equatable {
         /// The grain profile has a name already.
         case named
-        /// There is no Bluesky profile to make one from.
+        /// There is no Bluesky profile to name it from, and the grain
+        /// profile there is was left as it is.
         case noBluesky
-        /// A grain profile was made.
+        /// A grain profile was made, from the Bluesky one or bare.
         case made
         /// The grain profile there was was put over.
         case put
@@ -38,7 +42,7 @@ enum ProfileSeed {
             let outcome = try await seed(client: client, auth: auth)
             logger.info("profile seed: \(String(describing: outcome), privacy: .public)")
         } catch {
-            logger.info("seeding a profile from Bluesky failed: \(error)")
+            logger.info("seeding a grain profile failed: \(error)")
         }
     }
 
@@ -47,10 +51,11 @@ enum ProfileSeed {
         if let name = existing?.value?.dictValue?["displayName"]?.stringValue, !name.isEmpty {
             return .named
         }
-        guard let bsky = try await read(bluesky, client: client, auth: auth)?.value?.dictValue else {
+        let bsky = try await read(bluesky, client: client, auth: auth)?.value?.dictValue
+        if bsky == nil, existing != nil {
             return .noBluesky
         }
-        let record = AnyCodable(fromBluesky(bsky, grain: existing?.value?.dictValue))
+        let record = AnyCodable(fromBluesky(bsky ?? [:], grain: existing?.value?.dictValue))
         if let existing {
             _ = try await client.putRecord(collection: grain, rkey: "self", record: record, swapRecord: existing.cid, auth: auth)
             return .put

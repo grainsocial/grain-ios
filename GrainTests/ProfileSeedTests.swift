@@ -2,8 +2,8 @@ import CryptoKit
 @testable import Grain
 import XCTest
 
-/// The grain profile the app makes from the account's Bluesky profile once
-/// it signs in, as grain-serve makes one for the web.
+/// The grain profile the app makes once an account signs in, from its
+/// Bluesky profile or bare, as grain-serve makes one for the web.
 final class ProfileSeedTests: GrainTestCase {
     private var log: SeedLog!
 
@@ -60,8 +60,28 @@ final class ProfileSeedTests: GrainTestCase {
         XCTAssertNil(log.write)
     }
 
-    func testWithNoBlueskyProfileNothingIsWritten() async throws {
+    /// No Bluesky profile and no grain profile: a bare one is made at
+    /// `self`, its `createdAt` alone, so grain-serve tracks the account.
+    func testWithNeitherProfileABareOneIsMadeAtSelf() async throws {
         let client = makeClient(grain: nil, bluesky: nil)
+
+        let outcome = try await ProfileSeed.seed(client: client, auth: auth)
+
+        XCTAssertEqual(outcome, .made)
+        let write = try XCTUnwrap(log.write)
+        XCTAssertTrue(write.path.hasSuffix("com.atproto.repo.createRecord"))
+        XCTAssertEqual(write.body["rkey"] as? String, "self")
+        XCTAssertEqual(write.body["collection"] as? String, "social.grain.actor.profile")
+        let record = try XCTUnwrap(write.body["record"] as? [String: Any])
+        XCTAssertEqual(Set(record.keys), ["$type", "createdAt"])
+        XCTAssertEqual(record["$type"] as? String, "social.grain.actor.profile")
+        XCTAssertNotNil(DateFormatting.parse(record["createdAt"] as? String ?? ""))
+        XCTAssertNotNil(log.indexProxy)
+    }
+
+    /// No Bluesky profile and an unnamed grain profile: it is left as it is.
+    func testWithNoBlueskyProfileAnUnnamedGrainProfileIsLeft() async throws {
+        let client = makeClient(grain: #"{"createdAt": "2025-01-01T00:00:00.000Z"}"#, bluesky: nil)
 
         let outcome = try await ProfileSeed.seed(client: client, auth: auth)
 
