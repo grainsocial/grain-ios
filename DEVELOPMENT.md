@@ -3,6 +3,7 @@
 ## Requirements
 
 - Xcode 26+
+- [Git LFS](https://git-lfs.com) — icons, fonts, and other binary assets are stored in LFS; without it the build fails on an empty asset catalog
 - [XcodeGen](https://github.com/yonaskolb/XcodeGen)
 - [just](https://github.com/casey/just)
 - [xcbeautify](https://github.com/cpisciotta/xcbeautify)
@@ -10,17 +11,23 @@
 - [SwiftLint](https://github.com/realm/SwiftLint)
 
 ```bash
-brew install xcodegen just xcbeautify swiftformat swiftlint
+brew install git-lfs xcodegen just xcbeautify swiftformat swiftlint
+git lfs install
 ```
 
 ## Setup
 
-Generate the Xcode project and open it:
+Pull the LFS-backed assets, create your `.env`, then generate the Xcode project and open it:
 
 ```bash
+git lfs pull                 # fetch icons, fonts, and other binary assets
+cp .env.example .env         # BUNDLE_NAME must be set or the build produces an empty ".app"
 just generate
 open Grain.xcodeproj
 ```
+
+> `just generate` reads `.env` (via `set dotenv-load`). `BUNDLE_NAME` is required even for
+> simulator builds — with it unset, generation fails with "Multiple commands produce '.app'".
 
 If using a non-Xcode editor with SourceKit-LSP (e.g. Zed), run once after generating:
 
