@@ -106,10 +106,9 @@ struct GalleryDraft: Codable, Sendable, Identifiable, Equatable {
                 ] as [String: AnyCodable]),
                 "createdAt": AnyCodable(createdAt),
             ]
-            let alt = photo.alt.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !alt.isEmpty {
-                record["alt"] = AnyCodable(alt)
-            }
+            // Always sent: the PDS validates against its own compiled-in copy of
+            // this schema, which requires alt even when it is empty.
+            record["alt"] = AnyCodable(photo.alt.trimmingCharacters(in: .whitespacesAndNewlines))
             writes.append(.create(collection: "social.grain.photo", rkey: photo.photoRkey, value: AnyCodable(record)))
 
             if includeExif, var exif = photo.exif, !exif.isEmpty {
