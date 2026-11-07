@@ -7,7 +7,48 @@
 # Grain.xcodeproj (both at the repo root).
 set -ex
 
-brew install xcodegen git-lfs
+# Pinned release binaries, not Homebrew: Xcode Cloud can build on Intel, where
+# Homebrew has no bottles, so `brew install git-lfs` compiles Rust, LLVM and
+# OpenSSL from source and fails. Bump a version and its checksum together.
+GIT_LFS_VERSION=3.8.1
+XCODEGEN_VERSION=2.46.0
+XCODEGEN_SHA256=ef6d0a23bfb7393387f98e321ffd78a487231172e2e78c48d3c26275c263fd0c
+
+case "$(uname -m)" in
+  x86_64)
+    GIT_LFS_ARCH=amd64
+    GIT_LFS_SHA256=4292b3518e717e53c20a6c2c0696e2069a21e97500ad14b80b06bd52de8f3b72
+    ;;
+  arm64)
+    GIT_LFS_ARCH=arm64
+    GIT_LFS_SHA256=0ba10e897e0496412cd86eacaed4ed554c97ddc29bc5c709d28faa5eaaa2222c
+    ;;
+  *)
+    echo "error: no git-lfs pinned for $(uname -m)"
+    exit 1
+    ;;
+esac
+
+TOOLS=$(mktemp -d)
+
+# fetch <url> <sha256> <archive>: download an archive, refusing a wrong checksum.
+fetch() {
+  curl -fsSL --retry 3 -o "$3" "$1"
+  echo "$2  $3" | shasum -a 256 -c -
+}
+
+fetch "https://github.com/git-lfs/git-lfs/releases/download/v$GIT_LFS_VERSION/git-lfs-darwin-$GIT_LFS_ARCH-v$GIT_LFS_VERSION.zip" \
+  "$GIT_LFS_SHA256" "$TOOLS/git-lfs.zip"
+unzip -q "$TOOLS/git-lfs.zip" -d "$TOOLS"
+
+fetch "https://github.com/yonaskolb/XcodeGen/releases/download/$XCODEGEN_VERSION/xcodegen.artifactbundle.zip" \
+  "$XCODEGEN_SHA256" "$TOOLS/xcodegen.zip"
+unzip -q "$TOOLS/xcodegen.zip" -d "$TOOLS"
+
+# xcodegen finds its XcodeGen_XcodeGenKit.bundle beside the binary, so it runs
+# from where it was unpacked.
+PATH="$TOOLS/git-lfs-$GIT_LFS_VERSION:$TOOLS/xcodegen.artifactbundle/xcodegen-$XCODEGEN_VERSION-macosx/bin:$PATH"
+export PATH
 
 cd "$CI_PRIMARY_REPOSITORY_PATH"
 
