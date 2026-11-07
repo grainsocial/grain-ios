@@ -45,7 +45,7 @@ final class ProfileDetailViewModelTests: GrainTestCase {
         do {
             let key = try CryptoKit.P256.Signing.PrivateKey()
             let dpop = DPoP(privateKey: key)
-            return AuthContext(accessToken: "test-token", dpop: dpop)
+            return AuthContext(accessToken: "test-token", dpop: dpop, did: "did:plc:test", pds: URL(string: "https://test.local")!)
         } catch {
             XCTFail("Failed to create P256 private key: \(error)")
             fatalError("Unreachable")

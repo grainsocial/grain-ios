@@ -105,7 +105,7 @@ final class XRPCClientTests: GrainTestCase {
 
         let response = try await makeClient().uploadBlob(data: Data([1, 2, 3]), mimeType: "image/jpeg")
 
-        XCTAssertEqual(seen.url?.path, "/xrpc/dev.hatk.uploadBlob")
+        XCTAssertEqual(seen.url?.path, "/xrpc/com.atproto.repo.uploadBlob")
         XCTAssertEqual(seen.headers?["Content-Type"], "image/jpeg")
         XCTAssertEqual(seen.body, Data([1, 2, 3]))
         XCTAssertEqual(response.blob.ref?.link, "bafyblob")
@@ -188,7 +188,7 @@ final class XRPCClientTests: GrainTestCase {
         let refreshed = Counter()
         let client = XRPCClient(baseURL: baseURL, session: MockURLProtocol.mockSession()) { () -> AuthContext? in
             refreshed.next()
-            return AuthContext(accessToken: "fresh-token", dpop: dpop, nonce: nil)
+            return AuthContext(accessToken: "fresh-token", dpop: dpop, did: "did:plc:test", pds: URL(string: "https://test.local")!)
         }
 
         let result = try await client.query("dev.hatk.thing", as: Echo.self)
@@ -239,10 +239,10 @@ final class XRPCClientTests: GrainTestCase {
 
     // MARK: - DPoP
 
-    private func authContext(nonce: String? = nil) throws -> (AuthContext, String) {
+    private func authContext(nonce _: String? = nil) throws -> (AuthContext, String) {
         let did = "did:plc:xrpc-\(UUID().uuidString)"
         let dpop = try DPoP.loadOrCreate(for: did)
-        return (AuthContext(accessToken: "token", dpop: dpop, nonce: nonce), did)
+        return (AuthContext(accessToken: "token", dpop: dpop, did: "did:plc:test", pds: URL(string: "https://test.local")!), did)
     }
 
     func testAnAuthenticatedRequestCarriesABearerTokenAndAProof() async throws {
@@ -270,7 +270,7 @@ final class XRPCClientTests: GrainTestCase {
                     url: request.url!, statusCode: 400, httpVersion: nil,
                     headerFields: ["DPoP-Nonce": "server-nonce"]
                 )!
-                return (Data(), response)
+                return (Data(#"{"error": "use_dpop_nonce"}"#.utf8), response)
             }
             let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
             return (Data(#"{"value": "with nonce"}"#.utf8), response)
@@ -282,9 +282,10 @@ final class XRPCClientTests: GrainTestCase {
         XCTAssertEqual(attempts.count, 2)
     }
 
-    /// A 401 that carries a nonce is a nonce challenge, not an expired token —
-    /// treating it as expiry would sign the user out on every cold launch.
-    func testA401CarryingANonceIsTreatedAsANonceChallenge() async throws {
+    /// A resource server asks for a nonce with a 401 whose `WWW-Authenticate`
+    /// says `use_dpop_nonce`. That is not an expired token: treating it as
+    /// expiry would refresh on every cold launch.
+    func testA401AskingForANonceIsTreatedAsANonceChallenge() async throws {
         let (auth, did) = try authContext()
         defer { try? DPoP.clearKey(for: did) }
 
@@ -293,7 +294,10 @@ final class XRPCClientTests: GrainTestCase {
             if attempts.next() == 1 {
                 let response = HTTPURLResponse(
                     url: request.url!, statusCode: 401, httpVersion: nil,
-                    headerFields: ["DPoP-Nonce": "server-nonce"]
+                    headerFields: [
+                        "DPoP-Nonce": "server-nonce",
+                        "WWW-Authenticate": #"DPoP error="use_dpop_nonce", error_description="Resource server requires nonce in DPoP proof""#,
+                    ]
                 )!
                 return (Data(), response)
             }
@@ -352,7 +356,7 @@ final class XRPCClientTests: GrainTestCase {
             let response = HTTPURLResponse(
                 url: request.url!, statusCode: status, httpVersion: nil, headerFields: headers
             )!
-            return (Data(), response)
+            return (status == 400 ? Data(#"{"error": "use_dpop_nonce"}"#.utf8) : Data(), response)
         }
 
         try await makeClient().procedure("dev.hatk.putPreference", input: Input(key: "k"), auth: auth)
@@ -400,7 +404,6 @@ final class XRPCClientTests: GrainTestCase {
             .httpError(statusCode: 503, body: nil),
             .decodingError(URLError(.badServerResponse)),
             .unauthorized,
-            .dpopNonceRequired(nonce: "n"),
             .authorizationDenied,
             .authorizationFailed(code: "access_denied", description: nil),
         ]

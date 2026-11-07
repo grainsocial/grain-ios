@@ -34,7 +34,7 @@ final class GalleryServiceTests: GrainTestCase {
     }
 
     private func makeAuth() -> AuthContext {
-        AuthContext(accessToken: "test-token", dpop: DPoP(privateKey: P256.Signing.PrivateKey()))
+        AuthContext(accessToken: "test-token", dpop: DPoP(privateKey: P256.Signing.PrivateKey()), did: "did:plc:test", pds: URL(string: "https://test.local")!)
     }
 
     // MARK: - Tests
@@ -54,7 +54,7 @@ final class GalleryServiceTests: GrainTestCase {
             "expected the cascading endpoint, got \(recorder.paths[0])"
         )
         XCTAssertFalse(
-            recorder.paths.contains { $0.hasSuffix("dev.hatk.deleteRecord") },
+            recorder.paths.contains { $0.hasSuffix("com.atproto.repo.deleteRecord") },
             "deleteRecord orphans the gallery's photos, items, exif, and comments"
         )
     }

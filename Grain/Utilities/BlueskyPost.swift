@@ -122,7 +122,7 @@ enum BlueskyPost {
         // 6. Write the record
         let result: CreateRecordResponse
         if let rkey {
-            logger.info("  calling dev.hatk.putRecord with collection=app.bsky.feed.post, repo=\(repo), rkey=\(rkey)")
+            logger.info("  calling com.atproto.repo.putRecord with collection=app.bsky.feed.post, repo=\(repo), rkey=\(rkey)")
             result = try await client.putRecord(
                 collection: "app.bsky.feed.post",
                 rkey: rkey,
@@ -131,7 +131,7 @@ enum BlueskyPost {
                 auth: auth
             )
         } else {
-            logger.info("  calling dev.hatk.createRecord with collection=app.bsky.feed.post, repo=\(repo)")
+            logger.info("  calling com.atproto.repo.createRecord with collection=app.bsky.feed.post, repo=\(repo)")
             result = try await client.createRecord(
                 collection: "app.bsky.feed.post",
                 repo: repo,

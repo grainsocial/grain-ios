@@ -12,6 +12,17 @@ struct StoredAccount: Codable, Identifiable, Hashable {
     }
 }
 
+/// Where an account signs in and where its repo lives: what a refresh, a
+/// revocation and every signed-in call need besides the tokens.
+struct AccountServer: Codable, Sendable, Equatable {
+    /// The account's PDS, where signed-in calls go.
+    let pds: URL
+    /// The authorization server that issued the tokens.
+    let issuer: String
+    let tokenEndpoint: URL
+    let revocationEndpoint: URL?
+}
+
 /// Secure storage for OAuth tokens using Keychain.
 ///
 /// Every credential is namespaced by DID so several accounts can stay signed in
@@ -120,6 +131,16 @@ enum TokenStorage {
         read("token_scope", did)
     }
 
+    static func server(for did: String) -> AccountServer? {
+        guard let raw = read("oauth_server", did) else { return nil }
+        return try? JSONDecoder().decode(AccountServer.self, from: Data(raw.utf8))
+    }
+
+    static func storeServer(_ server: AccountServer, for did: String) {
+        guard let data = try? JSONEncoder().encode(server) else { return }
+        write("oauth_server", did, String(data: data, encoding: .utf8))
+    }
+
     static func setAvatar(_ avatar: String?, for did: String) {
         write("user_avatar", did, avatar)
     }
@@ -150,11 +171,17 @@ enum TokenStorage {
         accessToken(for: did) != nil && refreshToken(for: did) != nil
     }
 
+    /// Whether `did` can make signed-in calls: tokens, and the PDS and
+    /// authorization server they belong to.
+    static func hasSession(for did: String) -> Bool {
+        hasCredentials(for: did) && server(for: did) != nil
+    }
+
     /// Forget one account: wipe its credentials and drop it from the list.
     /// Clears `activeDID` if it was the active one — the caller decides which
     /// account, if any, takes over.
     static func removeAccount(_ did: String) {
-        for name in ["access_token", "refresh_token", "user_handle", "user_avatar", "token_expires_at", "token_scope"] {
+        for name in ["access_token", "refresh_token", "user_handle", "user_avatar", "token_expires_at", "token_scope", "oauth_server"] {
             write(name, did, nil)
         }
         accounts = accounts.filter { $0.did != did }

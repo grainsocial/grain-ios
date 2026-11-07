@@ -72,7 +72,7 @@ final class ProfileFavoritesAndModerationTests: GrainTestCase {
         AccountScopedStorage.activeAccountID = did
         client = XRPCClient(baseURL: URL(string: "https://test.local")!, session: MockURLProtocol.mockSession())
         vm = ProfileDetailViewModel(client: client)
-        auth = try AuthContext(accessToken: "token", dpop: DPoP.loadOrCreate(for: did))
+        auth = try AuthContext(accessToken: "token", dpop: DPoP.loadOrCreate(for: did), did: did, pds: URL(string: "https://test.local")!)
     }
 
     override func tearDown() async throws {

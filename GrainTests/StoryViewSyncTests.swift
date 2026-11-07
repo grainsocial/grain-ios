@@ -83,7 +83,7 @@ final class StoryViewSyncTests: GrainTestCase {
 
         try await client.markStoriesViewed(
             uris: ["at://did:plc:alice/social.grain.story/s1"],
-            auth: AuthContext(accessToken: "t", dpop: DPoP(privateKey: P256.Signing.PrivateKey()))
+            auth: AuthContext(accessToken: "t", dpop: DPoP(privateKey: P256.Signing.PrivateKey()), did: "did:plc:test", pds: XCTUnwrap(URL(string: "https://test.local")))
         )
 
         XCTAssertEqual(recorder.paths, ["/xrpc/social.grain.unspecced.markStoriesViewed"])

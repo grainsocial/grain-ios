@@ -24,7 +24,7 @@ final class StoryCommentsViewModelTests: GrainTestCase {
     private func makeDummyAuth() -> AuthContext {
         let key = P256.Signing.PrivateKey()
         let dpop = DPoP(privateKey: key)
-        return AuthContext(accessToken: "test-token", dpop: dpop)
+        return AuthContext(accessToken: "test-token", dpop: dpop, did: "did:plc:test", pds: URL(string: "https://test.local")!)
     }
 
     // MARK: - Preview Loading

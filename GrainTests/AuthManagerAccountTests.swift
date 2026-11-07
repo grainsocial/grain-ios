@@ -65,6 +65,7 @@ final class AuthManagerAccountTests: GrainTestCase {
             expiresAt: Date().addingTimeInterval(expiresIn),
             scope: AuthManager.requiredScopes.joined(separator: " ")
         )
+        TokenStorage.storeServer(.test, for: did)
         TokenStorage.upsertAccount(StoredAccount(did: did, handle: handle, avatar: nil))
     }
 
@@ -79,8 +80,9 @@ final class AuthManagerAccountTests: GrainTestCase {
     /// These are registered with the PDS; changing one without updating the
     /// client metadata breaks sign-in for everyone.
     func testTheOAuthIdentifiersAreTheRegisteredOnes() {
-        XCTAssertEqual(AuthManager.clientID, "grain-native://app")
-        XCTAssertEqual(AuthManager.redirectURI, "grain://oauth/callback")
+        XCTAssertEqual(AuthManager.clientID, AuthManager.serverURL.absoluteString + "/oauth/app-client-metadata.json")
+        XCTAssertEqual(AuthManager.redirectURI, "social.grain:/oauth/callback")
+        XCTAssertTrue(AuthManager.redirectURI.hasPrefix(AuthManager.callbackScheme + ":/"))
         XCTAssertFalse(AuthManager.requiredScopes.isEmpty)
         XCTAssertTrue(AuthManager.requiredScopes.contains("atproto"))
     }
@@ -292,7 +294,8 @@ final class AuthManagerAccountTests: GrainTestCase {
         let context = await auth.authContext()
 
         XCTAssertEqual(context?.accessToken, "alice.test-access")
-        XCTAssertNil(context?.nonce, "A fresh context starts without a nonce; the PDS supplies one")
+        XCTAssertEqual(context?.did, alice)
+        XCTAssertEqual(context?.pds, AccountServer.test.pds, "Signed-in calls go to the account's PDS")
     }
 
     // MARK: - AccountError

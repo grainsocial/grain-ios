@@ -73,8 +73,12 @@ targets:
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleURLTypes:
-          - CFBundleURLSchemes:
+          - CFBundleURLName: social.grain.deeplink
+            CFBundleURLSchemes:
               - grain
+          - CFBundleURLName: social.grain.oauth
+            CFBundleURLSchemes:
+              - social.grain
         CFBundleIconName: AppIcon
         ITSAppUsesNonExemptEncryption: false
         UISupportedInterfaceOrientations:

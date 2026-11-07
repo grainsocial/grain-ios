@@ -6,7 +6,8 @@ import os
 private let logger = Logger(subsystem: "social.grain.grain", category: "Auth")
 private let authSignposter = OSSignposter(subsystem: "social.grain.grain", category: "Auth")
 
-/// Manages OAuth + DPoP authentication flow against the hatk server.
+/// Signs accounts in at their own PDS with atproto OAuth, as a public native
+/// client, and holds their sessions.
 ///
 /// Several accounts can be signed in at once. Their credentials live side by
 /// side in the Keychain, keyed by DID; this class tracks which one is active
@@ -21,28 +22,48 @@ final class AuthManager {
     var avatarImage: UIImage?
     /// Every account signed in on this device, active one included.
     var accounts: [StoredAccount] = []
-    /// Set when a launch-time scope migration forced the user to sign out.
+    /// Set when a launch-time session migration forced the user to sign out.
     /// LoginView reads this to display an explanation above the sign-in form.
     var reauthReason: String?
 
     private(set) var dpop: DPoP?
-    private var codeVerifier: String?
-    private var client: XRPCClient?
     private var refreshTask: Task<Void, Error>?
     /// The OAuth flow currently on screen, if any. At most one at a time.
     private var loginTask: Task<Void, Error>?
 
     #if PRODUCTION_API || !targetEnvironment(simulator)
         nonisolated static let serverURL = URL(string: "https://grain.social")!
+        /// Where the sign-up button makes an account.
+        nonisolated static let signUpPDS = URL(string: "https://selfhosted.social")!
     #else
         nonisolated static let serverURL = URL(string: "http://127.0.0.1:3000")!
+        nonisolated static let signUpPDS = URL(string: "http://localhost:2583")!
     #endif
-    nonisolated static let clientID = "grain-native://app"
-    nonisolated static let redirectURI = "grain://oauth/callback"
 
-    /// OAuth scopes the app currently requests at sign-in. Update here, then
-    /// bump a `scopeMigration*` flag below if you want existing installs to
-    /// be forced through a fresh sign-in to pick the new scope up.
+    /// The client metadata document grain-serve publishes for the apps. A PDS
+    /// fetches it, so it must be https: a dev build signing in against a
+    /// local server needs that server behind an https tunnel.
+    nonisolated static let clientID = serverURL.appendingPathComponent("oauth/app-client-metadata.json").absoluteString
+    /// The app's bundle id reversed into a URL scheme, with one slash, as
+    /// atproto OAuth asks of a native client.
+    nonisolated static let redirectURI = "social.grain:/oauth/callback"
+    nonisolated static let callbackScheme = "social.grain"
+
+    /// The server's `did:web`, port and all (`:` as `%3A`).
+    nonisolated static let appviewDID: String = {
+        var host = serverURL.host ?? "grain.social"
+        if let port = serverURL.port {
+            host += "%3A\(port)"
+        }
+        return "did:web:\(host)"
+    }()
+
+    /// The AppView service a PDS proxies Grain's calls to.
+    nonisolated static let appviewService = "\(appviewDID)#grain_appview"
+
+    /// OAuth scopes the app requests at sign-in. Update here, then bump
+    /// `sessionMigrationKey` if existing installs should be forced through a
+    /// fresh sign-in to pick the new scope up.
     nonisolated static let requiredScopes: [String] = [
         "atproto",
         "blob:image/*",
@@ -52,28 +73,51 @@ final class AuthManager {
         "repo:social.grain.photo.exif",
         "repo:social.grain.actor.profile",
         "repo:social.grain.graph.follow",
-        "repo:social.grain.graph.block",
         "repo:social.grain.favorite",
         "repo:social.grain.comment",
         "repo:social.grain.story",
+        "repo:social.grain.graph.block",
         // Both actions: the cross-post uses putRecord so a resumed publish
         // overwrites its own post rather than posting twice, and the PDS
-        // asserts create *and* update for that call. Must match the string
-        // the server requests verbatim — the migration check compares exactly.
+        // asserts create *and* update for that call.
         "repo:app.bsky.feed.post?action=create&action=update",
+        // Every Grain method, through the PDS's proxy to the AppView.
+        rpcScope(audience: appviewService),
     ]
 
-    /// Version-tagged UserDefaults key marking that a one-shot scope
+    /// `rpc:*` for the service `audience`, which goes into the scope as a
+    /// query value: the PDS URL-decodes it, so `%` (a `did:web` port) is
+    /// escaped first, then `#`.
+    nonisolated static func rpcScope(audience: String) -> String {
+        let escaped = audience
+            .replacingOccurrences(of: "%", with: "%25")
+            .replacingOccurrences(of: "#", with: "%23")
+        return "rpc:*?aud=\(escaped)"
+    }
+
+    nonisolated static var scope: String {
+        requiredScopes.joined(separator: " ")
+    }
+
+    /// Version-tagged UserDefaults key marking that the one-shot session
     /// migration has already run for this install. Prevents re-auth loops
     /// when a re-login still yields a token without the newly added scopes.
-    /// To force another migration (e.g. after adding a scope), bump the
-    /// suffix: `scopeMigrationDone_v2`, `_v3`, etc.
-    private static let scopeMigrationKey = "scopeMigrationDone_v2"
+    /// To force another migration, bump the suffix.
+    private static let sessionMigrationKey = "scopeMigrationDone_v3"
+
+    nonisolated static let reauthMessage = "Grain has been updated. Please sign in again to enable new features."
 
     /// The session every OAuth call goes through. Injectable so tests can serve
-    /// the PAR/token/refresh endpoints without registering a `URLProtocol`
-    /// against `URLSession.shared` for the whole process.
+    /// discovery and the PAR/token/refresh endpoints.
     private let session: URLSession
+
+    /// Shows the authorization page and returns the URL the browser came back
+    /// with. Injectable so tests can stand in for the user.
+    var presentAuthorization: @MainActor (URL) async throws -> URL = AuthManager.webAuthentication
+
+    var oauth: OAuthClient {
+        OAuthClient(session: session, clientID: Self.clientID, redirectURI: Self.redirectURI)
+    }
 
     init(session: URLSession = NetworkEnvironment.session) {
         self.session = session
@@ -87,11 +131,12 @@ final class AuthManager {
             DPoP.migrateLegacyKey(to: migrated)
             AccountScopedStorage.migrateLegacyState(to: migrated)
         }
+        runSessionMigrationIfNeeded()
         accounts = TokenStorage.accounts
         AccountScopedStorage.activeAccountID = TokenStorage.activeDID
 
-        // Restore session from Keychain — allow expired tokens since we can refresh
-        if let did = TokenStorage.activeDID, TokenStorage.hasCredentials(for: did) {
+        // Restore session from Keychain; allow expired tokens since we can refresh
+        if let did = TokenStorage.activeDID, TokenStorage.hasSession(for: did) {
             isAuthenticated = true
             userDID = did
             userHandle = TokenStorage.handle(for: did)
@@ -104,8 +149,6 @@ final class AuthManager {
             dpop = try? DPoP.loadOrCreate(for: did)
             authSignposter.endInterval("DPoPLoad", dpopState)
             logger.debug("[DPoPLoad] end")
-
-            runScopeMigrationIfNeeded(did: did)
         } else {
             authSignposter.emitEvent("KeychainRead", id: spid, "authenticated=false")
             logger.debug("[KeychainRead] authenticated=false")
@@ -114,32 +157,36 @@ final class AuthManager {
         logger.debug("[SessionRestore] end")
     }
 
-    /// One-shot check at launch: if the currently-stored token predates the
-    /// scope-persistence code (or is missing any required scope) and we
-    /// haven't already run this migration, log the user out so they re-auth
-    /// with a fresh grant. The UserDefaults flag guarantees this fires at
-    /// most once per install per version — even if the re-login somehow
-    /// still returns an insufficient grant, we don't loop.
-    private func runScopeMigrationIfNeeded(did: String) {
-        guard !StorageEnvironment.defaults.bool(forKey: Self.scopeMigrationKey) else { return }
+    /// One-shot check at launch: drop every account that can't make a
+    /// signed-in call as this build makes them (no PDS and authorization
+    /// server on record) or whose grant lacks a required scope, so it signs
+    /// in again. The UserDefaults flag guarantees this fires at most once per
+    /// install per version: even if a re-login somehow still returns an
+    /// insufficient grant, it doesn't loop.
+    private func runSessionMigrationIfNeeded() {
+        guard !StorageEnvironment.defaults.bool(forKey: Self.sessionMigrationKey) else { return }
+        StorageEnvironment.defaults.set(true, forKey: Self.sessionMigrationKey)
 
-        let stored = TokenStorage.grantedScope(for: did).map { Set($0.split(separator: " ").map(String.init)) } ?? []
-        let missing = Self.requiredScopes.filter { !stored.contains($0) }
-        guard !missing.isEmpty else {
-            // Nothing to do — stored token already covers every required scope.
-            StorageEnvironment.defaults.set(true, forKey: Self.scopeMigrationKey)
-            return
+        let required = Set(Self.requiredScopes)
+        let stale = TokenStorage.accounts.filter { account in
+            let granted = TokenStorage.grantedScope(for: account.did).map { Set($0.split(separator: " ").map(String.init)) } ?? []
+            return TokenStorage.hasCredentials(for: account.did)
+                && (TokenStorage.server(for: account.did) == nil || !required.isSubset(of: granted))
         }
+        guard !stale.isEmpty else { return }
 
-        logger.info("[ScopeMigration] forcing re-auth; missing=\(missing.joined(separator: ","), privacy: .public)")
-        StorageEnvironment.defaults.set(true, forKey: Self.scopeMigrationKey)
-        // A scope bump applies to every grant, so drop them all rather than
-        // leaving stale accounts in the switcher that can't be switched to.
-        for account in TokenStorage.accounts {
+        logger.info("[SessionMigration] signing out \(stale.count) account(s)")
+        let active = TokenStorage.activeDID
+        for account in stale {
             forget(did: account.did)
         }
-        applySignedOutState()
-        reauthReason = "Grain has been updated. Please sign in again to enable new features."
+        if let active, stale.contains(where: { $0.did == active }) {
+            let next = TokenStorage.accounts.first { TokenStorage.hasSession(for: $0.did) }
+            setActiveDID(next?.did)
+            if next == nil {
+                reauthReason = Self.reauthMessage
+            }
+        }
     }
 
     /// Start the OAuth login flow, making the resulting account active. Set
@@ -150,9 +197,9 @@ final class AuthManager {
     /// leaves the current account exactly as it was.
     ///
     /// Concurrent calls join the flow already running rather than starting a
-    /// rival one. Every sign-in screen has more than one way to submit — a
-    /// button, the keyboard's Go key, tapping a suggestion — and the PAR round
-    /// trip happens before the web sheet appears, so a second trigger during
+    /// rival one. Every sign-in screen has more than one way to submit (a
+    /// button, the keyboard's Go key, tapping a suggestion) and discovery and
+    /// PAR happen before the web sheet appears, so a second trigger during
     /// that gap would otherwise stack a second sheet onto the PDS.
     func login(handle: String = "", createAccount: Bool = false) async throws {
         if let existing = loginTask {
@@ -168,77 +215,29 @@ final class AuthManager {
     }
 
     private func performLogin(handle: String, createAccount: Bool) async throws {
-        let dpop = DPoP.createEphemeral()
-
-        let client = XRPCClient(baseURL: Self.serverURL)
-        self.client = client
-
-        // Generate PKCE code verifier + challenge
-        let verifier = generateCodeVerifier()
-        codeVerifier = verifier
-        let challenge = generateCodeChallenge(verifier: verifier)
-
-        // Step 1: Pushed Authorization Request
-        var parBody: [String: String] = [
-            "client_id": Self.clientID,
-            "redirect_uri": Self.redirectURI,
-            "response_type": "code",
-            "code_challenge": challenge,
-            "code_challenge_method": "S256",
-            "scope": Self.requiredScopes.joined(separator: " "),
-        ]
+        let oauth = oauth
+        let pending: PendingAuthorization
         if createAccount {
-            parBody["prompt"] = "create"
-            #if PRODUCTION_API || !targetEnvironment(simulator)
-                parBody["login_hint"] = "selfhosted.social"
-            #else
-                parBody["login_hint"] = "localhost:2583"
-            #endif
-        } else if !handle.isEmpty {
-            parBody["login_hint"] = handle
+            pending = try await oauth.signUp(at: Self.signUpPDS, scope: Self.scope)
+        } else {
+            let identity = try await oauth.resolver.resolve(handle)
+            let hint = identity.handle ?? IdentityResolver.normalize(handle)
+            pending = try await oauth.authorize(identity, hint: hint, scope: Self.scope)
         }
 
-        let parURL = Self.serverURL.appendingPathComponent("oauth/par")
-        var parRequest = URLRequest(url: parURL)
-        parRequest.httpMethod = "POST"
-        parRequest.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        parRequest.httpBody = parBody.urlEncoded.data(using: .utf8)
+        let callback = try await presentAuthorization(pending.url)
+        let signedIn = try await oauth.redeem(pending, callback: callback)
+        store(signedIn)
+        await fetchAndStoreAvatar()
+    }
 
-        let parProof = try await dpop.createProof(httpMethod: "POST", url: parURL)
-        parRequest.setValue(parProof, forHTTPHeaderField: "DPoP")
-
-        var (parData, parHTTPResponse) = try await session.data(for: parRequest)
-
-        // Handle DPoP nonce requirement on PAR
-        if let httpResp = parHTTPResponse as? HTTPURLResponse,
-           httpResp.statusCode == 400,
-           let nonce = httpResp.value(forHTTPHeaderField: "DPoP-Nonce")
-        {
-            let retryProof = try await dpop.createProof(httpMethod: "POST", url: parURL, nonce: nonce)
-            parRequest.setValue(retryProof, forHTTPHeaderField: "DPoP")
-            (parData, parHTTPResponse) = try await session.data(for: parRequest)
-        }
-
-        if let httpResp = parHTTPResponse as? HTTPURLResponse,
-           !(200 ... 299).contains(httpResp.statusCode)
-        {
-            throw XRPCError.httpError(statusCode: httpResp.statusCode, body: parData)
-        }
-
-        let parResponse = try JSONDecoder().decode(PARResponse.self, from: parData)
-
-        // Step 2: Open browser for authorization
-        var authComponents = URLComponents(url: Self.serverURL.appendingPathComponent("oauth/authorize"), resolvingAgainstBaseURL: false)!
-        authComponents.queryItems = [
-            URLQueryItem(name: "request_uri", value: parResponse.requestUri),
-            URLQueryItem(name: "client_id", value: Self.clientID),
-        ]
-
-        let authURL = authComponents.url!
-        let callbackURL: URL = try await withCheckedThrowingContinuation { continuation in
+    /// The system's web authentication sheet, coming back on the app's
+    /// OAuth scheme.
+    static func webAuthentication(_ url: URL) async throws -> URL {
+        try await withCheckedThrowingContinuation { continuation in
             let session = ASWebAuthenticationSession(
-                url: authURL,
-                callback: .customScheme("grain")
+                url: url,
+                callback: .customScheme(callbackScheme)
             ) { url, error in
                 if let error {
                     continuation.resume(throwing: error); return
@@ -250,27 +249,6 @@ final class AuthManager {
             session.presentationContextProvider = WebAuthContextProvider.shared
             session.start()
         }
-
-        // Step 3: Exchange code for tokens
-        guard let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false) else {
-            throw XRPCError.invalidURL
-        }
-
-        // hatk sends `error` instead of `code` when the PDS rejects the request,
-        // most often because the user tapped "Deny" on the sign-in screen.
-        if let errorCode = components.queryItems?.first(where: { $0.name == "error" })?.value {
-            let description = components.queryItems?.first(where: { $0.name == "error_description" })?.value
-            throw errorCode == "access_denied"
-                ? XRPCError.authorizationDenied
-                : XRPCError.authorizationFailed(code: errorCode, description: description)
-        }
-
-        guard let code = components.queryItems?.first(where: { $0.name == "code" })?.value else {
-            throw XRPCError.invalidURL
-        }
-
-        try await exchangeCode(code: code, dpop: dpop)
-        await fetchAndStoreAvatar()
     }
 
     /// Refresh the access token only if it expires within 60 seconds.
@@ -301,55 +279,19 @@ final class AuthManager {
     /// for it, not to whoever is active when it lands.
     private func performRefresh(did: String) async throws {
         guard let dpop = try? DPoP.loadOrCreate(for: did),
-              let refreshToken = TokenStorage.refreshToken(for: did)
+              let refreshToken = TokenStorage.refreshToken(for: did),
+              let server = TokenStorage.server(for: did)
         else {
             throw XRPCError.unauthorized
         }
 
-        let tokenURL = Self.serverURL.appendingPathComponent("oauth/token")
-        var request = URLRequest(url: tokenURL)
-        request.httpMethod = "POST"
-        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-
-        let body: [String: String] = [
-            "grant_type": "refresh_token",
-            "refresh_token": refreshToken,
-            "client_id": Self.clientID,
-        ]
-        request.httpBody = body.urlEncoded.data(using: .utf8)
-
-        let proof = try await dpop.createProof(httpMethod: "POST", url: tokenURL)
-        request.setValue(proof, forHTTPHeaderField: "DPoP")
-
-        var (data, response) = try await session.data(for: request)
-
-        // Handle DPoP nonce requirement
-        if let httpResp = response as? HTTPURLResponse,
-           httpResp.statusCode == 400,
-           let nonce = httpResp.value(forHTTPHeaderField: "DPoP-Nonce")
-        {
-            let retryProof = try await dpop.createProof(httpMethod: "POST", url: tokenURL, nonce: nonce)
-            request.setValue(retryProof, forHTTPHeaderField: "DPoP")
-            (data, response) = try await session.data(for: request)
-        }
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw XRPCError.unauthorized
-        }
-
-        guard (200 ... 299).contains(httpResponse.statusCode) else {
-            let bodyStr = String(data: data, encoding: .utf8) ?? "no body"
-            logger.error("Token refresh failed (\(httpResponse.statusCode)): \(bodyStr)")
-
-            // Body keyword check covers legacy hatk (HTTP 500 + plain message) before it returned RFC 6749 invalid_grant.
-            let lower = bodyStr.lowercased()
-            let bodyClaimsTerminal = lower.contains("invalid_grant")
-                || lower.contains("refresh token")
-                || lower.contains("revoked")
-                || lower.contains("expired")
-            let isTerminal = (400 ... 499).contains(httpResponse.statusCode) || bodyClaimsTerminal
-            if isTerminal {
-                // The grant is gone — drop this account. If it's the one on
+        let tokens: OAuthTokens
+        do {
+            tokens = try await oauth.refresh(refreshToken: refreshToken, tokenEndpoint: server.tokenEndpoint, dpop: dpop)
+        } catch let OAuthError.refused(status, error, _) {
+            logger.error("Token refresh failed (\(status)): \(error ?? "no error", privacy: .public)")
+            if (400 ... 499).contains(status) {
+                // The grant is gone: drop this account. If it's the one on
                 // screen, fall through to whichever account is left.
                 forget(did: did)
                 if userDID == did {
@@ -357,10 +299,20 @@ final class AuthManager {
                 }
             }
             throw XRPCError.unauthorized
+        } catch {
+            logger.error("Token refresh failed: \(error)")
+            throw XRPCError.unauthorized
         }
 
-        let tokenResponse = try JSONDecoder().decode(TokenResponse.self, from: data)
-        store(tokenResponse, for: did, dpop: nil, makeActive: false)
+        TokenStorage.storeTokens(
+            did: did,
+            accessToken: tokens.accessToken,
+            // A server that doesn't rotate keeps the one it was given.
+            refreshToken: tokens.refreshToken ?? refreshToken,
+            handle: nil,
+            expiresAt: tokens.expiresAt,
+            scope: tokens.scope
+        )
     }
 
     /// Build an AuthContext for making authenticated requests.
@@ -373,8 +325,9 @@ final class AuthManager {
         // Re-read after the await: the active account may have changed.
         guard let currentDpop = dpop,
               let currentDID = userDID,
-              let token = TokenStorage.accessToken(for: currentDID) else { return nil }
-        return AuthContext(accessToken: token, dpop: currentDpop)
+              let token = TokenStorage.accessToken(for: currentDID),
+              let server = TokenStorage.server(for: currentDID) else { return nil }
+        return AuthContext(accessToken: token, dpop: currentDpop, did: currentDID, pds: server.pds)
     }
 
     /// Create an XRPCClient with automatic token refresh on 401.
@@ -396,80 +349,36 @@ final class AuthManager {
 
     // MARK: - Private
 
-    private func exchangeCode(code: String, dpop: DPoP) async throws {
-        let tokenURL = Self.serverURL.appendingPathComponent("oauth/token")
-        var request = URLRequest(url: tokenURL)
-        request.httpMethod = "POST"
-        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-
-        let body: [String: String] = [
-            "grant_type": "authorization_code",
-            "code": code,
-            "redirect_uri": Self.redirectURI,
-            "client_id": Self.clientID,
-            "code_verifier": codeVerifier ?? "",
-        ]
-        request.httpBody = body.urlEncoded.data(using: .utf8)
-
-        let proof = try await dpop.createProof(httpMethod: "POST", url: tokenURL)
-        request.setValue(proof, forHTTPHeaderField: "DPoP")
-
-        let (data, response) = try await session.data(for: request)
-
-        // Handle DPoP nonce retry
-        if let httpResponse = response as? HTTPURLResponse,
-           httpResponse.statusCode == 400,
-           let nonce = httpResponse.value(forHTTPHeaderField: "DPoP-Nonce")
-        {
-            let retryProof = try await dpop.createProof(httpMethod: "POST", url: tokenURL, nonce: nonce)
-            var retryRequest = request
-            retryRequest.setValue(retryProof, forHTTPHeaderField: "DPoP")
-            let (retryData, _) = try await session.data(for: retryRequest)
-            let tokenResponse = try JSONDecoder().decode(TokenResponse.self, from: retryData)
-            store(tokenResponse, for: tokenResponse.sub, dpop: dpop, makeActive: true)
-            return
-        }
-
-        let tokenResponse = try JSONDecoder().decode(TokenResponse.self, from: data)
-        store(tokenResponse, for: tokenResponse.sub, dpop: dpop, makeActive: true)
-    }
-
-    /// Persist a token response under `did`. Pass the `dpop` the tokens were
-    /// minted with on a fresh sign-in so it's saved alongside them; refreshes
-    /// reuse the account's stored key and pass nil.
-    private func store(_ response: TokenResponse, for did: String, dpop: DPoP?, makeActive: Bool) {
-        if let dpop {
-            try? dpop.persist(for: did)
-        }
+    /// Persist a fresh sign-in and make it the active account.
+    private func store(_ signedIn: OAuthSession) {
+        let did = signedIn.identity.did
+        try? signedIn.dpop.persist(for: did)
         TokenStorage.storeTokens(
             did: did,
-            accessToken: response.accessToken,
-            refreshToken: response.refreshToken,
-            handle: response.handle,
-            expiresAt: Date().addingTimeInterval(TimeInterval(response.expiresIn)),
-            // The server puts the granted scope in the access token's claims but
-            // omits it from the token response body, so `response.scope` is nil
-            // in practice. On a fresh sign-in fall back to what we asked for:
-            // the PDS either grants the requested scope or fails the
-            // authorization outright, and storing nil would leave the migration
-            // check above reading every scope as missing — signing out each new
-            // account after its first session.
-            //
-            // Only on a fresh sign-in. A refresh carries the scope of the grant
-            // it renews, which for an install that predates a scope bump is the
-            // narrower set; claiming otherwise would hide the next migration.
-            scope: response.scope ?? (dpop != nil ? Self.requiredScopes.joined(separator: " ") : nil)
+            accessToken: signedIn.tokens.accessToken,
+            refreshToken: signedIn.tokens.refreshToken,
+            handle: signedIn.identity.handle,
+            expiresAt: signedIn.tokens.expiresAt,
+            scope: signedIn.scope
         )
-        TokenStorage.upsertAccount(StoredAccount(did: did, handle: response.handle, avatar: nil))
+        TokenStorage.storeServer(
+            AccountServer(
+                pds: signedIn.identity.pds,
+                issuer: signedIn.server.issuer,
+                tokenEndpoint: signedIn.server.tokenEndpoint,
+                revocationEndpoint: signedIn.server.revocationEndpoint
+            ),
+            for: did
+        )
+        TokenStorage.upsertAccount(StoredAccount(did: did, handle: signedIn.identity.handle, avatar: nil))
         accounts = TokenStorage.accounts
 
-        guard makeActive else { return }
         setActiveDID(did)
-        self.dpop = dpop ?? (try? DPoP.loadOrCreate(for: did))
+        refreshTask = nil
+        dpop = signedIn.dpop
 
         // Guard each @Observable assignment: the macro's setter always fires the
-        // observation registrar even when the value is unchanged, so token refreshes
-        // would otherwise invalidate every observer (including GrainApp.body).
+        // observation registrar even when the value is unchanged.
         if !isAuthenticated {
             isAuthenticated = true
         }
@@ -532,17 +441,6 @@ final class AuthManager {
             logger.error("Avatar download failed: \(error)")
         }
     }
-
-    private func generateCodeVerifier() -> String {
-        var bytes = [UInt8](repeating: 0, count: 32)
-        _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
-        return Data(bytes).base64URLEncoded()
-    }
-
-    private func generateCodeChallenge(verifier: String) -> String {
-        let hash = SHA256.hash(data: Data(verifier.utf8))
-        return Data(hash).base64URLEncoded()
-    }
 }
 
 // MARK: - Account switching
@@ -567,7 +465,7 @@ extension AuthManager {
     /// Make an already-signed-in account the active one.
     func switchTo(did: String) async throws {
         guard did != userDID else { return }
-        guard TokenStorage.hasCredentials(for: did), let newDpop = try? DPoP.loadOrCreate(for: did) else {
+        guard TokenStorage.hasSession(for: did), let newDpop = try? DPoP.loadOrCreate(for: did) else {
             throw AccountError.signInRequired(handle: accounts.first { $0.did == did }?.handle)
         }
 
@@ -586,7 +484,7 @@ extension AuthManager {
                 // performRefresh drops the account when the grant is terminally
                 // gone; anything else (offline, 5xx) is worth switching through,
                 // since the 401 path retries.
-                if !TokenStorage.hasCredentials(for: did) {
+                if !TokenStorage.hasSession(for: did) {
                     throw AccountError.signInRequired(handle: accounts.first { $0.did == did }?.handle)
                 }
             }
@@ -612,10 +510,27 @@ extension AuthManager {
     func signOut(did: String) async {
         if did == userDID {
             await deactivateCurrentAccount()
+            await revoke(did: did)
             forget(did: did)
             activateNextAccountOrSignOut()
         } else {
+            await revoke(did: did)
             forget(did: did)
+        }
+    }
+
+    /// Ask the account's authorization server to revoke its refresh token.
+    /// Best effort: signing out locally never waits on the answer's success.
+    private func revoke(did: String) async {
+        guard let server = TokenStorage.server(for: did),
+              let endpoint = server.revocationEndpoint,
+              let refreshToken = TokenStorage.refreshToken(for: did),
+              let dpop = try? DPoP.loadOrCreate(for: did)
+        else { return }
+        do {
+            try await oauth.revoke(refreshToken: refreshToken, revocationEndpoint: endpoint, dpop: dpop)
+        } catch {
+            logger.error("[SignOut] revocation failed: \(error)")
         }
     }
 
@@ -644,7 +559,7 @@ extension AuthManager {
     /// Move to whichever account is left, or drop to the signed-out state.
     private func activateNextAccountOrSignOut() {
         refreshTask = nil
-        guard let next = TokenStorage.accounts.first(where: { TokenStorage.hasCredentials(for: $0.did) }),
+        guard let next = TokenStorage.accounts.first(where: { TokenStorage.hasSession(for: $0.did) }),
               let nextDpop = try? DPoP.loadOrCreate(for: next.did)
         else {
             applySignedOutState()
@@ -683,38 +598,6 @@ extension AuthManager {
     }
 }
 
-// MARK: - Response Types
-
-private struct PARResponse: Codable {
-    let requestUri: String
-    let expiresIn: Int
-
-    enum CodingKeys: String, CodingKey {
-        case requestUri = "request_uri"
-        case expiresIn = "expires_in"
-    }
-}
-
-private struct TokenResponse: Codable {
-    let accessToken: String
-    let tokenType: String
-    let expiresIn: Int
-    let refreshToken: String?
-    let sub: String
-    let handle: String?
-    let scope: String?
-
-    enum CodingKeys: String, CodingKey {
-        case accessToken = "access_token"
-        case tokenType = "token_type"
-        case expiresIn = "expires_in"
-        case refreshToken = "refresh_token"
-        case sub
-        case handle
-        case scope
-    }
-}
-
 // MARK: - ASWebAuthenticationSession Context
 
 import UIKit
@@ -731,17 +614,5 @@ final class WebAuthContextProvider: NSObject, ASWebAuthenticationPresentationCon
             return ASPresentationAnchor(windowScene: scene)
         }
         preconditionFailure("No window scene available for ASPresentationAnchor")
-    }
-}
-
-// MARK: - Helpers
-
-extension [String: String] {
-    var urlEncoded: String {
-        map { key, value in
-            let escapedKey = key.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? key
-            let escapedValue = value.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? value
-            return "\(escapedKey)=\(escapedValue)"
-        }.joined(separator: "&")
     }
 }

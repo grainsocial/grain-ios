@@ -1,4 +1,7 @@
 import Foundation
+import os
+
+private let logger = Logger(subsystem: "social.grain.grain", category: "Records")
 
 struct CreateRecordInput: Codable, Sendable {
     let collection: String
@@ -15,12 +18,17 @@ struct PutRecordInput: Codable, Sendable {
     let collection: String
     let rkey: String
     let record: AnyCodable
-    var repo: String?
+    let repo: String
 }
 
 struct DeleteRecordInput: Codable, Sendable {
+    let repo: String
     let collection: String
     let rkey: String
+}
+
+struct IndexRecordsInput: Codable, Sendable {
+    let uris: [String]
 }
 
 struct DeleteGalleryInput: Codable, Sendable {
@@ -33,15 +41,16 @@ struct GetRecordResponse: Codable, Sendable {
     var record: AnyCodable?
 }
 
-/// One write inside a `dev.hatk.applyWrites` batch.
+/// One write inside a `com.atproto.repo.applyWrites` batch.
 ///
-/// Grain only ever creates, and always with an explicit rkey, so a batch that
-/// has to be retried addresses the same records both times.
+/// Every write names its rkey, so a batch that has to be retried addresses
+/// the same records both times.
 struct ApplyWrite: Codable, Sendable {
     let type: String
     let collection: String
     let rkey: String
-    let value: AnyCodable
+    /// The record, for a create or an update.
+    let value: AnyCodable?
 
     enum CodingKeys: String, CodingKey {
         case type = "$type"
@@ -51,11 +60,20 @@ struct ApplyWrite: Codable, Sendable {
     }
 
     static func create(collection: String, rkey: String, value: AnyCodable) -> ApplyWrite {
-        ApplyWrite(type: "dev.hatk.applyWrites#create", collection: collection, rkey: rkey, value: value)
+        ApplyWrite(type: "com.atproto.repo.applyWrites#create", collection: collection, rkey: rkey, value: value)
+    }
+
+    static func update(collection: String, rkey: String, value: AnyCodable) -> ApplyWrite {
+        ApplyWrite(type: "com.atproto.repo.applyWrites#update", collection: collection, rkey: rkey, value: value)
+    }
+
+    static func delete(collection: String, rkey: String) -> ApplyWrite {
+        ApplyWrite(type: "com.atproto.repo.applyWrites#delete", collection: collection, rkey: rkey, value: nil)
     }
 }
 
 struct ApplyWritesInput: Codable, Sendable {
+    let repo: String
     let writes: [ApplyWrite]
 }
 
@@ -68,27 +86,86 @@ struct ApplyWritesResponse: Codable, Sendable {
     var results: [ApplyWriteResult]?
 }
 
+/// Writes go to the account's PDS as `com.atproto.repo.*` calls, with the
+/// account's DID as the repo. Each one that lands is then handed to the
+/// AppView's `social.grain.sync.indexRecords`, so the next read sees it
+/// without waiting on the firehose.
 extension XRPCClient {
+    /// How many URIs one `indexRecords` call takes.
+    static let indexBatchSize = 25
+
     func getRecord(uri: String, auth: AuthContext? = nil) async throws -> GetRecordResponse {
         try await query("dev.hatk.getRecord", params: ["uri": uri], auth: auth, as: GetRecordResponse.self)
     }
 
     func createRecord(collection: String, repo: String, record: AnyCodable, auth: AuthContext? = nil) async throws -> CreateRecordResponse {
-        try await procedure("dev.hatk.createRecord", input: CreateRecordInput(collection: collection, repo: repo, record: record), auth: auth, as: CreateRecordResponse.self)
+        let response = try await procedure(
+            "com.atproto.repo.createRecord",
+            input: CreateRecordInput(collection: collection, repo: repo, record: record),
+            auth: auth,
+            as: CreateRecordResponse.self
+        )
+        await indexRecords([response.uri].compactMap(\.self), auth: auth)
+        return response
     }
 
+    /// Create or overwrite the record at `rkey`. `repo` defaults to the
+    /// signed-in account's.
     func putRecord(collection: String, rkey: String, record: AnyCodable, repo: String? = nil, auth: AuthContext? = nil) async throws -> CreateRecordResponse {
-        try await procedure("dev.hatk.putRecord", input: PutRecordInput(collection: collection, rkey: rkey, record: record, repo: repo), auth: auth, as: CreateRecordResponse.self)
+        let repo = repo ?? auth?.did ?? ""
+        let response = try await procedure(
+            "com.atproto.repo.putRecord",
+            input: PutRecordInput(collection: collection, rkey: rkey, record: record, repo: repo),
+            auth: auth,
+            as: CreateRecordResponse.self
+        )
+        await indexRecords([response.uri ?? Self.uri(repo, collection, rkey)], auth: auth)
+        return response
     }
 
     /// Apply every write in a single atomic PDS commit. Either all the records
-    /// land or none do — there is no partially-created gallery to clean up.
+    /// land or none do: there is no partially-created gallery to clean up.
     func applyWrites(_ writes: [ApplyWrite], auth: AuthContext? = nil) async throws -> ApplyWritesResponse {
-        try await procedure("dev.hatk.applyWrites", input: ApplyWritesInput(writes: writes), auth: auth, as: ApplyWritesResponse.self)
+        let repo = auth?.did ?? ""
+        let response = try await procedure(
+            "com.atproto.repo.applyWrites",
+            input: ApplyWritesInput(repo: repo, writes: writes),
+            auth: auth,
+            as: ApplyWritesResponse.self
+        )
+        await indexRecords(writes.map { Self.uri(repo, $0.collection, $0.rkey) }, auth: auth)
+        return response
     }
 
     func deleteRecord(collection: String, rkey: String, auth: AuthContext? = nil) async throws {
-        try await procedure("dev.hatk.deleteRecord", input: DeleteRecordInput(collection: collection, rkey: rkey), auth: auth)
+        let repo = auth?.did ?? ""
+        try await procedure(
+            "com.atproto.repo.deleteRecord",
+            input: DeleteRecordInput(repo: repo, collection: collection, rkey: rkey),
+            auth: auth
+        )
+        await indexRecords([Self.uri(repo, collection, rkey)], auth: auth)
+    }
+
+    /// Ask the AppView to index `uris` now, deleted ones included, in batches
+    /// it accepts. Only Grain's own collections are its to index; a Bluesky
+    /// cross-post is not. A failure is logged and never fails the write it
+    /// follows: the firehose brings the record in the end.
+    func indexRecords(_ uris: [String], auth: AuthContext?) async {
+        let uris = uris.filter { $0.contains("/social.grain.") }
+        guard let auth, !uris.isEmpty else { return }
+        for start in stride(from: 0, to: uris.count, by: Self.indexBatchSize) {
+            let batch = Array(uris[start ..< min(start + Self.indexBatchSize, uris.count)])
+            do {
+                try await procedure("social.grain.sync.indexRecords", input: IndexRecordsInput(uris: batch), auth: auth)
+            } catch {
+                logger.error("indexRecords failed for \(batch.count) record(s): \(error)")
+            }
+        }
+    }
+
+    static func uri(_ repo: String, _ collection: String, _ rkey: String) -> String {
+        "at://\(repo)/\(collection)/\(rkey)"
     }
 
     func deleteGallery(rkey: String, auth: AuthContext? = nil) async throws {

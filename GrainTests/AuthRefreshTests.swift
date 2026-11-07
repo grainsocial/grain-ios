@@ -91,6 +91,7 @@ final class AuthRefreshTests: GrainTestCase {
             expiresAt: Date().addingTimeInterval(expiresIn),
             scope: AuthManager.requiredScopes.joined(separator: " ")
         )
+        TokenStorage.storeServer(.test, for: account)
         TokenStorage.upsertAccount(StoredAccount(did: account, handle: handle, avatar: nil))
     }
 
@@ -130,7 +131,7 @@ final class AuthRefreshTests: GrainTestCase {
 
         try await auth.refresh()
 
-        XCTAssertEqual(log.last?.url?.path, "/oauth/token")
+        XCTAssertEqual(log.last?.url, AccountServer.test.tokenEndpoint, "a refresh goes to the token endpoint the account signed in at")
         XCTAssertEqual(log.last?.httpMethod, "POST")
         XCTAssertEqual(log.lastForm["grant_type"], "refresh_token")
         XCTAssertEqual(log.lastForm["refresh_token"], "tester.test-refresh")
@@ -193,7 +194,7 @@ final class AuthRefreshTests: GrainTestCase {
                     url: request.url!, statusCode: 400, httpVersion: nil,
                     headerFields: ["DPoP-Nonce": "server-nonce"]
                 )!
-                return (Data(), response)
+                return (Data(#"{"error": "use_dpop_nonce"}"#.utf8), response)
             }
             let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
             return (Data(Self.renewed.utf8), response)
@@ -238,18 +239,6 @@ final class AuthRefreshTests: GrainTestCase {
 
         XCTAssertTrue(TokenStorage.hasCredentials(for: other))
         XCTAssertNotEqual(auth.userDID, did)
-    }
-
-    /// Older server builds answered a dead grant with a 500 and a sentence, so
-    /// the body is checked for the same meaning.
-    func testALegacyServerMessageIsAlsoTreatedAsTerminal() async throws {
-        try signIn(did, handle: "tester.test")
-        let auth = signedInManager()
-        respond(status: 500, body: "refresh token has been revoked")
-
-        try? await auth.refresh()
-
-        XCTAssertFalse(TokenStorage.hasCredentials(for: did))
     }
 
     /// Any 4xx means the grant is gone, whatever the body says.
