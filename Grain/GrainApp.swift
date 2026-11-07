@@ -46,6 +46,8 @@ struct GrainApp: App {
     @State private var labelDefsCache = LabelDefinitionsCache()
     @State private var uploadCenter = GalleryUploadCenter()
     @State private var pendingDeepLink: DeepLink?
+    @State private var updateGate = AppUpdateGate()
+    @Environment(\.scenePhase) private var scenePhase
     @AppStorage("appearance") private var appearance: String = "auto"
 
     private var colorScheme: ColorScheme? {
@@ -62,7 +64,11 @@ struct GrainApp: App {
             let isAuthed = authManager.isAuthenticated
             let _ = appSignposter.emitEvent("AuthGateResolved")
             Group {
-                if isAuthed {
+                if updateGate.isUpdateRequired {
+                    // Replaces the tree rather than covering it, so no sheet or
+                    // cover the app had open can sit above it.
+                    UpdateRequiredView(storeURL: updateGate.storeURL)
+                } else if isAuthed {
                     // Keyed on the account: switching rebuilds the whole tree so
                     // no view model, scroll position, or half-loaded feed
                     // carries over from the account being left.
@@ -118,6 +124,14 @@ struct GrainApp: App {
             }
             .task(priority: .background) {
                 GrainShortcuts.updateAppShortcutParameters()
+            }
+            .task {
+                await updateGate.check()
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active {
+                    Task { await updateGate.check() }
+                }
             }
             .preferredColorScheme(colorScheme)
         }

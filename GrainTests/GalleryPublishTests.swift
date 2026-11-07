@@ -196,6 +196,18 @@ final class GalleryPublishTests: GrainTestCase {
         XCTAssertTrue(writes.allSatisfy { TID.isValid($0.rkey) })
     }
 
+    /// A PDS refuses a photo with no alt key, so a photo without a description
+    /// still has to send one.
+    func testEveryPhotoWriteCarriesAlt() throws {
+        let draft = try makeDraft(photoCount: 2, uploaded: 2)
+        let photos = draft.writes().filter { $0.collection == "social.grain.photo" }
+        XCTAssertEqual(photos.count, 2)
+        for write in photos {
+            let record = try JSONSerialization.jsonObject(with: JSONEncoder().encode(write.value)) as? [String: Any]
+            XCTAssertNotNil(record?["alt"] as? String)
+        }
+    }
+
     /// A photo whose blob never made it up must not produce a dangling item
     /// record pointing at a photo that doesn't exist.
     func testWritesSkipPhotosWithoutBlobs() throws {
