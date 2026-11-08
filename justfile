@@ -46,6 +46,23 @@ sim-local: build-local
     xcrun simctl spawn "$SIM" log config --subsystem {{bundle_id}} --mode level:debug
     echo "Installed and launched on simulator (local/dev API)"
 
+# Build for simulator (next.grain.social, the grain-serve deploy beside production)
+build-next:
+    set -o pipefail && xcodebuild build -scheme Grain -destination 'generic/platform=iOS Simulator' -derivedDataPath {{derived_data}} PRODUCT_BUNDLE_IDENTIFIER={{bundle_id}} SWIFT_ACTIVE_COMPILATION_CONDITIONS='DEBUG NEXT_API' GRAIN_OAUTH_SCHEME=social.grain.next {{sim_sign}} 2>&1 | xcbeautify
+
+# Build + install + launch on simulator (next.grain.social)
+sim-next: build-next
+    #!/usr/bin/env bash
+    set -euo pipefail
+    SIM=${SIM_UDID:-booted}
+    xcrun simctl boot "$SIM" 2>/dev/null || true
+    xcrun simctl bootstatus "$SIM" -b >/dev/null
+    APP_PATH=$(find "{{derived_data}}/Build/Products/Debug-iphonesimulator" -name "{{bundle_name}}.app" -type d | head -1)
+    xcrun simctl install "$SIM" "$APP_PATH"
+    xcrun simctl launch "$SIM" {{bundle_id}}
+    xcrun simctl spawn "$SIM" log config --subsystem {{bundle_id}} --mode level:debug
+    echo "Installed and launched on simulator (next.grain.social)"
+
 # Build + install + launch on simulator (production API — grain.social; same as Xcode Run)
 sim:
     #!/usr/bin/env bash

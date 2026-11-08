@@ -63,8 +63,9 @@ final class NotificationsListRenderTests: GrainTestCase {
 
     private func renderList(_ items: [String], settle: TimeInterval = 0.35) {
         MockURLProtocol.respondByPath([
-            "getNotifications": "{\"notifications\": [\(items.joined(separator: ","))], \"cursor\": null, \"unseenCount\": 4}",
-            "getActorProfile": Fixtures.profileDetailed,
+            "listNotifications": "{\"notifications\": [\(items.joined(separator: ","))], \"cursor\": null}",
+            "getUnreadCount": #"{"count": 4}"#,
+            "actor.getProfile": Fixtures.profileDetailed,
         ], fallback: "{}")
 
         let env = TestEnvironment()

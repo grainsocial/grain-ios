@@ -31,16 +31,6 @@ private final class SharedSessionLog: @unchecked Sendable {
 
     var lastBody: [String: Any]? {
         guard let request = last else { return nil }
-        return Self.body(of: request)
-    }
-
-    /// The JSON body of the latest request to `path`.
-    func body(at path: String) -> [String: Any]? {
-        guard let request = lock.withLock({ requests.last { $0.url?.path == path } }) else { return nil }
-        return Self.body(of: request)
-    }
-
-    private static func body(of request: URLRequest) -> [String: Any]? {
         var data = request.httpBody
         if data == nil, let stream = request.httpBodyStream {
             stream.open()
@@ -91,18 +81,6 @@ final class NetworkSideEffectTests: GrainTestCase {
             log.record(request)
             let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!
             return (Data(body.utf8), response)
-        }
-    }
-
-    /// Answers requests to the paths given as given, and anything else with
-    /// an empty 200.
-    private func respond(_ answers: [String: (status: Int, body: String)]) {
-        let log = log!
-        MockURLProtocol.handler = { request in
-            log.record(request)
-            let answer = answers[request.url?.path ?? ""] ?? (200, "{}")
-            let response = HTTPURLResponse(url: request.url!, statusCode: answer.status, httpVersion: nil, headerFields: nil)!
-            return (Data(answer.body.utf8), response)
         }
     }
 
@@ -233,31 +211,8 @@ final class NetworkSideEffectTests: GrainTestCase {
 
     // MARK: - Push token registration
 
-    private static let registerPush = "/xrpc/social.grain.notification.registerPush"
-    private static let unregisterPush = "/xrpc/social.grain.notification.unregisterPush"
-    private static let registerToken = "/xrpc/dev.hatk.push.registerToken"
-    private static let unregisterToken = "/xrpc/dev.hatk.push.unregisterToken"
-
-    /// The answers a server gives for a method it does not serve, each of
-    /// which sends the app to the older call.
-    private static let methodMissingAnswers: [(status: Int, body: String)] = [
-        (404, "Not Found"),
-        (501, #"{"error":"MethodNotImplemented"}"#),
-        (400, #"{"error":"MethodNotImplemented","message":"Method Not Implemented"}"#),
-        (400, #"{"error":"MethodNotFound"}"#),
-    ]
-
-    /// Answers that are about the request rather than the method, after
-    /// which the older call is not tried.
-    private static let otherFailures: [(status: Int, body: String)] = [
-        (401, #"{"error":"AuthenticationRequired"}"#),
-        (400, #"{"error":"InvalidRequest","message":"Input/token must be a string"}"#),
-        (500, "nope"),
-    ]
-
-    /// APNs hands back a token as raw bytes; the server wants it hex-encoded,
-    /// in `registerPush` shaped as Bluesky's.
-    func testTheAPNsTokenIsRegisteredWithRegisterPush() async {
+    /// APNs hands back a token as raw bytes; the server wants it hex-encoded.
+    func testTheAPNsTokenIsSentToTheServerAsHex() async {
         respond("{}")
         let manager = PushManager()
         // Held in a local: `PushManager.authManager` is weak, so an inline
@@ -268,62 +223,16 @@ final class NetworkSideEffectTests: GrainTestCase {
         manager.didRegisterForRemoteNotifications(deviceToken: Data([0xDE, 0xAD, 0xBE, 0xEF]))
         await waitForRequest()
 
-        XCTAssertEqual(log.paths, [Self.registerPush])
-        XCTAssertEqual(log.last?.httpMethod, "POST")
-        XCTAssertEqual(log.last?.value(forHTTPHeaderField: "Content-Type"), "application/json")
-        let body = log.lastBody
-        XCTAssertEqual(body?.count, 4)
-        XCTAssertEqual(body?["serviceDid"] as? String, "did:web:grain.social")
-        XCTAssertEqual(body?["token"] as? String, "deadbeef")
-        XCTAssertEqual(body?["platform"] as? String, "ios")
-        XCTAssertEqual(body?["appId"] as? String, "social.grain.grain")
-    }
-
-    /// A server without `registerPush` gets the older call, exactly as before.
-    func testRegistrationFallsBackWhenTheServerLacksRegisterPush() async {
-        for answer in Self.methodMissingAnswers {
-            log = SharedSessionLog()
-            respond([Self.registerPush: answer])
-            let manager = PushManager()
-            let auth = AuthManager()
-            manager.configure(authManager: auth)
-
-            manager.didRegisterForRemoteNotifications(deviceToken: Data([0xDE, 0xAD]))
-            await waitForRequest(expecting: 2)
-
-            let label = "\(answer.status) \(answer.body)"
-            XCTAssertEqual(log.paths, [Self.registerPush, Self.registerToken], label)
-            let body = log.body(at: Self.registerToken)
-            XCTAssertEqual(body?.count, 2, label)
-            XCTAssertEqual(body?["token"] as? String, "dead", label)
-            XCTAssertEqual(body?["platform"] as? String, "apns", label)
-        }
-    }
-
-    /// Any other failure is the answer: the older call is not tried, and the
-    /// failure is swallowed, since there is nothing the user can do and it
-    /// must not take the launch down with it.
-    func testAFailedRegistrationIsSwallowedWithoutFallingBack() async {
-        for answer in Self.otherFailures {
-            log = SharedSessionLog()
-            respond([Self.registerPush: answer])
-            let manager = PushManager()
-            let auth = AuthManager()
-            manager.configure(authManager: auth)
-
-            manager.didRegisterForRemoteNotifications(deviceToken: Data([0x01]))
-            await waitForRequest()
-            try? await Task.sleep(for: .milliseconds(300))
-
-            let label = "\(answer.status) \(answer.body)"
-            XCTAssertEqual(log.paths.first, Self.registerPush, label)
-            XCTAssertFalse(log.paths.contains(Self.registerToken), label)
-        }
+        XCTAssertEqual(log.paths.last, "/xrpc/social.grain.notification.registerPush")
+        XCTAssertEqual(log.lastBody?["token"] as? String, "deadbeef")
+        XCTAssertEqual(log.lastBody?["platform"] as? String, "ios")
+        XCTAssertEqual(log.lastBody?["serviceDid"] as? String, AuthManager.appviewDID)
+        XCTAssertEqual(log.lastBody?["appId"] as? String, Bundle.main.bundleIdentifier)
     }
 
     /// Signing out has to withdraw the token, or the device keeps getting the
     /// previous account's notifications.
-    func testSigningOutUnregistersTheTokenWithUnregisterPush() async {
+    func testSigningOutUnregistersTheToken() async {
         respond("{}")
         let manager = PushManager()
         let auth = AuthManager()
@@ -338,73 +247,23 @@ final class NetworkSideEffectTests: GrainTestCase {
         }
         await manager.unregisterToken(auth: context)
 
-        XCTAssertEqual(log.paths.last, Self.unregisterPush)
-        let body = log.lastBody
-        XCTAssertEqual(body?.count, 4)
-        XCTAssertEqual(body?["serviceDid"] as? String, "did:web:grain.social")
-        XCTAssertEqual(body?["token"] as? String, "0102")
-        XCTAssertEqual(body?["platform"] as? String, "ios")
-        XCTAssertEqual(body?["appId"] as? String, "social.grain.grain")
+        XCTAssertEqual(log.paths.last, "/xrpc/social.grain.notification.unregisterPush")
+        XCTAssertEqual(log.lastBody?["token"] as? String, "0102")
+        XCTAssertEqual(log.lastBody?["platform"] as? String, "ios")
     }
 
-    func testUnregisteringFallsBackWhenTheServerLacksUnregisterPush() async {
-        for answer in Self.methodMissingAnswers {
-            log = SharedSessionLog()
-            respond([Self.registerPush: answer, Self.unregisterPush: answer])
-            let manager = PushManager()
-            let auth = AuthManager()
-            manager.configure(authManager: auth)
-            manager.didRegisterForRemoteNotifications(deviceToken: Data([0x01, 0x02]))
-            await waitForRequest(expecting: 2)
-            guard let context = await auth.authContext() else {
-                return XCTFail("The signed-in account should have an auth context")
-            }
+    /// A registration the server rejects is swallowed — there is nothing the
+    /// user can do, and it must not take the launch down with it.
+    func testAFailedRegistrationIsSwallowed() async {
+        respond("nope", status: 500)
+        let manager = PushManager()
+        let auth = AuthManager()
+        manager.configure(authManager: auth)
 
-            await manager.unregisterToken(auth: context)
+        manager.didRegisterForRemoteNotifications(deviceToken: Data([0x01]))
+        await waitForRequest()
 
-            let label = "\(answer.status) \(answer.body)"
-            XCTAssertEqual(Array(log.paths.suffix(2)), [Self.unregisterPush, Self.unregisterToken], label)
-            let body = log.body(at: Self.unregisterToken)
-            XCTAssertEqual(body?.count, 1, label)
-            XCTAssertEqual(body?["token"] as? String, "0102", label)
-        }
-    }
-
-    func testAFailedUnregistrationDoesNotFallBack() async {
-        for answer in Self.otherFailures {
-            log = SharedSessionLog()
-            respond([Self.unregisterPush: answer])
-            let manager = PushManager()
-            let auth = AuthManager()
-            manager.configure(authManager: auth)
-            manager.didRegisterForRemoteNotifications(deviceToken: Data([0x01, 0x02]))
-            await waitForRequest()
-            guard let context = await auth.authContext() else {
-                return XCTFail("The signed-in account should have an auth context")
-            }
-
-            await manager.unregisterToken(auth: context)
-
-            let label = "\(answer.status) \(answer.body)"
-            XCTAssertEqual(log.paths.last, Self.unregisterPush, label)
-            XCTAssertFalse(log.paths.contains(Self.unregisterToken), label)
-        }
-    }
-
-    func testOnlyAMissingMethodCountsAsMissing() {
-        func error(_ status: Int, _ body: String?) -> Error {
-            XRPCError.httpError(statusCode: status, body: body.map { Data($0.utf8) })
-        }
-        XCTAssertTrue(PushManager.isMethodMissing(error(404, nil)))
-        XCTAssertTrue(PushManager.isMethodMissing(error(501, nil)))
-        XCTAssertTrue(PushManager.isMethodMissing(error(400, #"{"error":"MethodNotImplemented"}"#)))
-        XCTAssertTrue(PushManager.isMethodMissing(error(400, #"{"error":"MethodNotFound"}"#)))
-        XCTAssertFalse(PushManager.isMethodMissing(error(400, #"{"error":"InvalidRequest"}"#)))
-        XCTAssertFalse(PushManager.isMethodMissing(error(400, "garbage")))
-        XCTAssertFalse(PushManager.isMethodMissing(error(400, nil)))
-        XCTAssertFalse(PushManager.isMethodMissing(error(500, nil)))
-        XCTAssertFalse(PushManager.isMethodMissing(XRPCError.unauthorized))
-        XCTAssertFalse(PushManager.isMethodMissing(URLError(.notConnectedToInternet)))
+        XCTAssertEqual(log.paths.last, "/xrpc/social.grain.notification.registerPush")
     }
 
     /// The manager only holds its `AuthManager` weakly, so a token arriving

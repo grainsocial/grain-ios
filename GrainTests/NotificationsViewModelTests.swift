@@ -20,6 +20,33 @@ final class NotificationsViewModelTests: GrainTestCase {
     // MARK: - loadInitial
 
     func testLoadInitialPopulatesNotifications() async {
+        MockURLProtocol.respondByPath([
+            "listNotifications": """
+            {
+                "notifications": [
+                    {
+                        "uri": "at://did:plc:a/notif/1",
+                        "reason": "follow",
+                        "createdAt": "2024-06-15T12:00:00Z",
+                        "indexedAt": "2024-06-15T12:00:00Z",
+                        "isRead": false,
+                        "author": {"cid": "c1", "did": "did:plc:a", "handle": "alice.test"}
+                    }
+                ],
+                "cursor": "next"
+            }
+            """,
+            "getUnreadCount": #"{"count": 3}"#,
+        ])
+
+        await vm.loadInitial()
+        XCTAssertEqual(vm.notifications.count, 1)
+        XCTAssertEqual(vm.unseenCount, 3)
+        XCTAssertFalse(vm.isLoading)
+    }
+
+    /// Without a count, the page's unread ones are the count.
+    func testLoadInitialCountsThePageWhenTheCountFails() async {
         MockURLProtocol.respondWithJSON("""
         {
             "notifications": [
@@ -27,18 +54,51 @@ final class NotificationsViewModelTests: GrainTestCase {
                     "uri": "at://did:plc:a/notif/1",
                     "reason": "follow",
                     "createdAt": "2024-06-15T12:00:00Z",
+                    "indexedAt": "2024-06-15T12:00:00Z",
+                    "isRead": false,
+                    "author": {"cid": "c1", "did": "did:plc:a", "handle": "alice.test"}
+                },
+                {
+                    "uri": "at://did:plc:a/notif/2",
+                    "reason": "follow",
+                    "createdAt": "2024-06-14T12:00:00Z",
+                    "indexedAt": "2024-06-14T12:00:00Z",
+                    "isRead": true,
                     "author": {"cid": "c1", "did": "did:plc:a", "handle": "alice.test"}
                 }
-            ],
-            "cursor": "next",
-            "unseenCount": 3
+            ]
         }
         """)
 
         await vm.loadInitial()
-        XCTAssertEqual(vm.notifications.count, 1)
-        XCTAssertEqual(vm.unseenCount, 3)
-        XCTAssertFalse(vm.isLoading)
+        XCTAssertEqual(vm.notifications.count, 2)
+        XCTAssertEqual(vm.unseenCount, 1)
+    }
+
+    func testFetchUnseenCountAsksForTheUnreadCount() async {
+        let seen = PathLog()
+        MockURLProtocol.handler = { request in
+            seen.append(request.url?.path ?? "")
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (Data(#"{"count": 4}"#.utf8), response)
+        }
+
+        await vm.fetchUnseenCount()
+        XCTAssertEqual(seen.paths, ["/xrpc/social.grain.notification.getUnreadCount"])
+        XCTAssertEqual(vm.unseenCount, 4)
+    }
+
+    func testMarkAsSeenUpdatesSeenAt() async {
+        vm.unseenCount = 2
+        let seen = PathLog()
+        MockURLProtocol.handler = { request in
+            seen.append(request.url?.path ?? "")
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (Data("{}".utf8), response)
+        }
+
+        await vm.markAsSeen()
+        XCTAssertEqual(seen.paths, ["/xrpc/social.grain.notification.updateSeen"])
     }
 
     func testLoadInitialGuardsAgainstConcurrent() async {
@@ -96,8 +156,7 @@ final class NotificationsViewModelTests: GrainTestCase {
                     "author": {"cid": "c1", "did": "did:plc:a", "handle": "alice.test"}
                 }
             ],
-            "cursor": "page2",
-            "unseenCount": 0
+            "cursor": "page2"
         }
         """)
         await vm.loadInitial()
@@ -119,5 +178,19 @@ final class NotificationsViewModelTests: GrainTestCase {
         """)
         await vm.loadMore()
         XCTAssertEqual(vm.notifications.count, 2)
+    }
+}
+
+/// The paths the mock was asked for, from outside the main actor.
+private final class PathLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var all: [String] = []
+
+    func append(_ path: String) {
+        lock.withLock { all.append(path) }
+    }
+
+    var paths: [String] {
+        lock.withLock { all }
     }
 }

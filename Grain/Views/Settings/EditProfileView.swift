@@ -166,9 +166,7 @@ struct EditProfileView: View {
 
             // Fetch raw record to get avatar blob ref for preservation on save
             let record = try await client.getRecord(uri: "at://\(did)/social.grain.actor.profile/self", auth: authContext)
-            if let value = record.record?.dictValue?["value"],
-               let avatar = value.dictValue?["avatar"]
-            {
+            if let avatar = record.value?.dictValue?["avatar"] {
                 existingAvatarBlob = avatar.dictValue
             }
         } catch {

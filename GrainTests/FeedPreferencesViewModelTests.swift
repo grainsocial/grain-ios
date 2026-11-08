@@ -1,16 +1,20 @@
 @testable import Grain
 import XCTest
 
+/// What the server answers a read of the set with, and a write: a write
+/// reads the set first, so it is answered for both.
+private let noPreferences = #"{"preferences": []}"#
+
 /// File scope, not a static member: `MockURLProtocol.handler` runs outside the
 /// main actor, so anything it reads has to live outside this @MainActor class.
 private let serverFeeds = """
-{"preferences": {
-  "pinnedFeeds": [
+{"preferences": [
+  {"$type": "social.grain.actor.defs#pinnedFeedsPref", "items": [
     {"id": "following", "label": "Following", "type": "feed", "path": "/feeds/following"},
     {"id": "camera:Leica M6", "label": "Leica M6", "type": "camera", "path": "/c/leica"}
-  ],
-  "includeExif": false
-}}
+  ]},
+  {"$type": "social.grain.actor.defs#photoMetadataPref", "includeExif": false}
+]}
 """
 
 /// Pinned feeds drive the feed switcher, and every mutation is applied
@@ -84,7 +88,7 @@ final class FeedPreferencesViewModelTests: GrainTestCase {
     /// An account that has never set preferences comes back empty, and wiping
     /// the switcher down to nothing would leave no feed to show.
     func testAnEmptyFeedListLeavesTheDefaultsInPlace() async {
-        MockURLProtocol.respondWithJSON(#"{"preferences": {"pinnedFeeds": []}}"#)
+        MockURLProtocol.respondWithJSON(#"{"preferences": [{"$type": "social.grain.actor.defs#pinnedFeedsPref", "items": []}]}"#)
 
         await vm.refresh(auth: nil)
 
@@ -125,7 +129,7 @@ final class FeedPreferencesViewModelTests: GrainTestCase {
     // MARK: - pinFeed
 
     func testPinningAppendsToTheEndOfTheList() async {
-        MockURLProtocol.respondWithJSON("{}")
+        MockURLProtocol.respondWithJSON(noPreferences)
 
         await vm.pinFeed(hashtagFeed, auth: nil)
 
@@ -157,7 +161,7 @@ final class FeedPreferencesViewModelTests: GrainTestCase {
     // MARK: - unpinFeed
 
     func testUnpinningRemovesTheFeed() async {
-        MockURLProtocol.respondWithJSON("{}")
+        MockURLProtocol.respondWithJSON(noPreferences)
 
         await vm.unpinFeed("following", auth: nil)
 
@@ -166,7 +170,7 @@ final class FeedPreferencesViewModelTests: GrainTestCase {
 
     /// Unpinning the feed you're looking at has to move the selection with it.
     func testUnpinningTheSelectedFeedMovesTheSelection() async {
-        MockURLProtocol.respondWithJSON("{}")
+        MockURLProtocol.respondWithJSON(noPreferences)
         vm.selectedFeedId = "recent"
 
         await vm.unpinFeed("recent", auth: nil)
@@ -175,7 +179,7 @@ final class FeedPreferencesViewModelTests: GrainTestCase {
     }
 
     func testUnpinningTheLastFeedFallsBackToRecent() async {
-        MockURLProtocol.respondWithJSON("{}")
+        MockURLProtocol.respondWithJSON(noPreferences)
         vm.pinnedFeeds = [PinnedFeed.defaults[1]]
         vm.selectedFeedId = "following"
 
@@ -197,7 +201,7 @@ final class FeedPreferencesViewModelTests: GrainTestCase {
     // MARK: - reorderFeeds
 
     func testReorderingKeepsTheNewOrder() async {
-        MockURLProtocol.respondWithJSON("{}")
+        MockURLProtocol.respondWithJSON(noPreferences)
         let reversed = Array(PinnedFeed.defaults.reversed())
 
         await vm.reorderFeeds(reversed, auth: nil)
@@ -216,7 +220,7 @@ final class FeedPreferencesViewModelTests: GrainTestCase {
     // MARK: - includeExif
 
     func testTurningExifOffSticks() async {
-        MockURLProtocol.respondWithJSON("{}")
+        MockURLProtocol.respondWithJSON(noPreferences)
 
         await vm.setIncludeExif(false, auth: nil)
 

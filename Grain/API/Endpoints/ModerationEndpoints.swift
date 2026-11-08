@@ -1,6 +1,8 @@
 import Foundation
 
-struct LabelDefinition: Codable, Sendable, Identifiable {
+/// A label grain's labeler gives out, as
+/// `com.atproto.label.defs#labelValueDefinition` has one.
+struct LabelDefinition: Codable, Sendable, Identifiable, Equatable {
     let identifier: String
     var locales: [LabelLocale]?
     var blurs: String?
@@ -15,18 +17,73 @@ struct LabelDefinition: Codable, Sendable, Identifiable {
     }
 }
 
-struct LabelLocale: Codable, Sendable {
+struct LabelLocale: Codable, Sendable, Equatable {
     let name: String
+    var description: String?
 }
 
+extension LabelDefinition {
+    private static func grain(_ identifier: String, _ blurs: String, _ defaultSetting: String, _ name: String, _ description: String) -> LabelDefinition {
+        LabelDefinition(identifier: identifier, locales: [LabelLocale(name: name, description: description)], blurs: blurs, defaultSetting: defaultSetting)
+    }
+
+    /// The labels grain gives out, as grain-serve defines them
+    /// (`grain::labels::DEFINITIONS`), in its order: the reasons a report
+    /// names and the warnings a gallery carries. The app reads them from
+    /// `social.grain.moderation.describeLabels`; this copy is what it uses
+    /// until that answers, and when it cannot.
+    static let all: [LabelDefinition] = [
+        grain("copyright", "content", "hide", "Copyright Violation", "Content that infringes on copyright or intellectual property."),
+        grain("csae", "content", "hide", "Child Safety", "Sexual content involving a minor, or the exploitation, grooming or endangerment of a child."),
+        grain("gore", "media", "hide", "Graphic Media", "Graphic or violent imagery."),
+        grain("harassment", "none", "warn", "Harassment", "Targeted harassment, bullying, or hate speech."),
+        grain("misleading", "none", "warn", "Misleading", "Impersonation, misinformation, or deceptive content."),
+        grain("nudity", "media", "warn", "Nudity", "Content containing nudity."),
+        grain("other", "none", "ignore", "Other", "Content that does not fit other report categories."),
+        grain("sexual", "media", "warn", "Sexual Content", "Unwanted or mislabeled sexual content."),
+        grain("spam", "content", "hide", "Spam", "Unwanted or repetitive promotional content."),
+    ]
+
+    /// The `reasonType` a report for each label names: the one grain-serve
+    /// files under that label (`grain::labels::label_for`). atproto's where
+    /// it has one, Ozone's for graphic media and child safety, grain's own
+    /// for the rest.
+    static let reportReasons: [String: String] = [
+        "copyright": "social.grain.moderation.defs#reasonCopyright",
+        "csae": "tools.ozone.report.defs#reasonChildSafetyOther",
+        "gore": "tools.ozone.report.defs#reasonViolenceGraphicContent",
+        "harassment": "com.atproto.moderation.defs#reasonRude",
+        "misleading": "com.atproto.moderation.defs#reasonMisleading",
+        "nudity": "social.grain.moderation.defs#reasonNudity",
+        "other": "com.atproto.moderation.defs#reasonOther",
+        "sexual": "com.atproto.moderation.defs#reasonSexual",
+        "spam": "com.atproto.moderation.defs#reasonSpam",
+    ]
+
+    /// The `reasonType` a report filed under `label` names.
+    static func reasonType(for label: String) -> String {
+        reportReasons[label] ?? reportReasons["other"]!
+    }
+}
+
+/// `social.grain.moderation.describeLabels`' answer: the labels grain-serve
+/// gives out, as a Bluesky labeler's service record has them.
 struct DescribeLabelsResponse: Codable, Sendable {
-    let definitions: [LabelDefinition]?
+    struct Policies: Codable, Sendable {
+        var labelValues: [String]?
+        var labelValueDefinitions: [LabelDefinition]?
+    }
+
+    /// The labeler, as its labels name it in `src`.
+    var did: String?
+    let policies: Policies
 }
 
+/// `com.atproto.moderation.createReport`'s input.
 struct CreateReportInput: Codable, Sendable {
-    let subject: StrongRef
-    let label: String
+    let reasonType: String
     var reason: String?
+    let subject: StrongRef
 }
 
 struct StrongRef: Codable, Sendable {
@@ -39,10 +96,6 @@ struct StrongRef: Codable, Sendable {
         case uri
         case cid
     }
-}
-
-struct CreateReportResponse: Codable, Sendable {
-    let id: Int
 }
 
 // MARK: - Block / Mute types
@@ -85,18 +138,24 @@ struct MuteListResponse: Codable, Sendable {
 }
 
 extension XRPCClient {
-    func describeLabels(auth: AuthContext? = nil) async throws -> [LabelDefinition] {
-        let response = try await query("dev.hatk.describeLabels", auth: auth, as: DescribeLabelsResponse.self)
-        return response.definitions ?? []
-    }
-
+    /// Report a record to grain, filed under `label`. The call goes through
+    /// the PDS to grain's AppView, which files grain's reports, rather than
+    /// to the PDS's own moderation service.
     func createReport(subjectUri: String, subjectCid: String, label: String, reason: String? = nil, auth: AuthContext? = nil) async throws {
         let input = CreateReportInput(
-            subject: StrongRef(type: "com.atproto.repo.strongRef", uri: subjectUri, cid: subjectCid),
-            label: label,
-            reason: reason
+            reasonType: LabelDefinition.reasonType(for: label),
+            reason: reason,
+            subject: StrongRef(type: "com.atproto.repo.strongRef", uri: subjectUri, cid: subjectCid)
         )
-        try await procedure("dev.hatk.createReport", input: input, auth: auth)
+        try await procedure(Self.createReportMethod, input: input, auth: auth)
+    }
+
+    static let createReportMethod = "com.atproto.moderation.createReport"
+
+    /// The labels grain-serve gives out and what each means.
+    func describeLabels(auth: AuthContext? = nil) async throws -> [LabelDefinition] {
+        let response = try await query("social.grain.moderation.describeLabels", auth: auth, as: DescribeLabelsResponse.self)
+        return response.policies.labelValueDefinitions ?? []
     }
 
     // MARK: - Blocks
@@ -117,7 +176,7 @@ extension XRPCClient {
     }
 
     func getBlocks(auth: AuthContext) async throws -> BlockListResponse {
-        try await query("social.grain.unspecced.getBlocks", auth: auth, as: BlockListResponse.self)
+        try await query("social.grain.graph.getBlocks", auth: auth, as: BlockListResponse.self)
     }
 
     // MARK: - Mutes
@@ -131,6 +190,6 @@ extension XRPCClient {
     }
 
     func getMutes(auth: AuthContext) async throws -> MuteListResponse {
-        try await query("social.grain.unspecced.getMutes", auth: auth, as: MuteListResponse.self)
+        try await query("social.grain.graph.getMutes", auth: auth, as: MuteListResponse.self)
     }
 }

@@ -29,9 +29,9 @@ enum XRPCError: Error, LocalizedError {
 ///
 /// A call without an auth context goes to `baseURL`, Grain's AppView, as is.
 /// A call with one goes to the account's PDS, with a DPoP-bound token and a
-/// proof per request; every method outside `com.atproto.*` also carries an
-/// `atproto-proxy` header, so the PDS forwards it to the AppView with a
-/// service token, as Bluesky's apps reach their AppView.
+/// proof per request; every method outside `com.atproto.*`, and a report,
+/// also carries an `atproto-proxy` header, so the PDS forwards it to the
+/// AppView with a service token, as Bluesky's apps reach their AppView.
 final class XRPCClient: Sendable {
     let baseURL: URL
     private let session: URLSession
@@ -106,9 +106,14 @@ final class XRPCClient: Sendable {
         return try decode(UploadBlobResponse.self, from: response)
     }
 
-    /// The `atproto-proxy` value a signed-in call to `nsid` carries, if any.
+    /// The `atproto-proxy` value a signed-in call to `nsid` carries, if any:
+    /// grain's AppView for every method outside `com.atproto.*`, and for a
+    /// report, which grain files rather than the PDS's moderation service.
     static func proxy(for nsid: String) -> String? {
-        nsid.hasPrefix("com.atproto.") ? nil : AuthManager.appviewService
+        if nsid == createReportMethod {
+            return AuthManager.appviewService
+        }
+        return nsid.hasPrefix("com.atproto.") ? nil : AuthManager.appviewService
     }
 
     // MARK: - Private

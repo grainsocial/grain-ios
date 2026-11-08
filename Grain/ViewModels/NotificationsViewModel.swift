@@ -36,11 +36,16 @@ final class NotificationsViewModel {
         hasMore = true
 
         do {
-            let response = try await client.getNotifications(auth: auth)
+            async let page = client.getNotifications(auth: auth)
+            async let unread = try? client.getUnreadCount(auth: auth)
+            // The count first: it cannot throw, so both are awaited before
+            // a failed page leaves the scope.
+            let count = await unread
+            let response = try await page
             withAnimation(nil) {
                 notifications = response.notifications
                 grouped = GroupedNotification.group(notifications)
-                unseenCount = response.unseenCount ?? 0
+                unseenCount = count ?? response.notifications.filter { $0.isRead == false }.count
                 cursor = response.cursor
                 hasMore = response.cursor != nil
             }
@@ -112,8 +117,7 @@ final class NotificationsViewModel {
 
     func fetchUnseenCount(auth: AuthContext? = nil) async {
         do {
-            let response = try await client.getNotifications(countOnly: true, auth: auth)
-            unseenCount = response.unseenCount ?? 0
+            unseenCount = try await client.getUnreadCount(auth: auth)
         } catch {
             self.error = error
         }

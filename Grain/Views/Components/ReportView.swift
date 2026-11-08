@@ -8,8 +8,13 @@ struct ReportView: View {
     let subjectUri: String
     let subjectCid: String
 
-    @State private var labelDefs: [LabelDefinition] = []
+    @Environment(LabelDefinitionsCache.self) private var labelDefsCache
     @State private var selectedLabel = ""
+
+    private var labelDefs: [LabelDefinition] {
+        labelDefsCache.definitions
+    }
+
     @State private var reason = ""
     @State private var isSubmitting = false
     @State private var isSubmitted = false
@@ -27,16 +32,17 @@ struct ReportView: View {
                 } else {
                     Form {
                         Section("Category") {
-                            if labelDefs.isEmpty {
-                                ProgressView()
-                            } else {
-                                Picker("Category", selection: $selectedLabel) {
-                                    ForEach(labelDefs) { def in
-                                        Text(def.displayName).tag(def.identifier)
-                                    }
+                            Picker("Category", selection: $selectedLabel) {
+                                ForEach(labelDefs) { def in
+                                    Text(def.displayName).tag(def.identifier)
                                 }
-                                .pickerStyle(.inline)
-                                .labelsHidden()
+                            }
+                            .pickerStyle(.inline)
+                            .labelsHidden()
+                            .onAppear {
+                                if selectedLabel.isEmpty {
+                                    selectedLabel = labelDefs.first?.identifier ?? ""
+                                }
                             }
                         }
 
@@ -72,20 +78,6 @@ struct ReportView: View {
                     }
                 }
             }
-            .task {
-                await loadLabels()
-            }
-        }
-    }
-
-    private func loadLabels() async {
-        do {
-            labelDefs = try await client.describeLabels(auth: auth.authContext())
-            if let first = labelDefs.first {
-                selectedLabel = first.identifier
-            }
-        } catch {
-            self.error = "Failed to load report categories."
         }
     }
 

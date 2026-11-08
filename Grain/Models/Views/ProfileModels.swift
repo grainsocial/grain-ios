@@ -2,7 +2,9 @@ import Foundation
 
 /// social.grain.actor.defs#profileView
 struct GrainProfile: Codable, Sendable, Identifiable {
-    let cid: String
+    /// The profile record's CID: absent for an account with no grain
+    /// profile indexed, which the lexicon allows.
+    let cid: String?
     let did: String
     let handle: String
     var displayName: String?
@@ -18,7 +20,9 @@ struct GrainProfile: Codable, Sendable, Identifiable {
 
 /// social.grain.actor.defs#profileViewDetailed
 struct GrainProfileDetailed: Codable, Sendable, Identifiable {
-    let cid: String
+    /// The profile record's CID: absent for an account with no grain
+    /// profile indexed, which the lexicon allows.
+    let cid: String?
     let did: String
     let handle: String
     var displayName: String?

@@ -86,7 +86,7 @@ final class StoryViewSyncTests: GrainTestCase {
             auth: AuthContext(accessToken: "t", dpop: DPoP(privateKey: P256.Signing.PrivateKey()), did: "did:plc:test", pds: XCTUnwrap(URL(string: "https://test.local")))
         )
 
-        XCTAssertEqual(recorder.paths, ["/xrpc/social.grain.unspecced.markStoriesViewed"])
+        XCTAssertEqual(recorder.paths, ["/xrpc/social.grain.story.markViewed"])
         let body = try XCTUnwrap(recorder.bodies.first)
         let decoded = try JSONDecoder().decode([String: [String]].self, from: body)
         XCTAssertEqual(decoded, ["stories": ["at://did:plc:alice/social.grain.story/s1"]])

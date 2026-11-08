@@ -158,7 +158,7 @@ struct MainTabView: View {
             // Resolve auth context once (may refresh token) while avatar is in flight
             let ctx = await auth.authContext()
 
-            // Kick off notifications + label defs in parallel now that we have ctx
+            // Kick off notifications and label definitions in parallel now that we have ctx
             let notifSpid = launchSignposter.makeSignpostID()
             let labelsSpid = launchSignposter.makeSignpostID()
             let notifState = launchSignposter.beginInterval("NotificationsFetch", id: notifSpid)

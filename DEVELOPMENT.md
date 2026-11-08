@@ -56,6 +56,7 @@ Find your device UDID with `xcrun devicectl list devices`.
 ```bash
 just sim               # Build + install + launch on simulator (production API)
 just sim-local         # Build + install + launch on simulator (local/dev API)
+just sim-next          # Build + install + launch on simulator (next.grain.social)
 just sim-fresh         # Same as `just sim`, but uninstalls first (wipes app sandbox)
 just sim-local-fresh   # Same as `just sim-local`, but uninstalls first
 just device DEVICE_ID  # Build + install to a plugged-in iOS device

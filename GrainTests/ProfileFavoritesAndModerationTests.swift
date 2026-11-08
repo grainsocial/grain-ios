@@ -250,7 +250,7 @@ final class ProfileFavoritesAndModerationTests: GrainTestCase {
 
     func testPagingGalleriesAppendsUntilTheServerRunsOut() async {
         MockURLProtocol.respondByPath([
-            "getActorProfile": profileJSON(),
+            "actor.getProfile": profileJSON(),
             "getFeed": feedJSON([galleryJSON(1)], cursor: "page2"),
         ])
         await vm.load(did: "did:plc:someone")
@@ -275,18 +275,18 @@ final class ProfileFavoritesAndModerationTests: GrainTestCase {
     // MARK: - Blocking
 
     func testAProfileIsHiddenInEitherDirectionOfABlock() async {
-        MockURLProtocol.respondByPath(["getActorProfile": profileJSON(viewer: #"{"blocking": "at://b/1"}"#)])
+        MockURLProtocol.respondByPath(["actor.getProfile": profileJSON(viewer: #"{"blocking": "at://b/1"}"#)])
         await vm.load(did: "did:plc:someone")
         XCTAssertTrue(vm.isBlockHidden)
 
         let other = ProfileDetailViewModel(client: client)
-        MockURLProtocol.respondByPath(["getActorProfile": profileJSON(viewer: #"{"blockedBy": true}"#)])
+        MockURLProtocol.respondByPath(["actor.getProfile": profileJSON(viewer: #"{"blockedBy": true}"#)])
         await other.load(did: "did:plc:someone")
         XCTAssertTrue(other.isBlockHidden)
     }
 
     func testAnUnblockedProfileIsNotHidden() async {
-        MockURLProtocol.respondByPath(["getActorProfile": profileJSON()])
+        MockURLProtocol.respondByPath(["actor.getProfile": profileJSON()])
         await vm.load(did: "did:plc:someone")
 
         XCTAssertFalse(vm.isBlockHidden)
@@ -294,7 +294,7 @@ final class ProfileFavoritesAndModerationTests: GrainTestCase {
 
     /// Blocking is applied optimistically so the content disappears on tap.
     func testBlockingHidesTheProfileImmediately() async {
-        MockURLProtocol.respondByPath(["getActorProfile": profileJSON()])
+        MockURLProtocol.respondByPath(["actor.getProfile": profileJSON()])
         await vm.load(did: "did:plc:someone")
 
         MockURLProtocol.respondWithJSON(#"{"uri": "at://did:plc:test/social.grain.graph.block/1", "cid": "b"}"#)
@@ -307,7 +307,7 @@ final class ProfileFavoritesAndModerationTests: GrainTestCase {
     /// If the write fails the block has to come back off, or the profile stays
     /// blank for someone who isn't actually blocked.
     func testAFailedBlockIsRolledBack() async {
-        MockURLProtocol.respondByPath(["getActorProfile": profileJSON()])
+        MockURLProtocol.respondByPath(["actor.getProfile": profileJSON()])
         await vm.load(did: "did:plc:someone")
 
         MockURLProtocol.respondWithError(statusCode: 500)
@@ -318,7 +318,7 @@ final class ProfileFavoritesAndModerationTests: GrainTestCase {
     }
 
     func testUnblockingRestoresTheProfile() async {
-        MockURLProtocol.respondByPath(["getActorProfile": profileJSON(viewer: #"{"blocking": "at://did:plc:test/social.grain.graph.block/1"}"#)])
+        MockURLProtocol.respondByPath(["actor.getProfile": profileJSON(viewer: #"{"blocking": "at://did:plc:test/social.grain.graph.block/1"}"#)])
         await vm.load(did: "did:plc:someone")
         XCTAssertTrue(vm.isBlockHidden)
 
@@ -330,7 +330,7 @@ final class ProfileFavoritesAndModerationTests: GrainTestCase {
     }
 
     func testAFailedUnblockLeavesTheBlockInPlace() async {
-        MockURLProtocol.respondByPath(["getActorProfile": profileJSON(viewer: #"{"blocking": "at://did:plc:test/social.grain.graph.block/1"}"#)])
+        MockURLProtocol.respondByPath(["actor.getProfile": profileJSON(viewer: #"{"blocking": "at://did:plc:test/social.grain.graph.block/1"}"#)])
         await vm.load(did: "did:plc:someone")
 
         MockURLProtocol.respondWithError(statusCode: 500)
@@ -341,7 +341,7 @@ final class ProfileFavoritesAndModerationTests: GrainTestCase {
 
     /// Signed out there is nobody to block on behalf of.
     func testBlockingBailsWithoutAuth() async {
-        MockURLProtocol.respondByPath(["getActorProfile": profileJSON()])
+        MockURLProtocol.respondByPath(["actor.getProfile": profileJSON()])
         await vm.load(did: "did:plc:someone")
 
         var requestMade = false
@@ -369,7 +369,7 @@ final class ProfileFavoritesAndModerationTests: GrainTestCase {
     // MARK: - Muting
 
     func testMutingAndUnmutingFlipTheViewerState() async {
-        MockURLProtocol.respondByPath(["getActorProfile": profileJSON()])
+        MockURLProtocol.respondByPath(["actor.getProfile": profileJSON()])
         await vm.load(did: "did:plc:someone")
 
         MockURLProtocol.respondWithJSON("{}")
@@ -382,7 +382,7 @@ final class ProfileFavoritesAndModerationTests: GrainTestCase {
     }
 
     func testAFailedMuteIsRolledBack() async {
-        MockURLProtocol.respondByPath(["getActorProfile": profileJSON()])
+        MockURLProtocol.respondByPath(["actor.getProfile": profileJSON()])
         await vm.load(did: "did:plc:someone")
 
         MockURLProtocol.respondWithError(statusCode: 500)
@@ -392,7 +392,7 @@ final class ProfileFavoritesAndModerationTests: GrainTestCase {
     }
 
     func testMutingBailsWithoutAuth() async {
-        MockURLProtocol.respondByPath(["getActorProfile": profileJSON()])
+        MockURLProtocol.respondByPath(["actor.getProfile": profileJSON()])
         await vm.load(did: "did:plc:someone")
 
         var requestMade = false

@@ -74,12 +74,12 @@ final class ProfileDetailViewModel {
             }
         }
 
-        async let profileFetch = client.getActorProfile(actor: did, viewer: viewer, auth: auth)
+        async let profileFetch = client.getActorProfile(actor: did, auth: auth)
         async let feedFetch = client.getFeed(feed: "actor", actor: did, auth: auth)
         async let storiesFetch = client.getStories(actor: did, auth: auth)
         async let knownFollowersFetch: [FollowerItem] = {
             guard let viewer, viewer != did else { return [] }
-            let response = try? await client.getKnownFollowers(actor: did, viewer: viewer, auth: auth)
+            let response = try? await client.getKnownFollowers(actor: did, auth: auth)
             return response?.items ?? []
         }()
 

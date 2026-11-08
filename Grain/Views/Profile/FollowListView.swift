@@ -194,23 +194,23 @@ struct FollowListView: View {
         do {
             switch mode {
             case .followers:
-                let response = try await client.getFollowers(actor: did, viewer: auth.userDID, cursor: nil, auth: auth.authContext())
+                let response = try await client.getFollowers(actor: did, cursor: nil, auth: auth.authContext())
                 items = (response.items ?? []).map { FollowListItem(from: $0) }
                 cursor = response.cursor
                 totalCount = response.totalCount
             case .following:
-                let response = try await client.getFollowing(actor: did, viewer: auth.userDID, cursor: nil, auth: auth.authContext())
+                let response = try await client.getFollowing(actor: did, cursor: nil, auth: auth.authContext())
                 items = (response.items ?? []).map { FollowListItem(from: $0) }
                 cursor = response.cursor
                 totalCount = response.totalCount
             case .knownFollowers:
-                if let viewer = auth.userDID {
-                    let response = try await client.getKnownFollowers(actor: did, viewer: viewer, auth: auth.authContext())
+                if auth.userDID != nil {
+                    let response = try await client.getKnownFollowers(actor: did, auth: auth.authContext())
                     items = (response.items ?? []).map { FollowListItem(from: $0) }
                     totalCount = items.count
                 }
             case let .galleryFavorites(uri):
-                let response = try await client.getGalleryFavorites(gallery: uri, viewer: auth.userDID, cursor: nil, auth: auth.authContext())
+                let response = try await client.getGalleryFavorites(gallery: uri, cursor: nil, auth: auth.authContext())
                 items = (response.items ?? []).map { FollowListItem(from: $0) }
                 cursor = response.cursor
                 totalCount = response.totalCount
@@ -233,14 +233,14 @@ struct FollowListView: View {
             let existingIDs = Set(items.map(\.id))
             switch mode {
             case .followers:
-                let response = try await client.getFollowers(actor: did, viewer: auth.userDID, cursor: cursor, auth: auth.authContext())
+                let response = try await client.getFollowers(actor: did, cursor: cursor, auth: auth.authContext())
                 if let newItems = response.items {
                     let filtered = newItems.filter { !existingIDs.contains($0.did) }
                     items.append(contentsOf: filtered.map { FollowListItem(from: $0) })
                 }
                 cursor = response.cursor
             case .following:
-                let response = try await client.getFollowing(actor: did, viewer: auth.userDID, cursor: cursor, auth: auth.authContext())
+                let response = try await client.getFollowing(actor: did, cursor: cursor, auth: auth.authContext())
                 if let newItems = response.items {
                     let filtered = newItems.filter { !existingIDs.contains($0.did) }
                     items.append(contentsOf: filtered.map { FollowListItem(from: $0) })
@@ -249,7 +249,7 @@ struct FollowListView: View {
             case .knownFollowers:
                 break // No pagination for known followers
             case let .galleryFavorites(uri):
-                let response = try await client.getGalleryFavorites(gallery: uri, viewer: auth.userDID, cursor: cursor, auth: auth.authContext())
+                let response = try await client.getGalleryFavorites(gallery: uri, cursor: cursor, auth: auth.authContext())
                 if let newItems = response.items {
                     let filtered = newItems.filter { !existingIDs.contains($0.did) }
                     items.append(contentsOf: filtered.map { FollowListItem(from: $0) })
