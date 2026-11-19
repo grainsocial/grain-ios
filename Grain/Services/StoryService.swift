@@ -90,8 +90,6 @@ enum StoryService {
             let options = BlueskyPostOptions(
                 url: "https://grain.social/profile/\(repo)/story/\(rkey)",
                 title: nil,
-                location: draft.location.map { ($0.name, $0.address) },
-                description: nil,
                 images: [(blob: upload.blob, alt: "", width: Int(size.width), height: Int(size.height))]
             )
             do {

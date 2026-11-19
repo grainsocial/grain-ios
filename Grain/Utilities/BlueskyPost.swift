@@ -1,5 +1,6 @@
 import Foundation
 import os
+import UIKit
 
 private let logger = Logger(subsystem: "social.grain.grain", category: "BlueskyPost")
 
@@ -17,14 +18,22 @@ private enum FacetPattern {
 struct BlueskyPostOptions {
     let url: String
     let title: String?
-    let location: (name: String, address: [String: AnyCodable]?)?
-    let description: String?
     let images: [(blob: BlobRef, alt: String, width: Int, height: Int)]
+    /// The gallery's OpenGraph card, drawn by grain-serve: the thumb of the
+    /// link card a post with more than four photos embeds instead of images.
+    var cardURL: URL?
 }
 
 enum BlueskyPost {
-    /// Create a cross-post to Bluesky with images, location, and description.
+    /// Bluesky embeds at most four images; a gallery with more becomes a link card.
+    static let maxEmbeddedImages = 4
+
+    /// Create a cross-post to Bluesky: the title and link, with the photos.
     /// Mirrors the web client's `createBskyPost()` in `bsky-post.ts`.
+    ///
+    /// Up to four photos are embedded as images. A gallery with more is
+    /// embedded as a link card to it, its thumb the gallery's OpenGraph card
+    /// (`cardURL`), so the post neither drops photos silently nor misleads.
     ///
     /// Pass `rkey` when the caller might run this more than once — a resumed
     /// gallery publish, say. With a record key of our own the write becomes an
@@ -38,40 +47,24 @@ enum BlueskyPost {
         createdAt: String = DateFormatting.nowISO()
     ) async throws {
         logger.info("Creating Bluesky cross-post for \(options.url)")
-        logger.info("  images: \(options.images.count), location: \(options.location?.name ?? "none"), description: \(options.description ?? "none")")
+        logger.info("  images: \(options.images.count)")
 
         // 1. Build post text (same format as web)
-        let postText = buildPostText(
-            url: options.url,
-            title: options.title,
-            location: options.location,
-            description: options.description
-        )
+        let postText = buildPostText(url: options.url, title: options.title)
         logger.info("  postText: \(postText)")
 
         // 2. Parse facets for URLs, mentions, and hashtags (same as web)
         let facets = await parseTextToFacets(postText)
         logger.info("  facets: \(facets.count)")
 
-        // 3. Build image embed from already-uploaded blob refs
-        // Web client uploads separately, but blob refs are repo-scoped and reusable
-        var imageEmbeds: [[String: AnyCodable]] = []
-        for img in options.images.prefix(4) {
-            let blobDict: [String: AnyCodable] = [
-                "$type": AnyCodable(img.blob.type ?? "blob"),
-                "ref": AnyCodable(["$link": AnyCodable(img.blob.ref?.link ?? "")] as [String: AnyCodable]),
-                "mimeType": AnyCodable(img.blob.mimeType ?? "image/jpeg"),
-                "size": AnyCodable(img.blob.size ?? 0),
-            ]
-            imageEmbeds.append([
-                "image": AnyCodable(blobDict),
-                "alt": AnyCodable(img.alt),
-                "aspectRatio": AnyCodable([
-                    "width": AnyCodable(img.width),
-                    "height": AnyCodable(img.height),
-                ] as [String: AnyCodable]),
-            ])
-            logger.info("  image blob: type=\(img.blob.type ?? "nil"), ref=\(img.blob.ref?.link ?? "nil"), size=\(img.blob.size ?? 0)")
+        // 3. Build the embed. Image blob refs are repo-scoped and reusable, so
+        // the photos the gallery already uploaded are embedded as they are.
+        let embed: [String: AnyCodable]? = if options.images.count > maxEmbeddedImages {
+            await externalEmbed(options: options, client: client, auth: auth)
+        } else if options.images.isEmpty {
+            nil
+        } else {
+            imagesEmbed(options.images)
         }
 
         // 4. Build the record — must match web's structure exactly:
@@ -105,11 +98,8 @@ enum BlueskyPost {
             record["facets"] = AnyCodable(facetDicts as [[String: AnyCodable]])
         }
 
-        if !imageEmbeds.isEmpty {
-            record["embed"] = AnyCodable([
-                "$type": AnyCodable("app.bsky.embed.images"),
-                "images": AnyCodable(imageEmbeds as [[String: AnyCodable]]),
-            ] as [String: AnyCodable])
+        if let embed {
+            record["embed"] = AnyCodable(embed)
         }
 
         // 5. Log the full JSON for debugging
@@ -143,94 +133,89 @@ enum BlueskyPost {
         logger.info("Bluesky cross-post created: uri=\(result.uri ?? "nil"), cid=\(result.cid ?? "nil")")
     }
 
-    // MARK: - Text Building
+    // MARK: - Embeds
 
-    /// Build post text:
-    /// Title, description…
-    ///
-    /// 📍 Location Name, Region, Country
-    ///
-    /// #GrainSocial see full post here (link)
-    static func buildPostText(
-        url: String,
-        title: String?,
-        location: (name: String, address: [String: AnyCodable]?)?,
-        description: String?
-    ) -> String {
-        // Build location line. `location.name` may be either a POI name
-        // ("Blue Bottle Coffee") or a Nominatim-formatted fallback that already
-        // contains locality/state/country ("New York, New York, United States").
-        // We take the first comma-separated chunk as the primary label, then
-        // append locality/region/country while dropping adjacent duplicates —
-        // this keeps useful context for POIs ("Blue Bottle Coffee, Oakland, California, US")
-        // while collapsing duplicates for city fallbacks ("New York, US").
-        var locationLine: String?
-        if let location {
-            let trimmedName = location.name.trimmingCharacters(in: .whitespaces)
-            let locality = location.address?["locality"]?.stringValue
-            let region = location.address?["region"]?.stringValue
-            let country = location.address?["country"]?.stringValue
-            let hasAddressContext = [locality, region, country].contains { !($0 ?? "").isEmpty }
+    private static func blobDict(_ blob: BlobRef) -> [String: AnyCodable] {
+        [
+            "$type": AnyCodable(blob.type ?? "blob"),
+            "ref": AnyCodable(["$link": AnyCodable(blob.ref?.link ?? "")] as [String: AnyCodable]),
+            "mimeType": AnyCodable(blob.mimeType ?? "image/jpeg"),
+            "size": AnyCodable(blob.size ?? 0),
+        ]
+    }
 
-            if !hasAddressContext {
-                // Legacy records (community.lexicon.location.hthree) have no
-                // structured address — use the stored name as-is.
-                locationLine = "📍 \(trimmedName)"
-            } else {
-                let primaryLabel = trimmedName.components(separatedBy: ",").first?
-                    .trimmingCharacters(in: .whitespaces) ?? trimmedName
+    private static func imagesEmbed(_ images: [(blob: BlobRef, alt: String, width: Int, height: Int)]) -> [String: AnyCodable] {
+        let embedded: [[String: AnyCodable]] = images.map { img in
+            [
+                "image": AnyCodable(blobDict(img.blob)),
+                "alt": AnyCodable(img.alt),
+                "aspectRatio": AnyCodable([
+                    "width": AnyCodable(img.width),
+                    "height": AnyCodable(img.height),
+                ] as [String: AnyCodable]),
+            ]
+        }
+        return [
+            "$type": AnyCodable("app.bsky.embed.images"),
+            "images": AnyCodable(embedded as [[String: AnyCodable]]),
+        ]
+    }
 
-                var parts: [String] = []
-                func appendIfDistinct(_ value: String?) {
-                    guard let value = value?.trimmingCharacters(in: .whitespaces), !value.isEmpty else { return }
-                    if parts.last?.caseInsensitiveCompare(value) == .orderedSame {
-                        return
-                    }
-                    parts.append(value)
+    /// A link card to the gallery. Its thumb is the gallery's OpenGraph card,
+    /// re-encoded as JPEG under Bluesky's 1 MB cap for external thumbs; when
+    /// the card can't be fetched or uploaded the card goes without a thumb
+    /// rather than failing the cross-post.
+    private static func externalEmbed(options: BlueskyPostOptions, client: XRPCClient, auth: AuthContext) async -> [String: AnyCodable] {
+        let title = options.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        var external: [String: AnyCodable] = [
+            "uri": AnyCodable(options.url),
+            "title": AnyCodable(title.isEmpty ? "Gallery on Grain" : title),
+            "description": AnyCodable("\(options.images.count) photos on Grain"),
+        ]
+        if let cardURL = options.cardURL {
+            do {
+                let (data, response) = try await NetworkEnvironment.session.data(from: cardURL)
+                guard let http = response as? HTTPURLResponse, (200 ... 299).contains(http.statusCode),
+                      let image = UIImage(data: data)
+                else {
+                    throw URLError(.badServerResponse)
                 }
-
-                appendIfDistinct(primaryLabel)
-                appendIfDistinct(locality)
-                appendIfDistinct(region)
-                appendIfDistinct(country)
-                locationLine = "📍 \(parts.joined(separator: ", "))"
+                let (jpeg, _) = ImageProcessing.resizeImage(image, maxDimension: 1200, maxBytes: 900_000)
+                let upload = try await client.uploadBlob(data: jpeg, mimeType: "image/jpeg", auth: auth)
+                external["thumb"] = AnyCodable(blobDict(upload.blob))
+            } catch {
+                logger.error("Bluesky cross-post card thumb failed: \(error.localizedDescription)")
             }
         }
+        return [
+            "$type": AnyCodable("app.bsky.embed.external"),
+            "external": AnyCodable(external),
+        ]
+    }
 
-        // Build suffix (location + hashtag + link)
-        var suffixLines: [String] = []
-        if let locationLine {
-            suffixLines.append("")
-            suffixLines.append(locationLine)
-        }
-        suffixLines.append("")
-        suffixLines.append("#GrainSocial \(url)")
-        let suffix = suffixLines.joined(separator: "\n")
+    // MARK: - Text Building
+
+    /// Build post text, the same as web's:
+    ///
+    ///     Title
+    ///
+    ///     #GrainSocial (link)
+    ///
+    /// or just the hashtag and link with no title.
+    static func buildPostText(url: String, title: String?) -> String {
+        let suffix = "#GrainSocial \(url)"
+        let separator = "\n\n"
 
         // Lexicon constraints: maxGraphemes=300, maxLength=3000 bytes.
-        // The budget has to pay for the newline that joins the content to the
-        // suffix as well as the suffix itself — without it a truncated post
-        // lands on exactly 301 graphemes and the PDS rejects the record.
-        let overheadGraphemes = suffix.count + 1
-        let overheadBytes = suffix.utf8.count + 1
-        let maxContentGraphemes = 300 - overheadGraphemes
-        let maxContentBytes = 3000 - overheadBytes
+        // The budget has to pay for the newlines that join the title to the
+        // suffix as well as the suffix itself, or a truncated post overruns.
+        let maxContentGraphemes = 300 - suffix.count - separator.count
+        let maxContentBytes = 3000 - suffix.utf8.count - separator.utf8.count
 
-        // Build title + description content
-        var content = ""
-        let titleText = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let descText = description?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-
-        if !titleText.isEmpty, !descText.isEmpty {
-            content = "\(titleText), \(descText)"
-        } else if !titleText.isEmpty {
-            content = titleText
-        } else if !descText.isEmpty {
-            content = descText
-        }
+        var content = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
         // Truncate to fit. A budget too small to hold even the ellipsis means
-        // the suffix alone fills the post, so the content is dropped entirely.
+        // the suffix alone fills the post, so the title is dropped entirely.
         if !content.isEmpty {
             if maxContentGraphemes < 1 || maxContentBytes < 3 {
                 content = ""
@@ -244,13 +229,7 @@ enum BlueskyPost {
             }
         }
 
-        var lines: [String] = []
-        if !content.isEmpty {
-            lines.append(content)
-        }
-        lines.append(contentsOf: suffixLines)
-
-        return lines.joined(separator: "\n")
+        return content.isEmpty ? suffix : content + separator + suffix
     }
 
     // MARK: - Facet Parsing

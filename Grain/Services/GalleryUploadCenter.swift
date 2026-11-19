@@ -345,9 +345,8 @@ final class GalleryUploadCenter {
                 options: BlueskyPostOptions(
                     url: "https://grain.social/profile/\(draft.repo)/gallery/\(draft.galleryRkey)",
                     title: draft.title.isEmpty ? nil : draft.title,
-                    location: draft.location.map { ($0.name, $0.address) },
-                    description: draft.description.isEmpty ? nil : draft.description,
-                    images: images
+                    images: images,
+                    cardURL: URL(string: "https://grain.social/og/profile/\(draft.repo)/gallery/\(draft.galleryRkey)")
                 ),
                 client: client,
                 repo: draft.repo,

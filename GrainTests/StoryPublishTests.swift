@@ -256,9 +256,7 @@ struct StoryPublishTests {
         let post = try #require(blueskyRecords().first)
         #expect(post["repo"] as? String == "did:plc:test")
         let record = try #require(post["record"] as? [String: Any])
-        let text = record["text"] as? String ?? ""
-        #expect(text.contains("grain.social/profile/did:plc:test/story/story1"), "the post links to the story the PDS just keyed: \(text)")
-        #expect(text.contains("Lisboa"), "the location carries into the post")
+        #expect(record["text"] as? String == "#GrainSocial https://grain.social/profile/did:plc:test/story/story1", "the post is the link to the story the PDS just keyed, without the location")
 
         let embed = try #require(record["embed"] as? [String: Any])
         let images = try #require(embed["images"] as? [[String: Any]])

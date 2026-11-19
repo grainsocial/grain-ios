@@ -106,25 +106,28 @@ final class CrossPostPublishTests: GrainTestCase {
         postToBluesky: Bool,
         title: String = "Golden hour",
         description: String = "Shot on Portra.",
-        location: GalleryDraft.Location? = nil
+        location: GalleryDraft.Location? = nil,
+        photoCount: Int = 1
     ) -> GalleryDraft {
-        let photo = GalleryDraft.Photo(
-            id: UUID(),
-            fileName: "photo.jpg",
-            width: 3000,
-            height: 2000,
-            alt: "A quiet street",
-            exif: nil,
-            photoRkey: TID.next(),
-            exifRkey: TID.next(),
-            itemRkey: TID.next(),
-            blob: BlobRef(
-                type: "blob",
-                ref: BlobRef.BlobLink(link: "bafyalready"),
-                mimeType: "image/jpeg",
-                size: 1234
+        let photos = (0 ..< photoCount).map { _ in
+            GalleryDraft.Photo(
+                id: UUID(),
+                fileName: "photo.jpg",
+                width: 3000,
+                height: 2000,
+                alt: "A quiet street",
+                exif: nil,
+                photoRkey: TID.next(),
+                exifRkey: TID.next(),
+                itemRkey: TID.next(),
+                blob: BlobRef(
+                    type: "blob",
+                    ref: BlobRef.BlobLink(link: "bafyalready"),
+                    mimeType: "image/jpeg",
+                    size: 1234
+                )
             )
-        )
+        }
         return GalleryDraft(
             repo: "did:plc:test",
             title: title,
@@ -136,7 +139,7 @@ final class CrossPostPublishTests: GrainTestCase {
             createdAt: DateFormatting.nowISO(),
             galleryRkey: TID.next(),
             blueskyRkey: TID.next(),
-            photos: [photo]
+            photos: photos
         )
     }
 
@@ -195,7 +198,9 @@ final class CrossPostPublishTests: GrainTestCase {
         XCTAssertEqual(ratio?["width"] as? Int, 3000)
     }
 
-    func testALocationIsCarriedIntoTheCrossPostText() async {
+    /// The post is the title and the link alone: the description and the
+    /// location stay on Grain.
+    func testTheCrossPostTextIsTheTitleAndTheLink() async {
         let located = draft(
             postToBluesky: true,
             location: GalleryDraft.Location(h3: "8a2a1072b59ffff", name: "Lisboa", address: nil)
@@ -204,10 +209,29 @@ final class CrossPostPublishTests: GrainTestCase {
         _ = await center.publish(located, client: client, auth: StubAuth())
 
         let record = log.bodies("com.atproto.repo.putRecord").first?["record"] as? [String: Any]
-        XCTAssertTrue((record?["text"] as? String ?? "").contains("Lisboa"))
+        XCTAssertEqual(
+            record?["text"] as? String,
+            "Golden hour\n\n#GrainSocial https://grain.social/profile/did:plc:test/gallery/\(located.galleryRkey)"
+        )
     }
 
-    /// An untitled, undescribed gallery still gets a post — just a barer one.
+    /// A gallery of more than four photos posts a link card to itself, its
+    /// thumb drawn from the gallery's OpenGraph card on grain.social.
+    func testALargeGalleryCrossPostsALinkCard() async {
+        let large = draft(postToBluesky: true, photoCount: 6)
+
+        _ = await center.publish(large, client: client, auth: StubAuth())
+
+        XCTAssertEqual(log.count("/og/profile/did:plc:test/gallery/\(large.galleryRkey)"), 1)
+        let record = log.bodies("com.atproto.repo.putRecord").first?["record"] as? [String: Any]
+        let embed = record?["embed"] as? [String: Any]
+        XCTAssertEqual(embed?["$type"] as? String, "app.bsky.embed.external")
+        let external = embed?["external"] as? [String: Any]
+        XCTAssertEqual(external?["uri"] as? String, "https://grain.social/profile/did:plc:test/gallery/\(large.galleryRkey)")
+        XCTAssertEqual(external?["description"] as? String, "6 photos on Grain")
+    }
+
+    /// An untitled gallery still gets a post: the hashtag and the link alone.
     func testAnEmptyGalleryStillCrossPosts() async {
         let bare = draft(postToBluesky: true, title: "", description: "")
 
@@ -215,7 +239,10 @@ final class CrossPostPublishTests: GrainTestCase {
 
         XCTAssertEqual(log.count("com.atproto.repo.putRecord"), 1)
         let record = log.bodies("com.atproto.repo.putRecord").first?["record"] as? [String: Any]
-        XCTAssertFalse((record?["text"] as? String ?? "").isEmpty)
+        XCTAssertEqual(
+            record?["text"] as? String,
+            "#GrainSocial https://grain.social/profile/did:plc:test/gallery/\(bare.galleryRkey)"
+        )
     }
 
     // MARK: - When Bluesky is the thing that fails

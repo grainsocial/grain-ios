@@ -1,4 +1,5 @@
 @testable import Grain
+import UIKit
 import XCTest
 
 /// Captures the record the cross-post actually writes.
@@ -88,17 +89,45 @@ final class BlueskyCrossPostTests: GrainTestCase {
 
     private func options(
         title: String? = "Golden hour",
-        description: String? = nil,
-        location: (name: String, address: [String: AnyCodable]?)? = nil,
-        images: [(blob: BlobRef, alt: String, width: Int, height: Int)] = []
+        images: [(blob: BlobRef, alt: String, width: Int, height: Int)] = [],
+        cardURL: URL? = nil
     ) -> BlueskyPostOptions {
         BlueskyPostOptions(
             url: "https://grain.social/profile/did:plc:test/gallery/1",
             title: title,
-            location: location,
-            description: description,
-            images: images
+            images: images,
+            cardURL: cardURL
         )
+    }
+
+    private let cardURL = URL(string: "https://grain.social/og/profile/did:plc:test/gallery/1")!
+
+    private func photos(_ count: Int) -> [(blob: BlobRef, alt: String, width: Int, height: Int)] {
+        (0 ..< count).map { (blob: blob("bafy\($0)"), alt: "Photo \($0)", width: 100, height: 100) }
+    }
+
+    /// Serves the OpenGraph card as a PNG (or fails it), and answers the
+    /// thumb's upload with a blob, besides the post's own write.
+    private func serveCard(_ available: Bool) {
+        let log = log!
+        let png = UIGraphicsImageRenderer(size: CGSize(width: 12, height: 6)).pngData { context in
+            UIColor.orange.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 12, height: 6))
+        }
+        MockURLProtocol.handler = { request in
+            let path = request.url?.path ?? ""
+            if path.hasPrefix("/og/") {
+                let response = HTTPURLResponse(url: request.url!, statusCode: available ? 200 : 404, httpVersion: nil, headerFields: nil)!
+                return (available ? png : Data(), response)
+            }
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            if path.hasSuffix("com.atproto.repo.uploadBlob") {
+                let blob = #"{"blob": {"$type": "blob", "ref": {"$link": "bafycard"}, "mimeType": "image/jpeg", "size": 4321}}"#
+                return (Data(blob.utf8), response)
+            }
+            log.record(request)
+            return (Data(#"{"uri": "at://did:plc:test/app.bsky.feed.post/1", "cid": "bafy"}"#.utf8), response)
+        }
     }
 
     private func post(
@@ -172,19 +201,54 @@ final class BlueskyCrossPostTests: GrainTestCase {
         XCTAssertEqual(ratio["height"] as? Int, 2000)
     }
 
-    /// Bluesky takes at most four images; sending more is rejected outright.
-    func testOnlyTheFirstFourImagesAreEmbedded() async throws {
-        let images = (0 ..< 7).map {
-            (blob: blob("bafy\($0)"), alt: "Photo \($0)", width: 100, height: 100)
-        }
-
-        try await post(options(images: images))
+    /// Four photos are the most Bluesky embeds as images, and all are sent.
+    func testFourImagesAreAllEmbedded() async throws {
+        try await post(options(images: photos(4), cardURL: cardURL))
 
         let embed = try XCTUnwrap(log.lastRecord?["embed"] as? [String: Any])
+        XCTAssertEqual(embed["$type"] as? String, "app.bsky.embed.images")
         let embedded = try XCTUnwrap(embed["images"] as? [[String: Any]])
         XCTAssertEqual(embedded.count, 4)
         XCTAssertEqual(embedded.first?["alt"] as? String, "Photo 0")
         XCTAssertEqual(embedded.last?["alt"] as? String, "Photo 3")
+    }
+
+    // MARK: - External embed
+
+    /// More than four photos become a link card to the gallery, its thumb
+    /// the gallery's OpenGraph card uploaded as a blob.
+    func testMoreThanFourImagesBecomeALinkCardWithTheGallerysCard() async throws {
+        serveCard(true)
+
+        try await post(options(images: photos(7), cardURL: cardURL))
+
+        let embed = try XCTUnwrap(log.lastRecord?["embed"] as? [String: Any])
+        XCTAssertEqual(embed["$type"] as? String, "app.bsky.embed.external")
+        XCTAssertNil(embed["images"])
+        let external = try XCTUnwrap(embed["external"] as? [String: Any])
+        XCTAssertEqual(external["uri"] as? String, "https://grain.social/profile/did:plc:test/gallery/1")
+        XCTAssertEqual(external["title"] as? String, "Golden hour")
+        XCTAssertEqual(external["description"] as? String, "7 photos on Grain")
+        let thumb = try XCTUnwrap(external["thumb"] as? [String: Any])
+        XCTAssertEqual(thumb["$type"] as? String, "blob")
+        XCTAssertEqual(thumb["mimeType"] as? String, "image/jpeg")
+        XCTAssertEqual(thumb["size"] as? Int, 4321)
+        XCTAssertEqual((thumb["ref"] as? [String: Any])?["$link"] as? String, "bafycard")
+    }
+
+    /// A card that can't be fetched leaves the link card without a thumb
+    /// rather than failing the cross-post.
+    func testALinkCardWhoseCardFailsHasNoThumb() async throws {
+        serveCard(false)
+
+        try await post(options(title: nil, images: photos(5), cardURL: cardURL))
+
+        let embed = try XCTUnwrap(log.lastRecord?["embed"] as? [String: Any])
+        XCTAssertEqual(embed["$type"] as? String, "app.bsky.embed.external")
+        let external = try XCTUnwrap(embed["external"] as? [String: Any])
+        XCTAssertEqual(external["title"] as? String, "Gallery on Grain")
+        XCTAssertEqual(external["description"] as? String, "5 photos on Grain")
+        XCTAssertNil(external["thumb"])
     }
 
     /// A gallery with no blobs yet must not send an empty embed — Bluesky
@@ -225,8 +289,8 @@ final class BlueskyCrossPostTests: GrainTestCase {
         })
     }
 
-    func testAHashtagInTheDescriptionIsFacetedAsATag() async throws {
-        try await post(options(description: "Shot on #Portra400 in the morning."))
+    func testAHashtagInTheTitleIsFacetedAsATag() async throws {
+        try await post(options(title: "Shot on #Portra400 in the morning."))
 
         let facets = try XCTUnwrap(log.lastRecord?["facets"] as? [[String: Any]])
         let features = facets.flatMap { ($0["features"] as? [[String: Any]]) ?? [] }
@@ -237,7 +301,7 @@ final class BlueskyCrossPostTests: GrainTestCase {
     /// Every facet's byte range has to land inside the text it annotates, or
     /// Bluesky renders the link over the wrong characters.
     func testEveryFacetPointsAtRealBytesOfTheText() async throws {
-        try await post(options(title: "A café gallery", description: "Shot on #Portra400 ☕️"))
+        try await post(options(title: "A café gallery, shot on #Portra400 ☕️"))
 
         let record = try XCTUnwrap(log.lastRecord)
         let text = try XCTUnwrap(record["text"] as? String)

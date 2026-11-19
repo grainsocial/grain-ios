@@ -140,7 +140,7 @@ struct CreateGalleryView: View {
                 Section {
                     Toggle("Post to Bluesky", isOn: $postToBluesky)
                 } footer: {
-                    Text("Includes title, description, location, and the first 4 photos.")
+                    Text("Posts the title and a link, with up to 4 photos, or a preview card of the gallery when it has more.")
                 }
             }
             // Lock the Form's vertical scroll while the zoom overlay is up so a
