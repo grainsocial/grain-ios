@@ -40,6 +40,13 @@ private final class StubAuth: AuthContextProviding {
     }
 }
 
+/// A GET has no body: its query as a JSON object, logged in its place.
+private func queryAsBody(of request: URLRequest) -> Data? {
+    let items = request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems } ?? []
+    let query = Dictionary(items.map { ($0.name, $0.value ?? "") }, uniquingKeysWith: { $1 })
+    return try? JSONSerialization.data(withJSONObject: query)
+}
+
 private func bodyData(of request: URLRequest) -> Data? {
     if let body = request.httpBody {
         return body
@@ -93,9 +100,15 @@ final class CrossPostPublishTests: GrainTestCase {
     private func respondOK() {
         let log = log!
         MockURLProtocol.handler = { request in
-            log.record(path: request.url?.path ?? "", body: bodyData(of: request))
-            let body = #"{"uri": "at://did:plc:test/x/1", "cid": "bafy", "results": [], "blob": {"$type": "blob", "ref": {"$link": "bafyblob"}, "mimeType": "image/jpeg", "size": 10}}"#
+            let path = request.url?.path ?? ""
             let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            if path.hasSuffix("social.grain.gallery.getCrossPost") {
+                log.record(path: path, body: queryAsBody(of: request))
+                let post = #"{"post": {"$type": "app.bsky.feed.post", "text": "Golden hour", "tags": ["grainsocial"], "createdAt": "2025-01-01T00:00:00.000Z"}}"#
+                return (Data(post.utf8), response)
+            }
+            log.record(path: path, body: bodyData(of: request))
+            let body = #"{"uri": "at://did:plc:test/x/1", "cid": "bafy", "results": [], "blob": {"$type": "blob", "ref": {"$link": "bafyblob"}, "mimeType": "image/jpeg", "size": 10}}"#
             return (Data(body.utf8), response)
         }
     }
@@ -106,28 +119,25 @@ final class CrossPostPublishTests: GrainTestCase {
         postToBluesky: Bool,
         title: String = "Golden hour",
         description: String = "Shot on Portra.",
-        location: GalleryDraft.Location? = nil,
-        photoCount: Int = 1
+        location: GalleryDraft.Location? = nil
     ) -> GalleryDraft {
-        let photos = (0 ..< photoCount).map { _ in
-            GalleryDraft.Photo(
-                id: UUID(),
-                fileName: "photo.jpg",
-                width: 3000,
-                height: 2000,
-                alt: "A quiet street",
-                exif: nil,
-                photoRkey: TID.next(),
-                exifRkey: TID.next(),
-                itemRkey: TID.next(),
-                blob: BlobRef(
-                    type: "blob",
-                    ref: BlobRef.BlobLink(link: "bafyalready"),
-                    mimeType: "image/jpeg",
-                    size: 1234
-                )
+        let photo = GalleryDraft.Photo(
+            id: UUID(),
+            fileName: "photo.jpg",
+            width: 3000,
+            height: 2000,
+            alt: "A quiet street",
+            exif: nil,
+            photoRkey: TID.next(),
+            exifRkey: TID.next(),
+            itemRkey: TID.next(),
+            blob: BlobRef(
+                type: "blob",
+                ref: BlobRef.BlobLink(link: "bafyalready"),
+                mimeType: "image/jpeg",
+                size: 1234
             )
-        }
+        )
         return GalleryDraft(
             repo: "did:plc:test",
             title: title,
@@ -139,7 +149,7 @@ final class CrossPostPublishTests: GrainTestCase {
             createdAt: DateFormatting.nowISO(),
             galleryRkey: TID.next(),
             blueskyRkey: TID.next(),
-            photos: photos
+            photos: [photo]
         )
     }
 
@@ -154,22 +164,25 @@ final class CrossPostPublishTests: GrainTestCase {
         XCTAssertEqual(log.count("com.atproto.repo.applyWrites"), 1, "The gallery itself still commits")
     }
 
+    /// The post is the one grain-serve words for the gallery just committed,
+    /// written as it came.
     func testAGalleryWithCrossPostingOnAlsoPostsToBluesky() async {
-        let published = await center.publish(draft(postToBluesky: true), client: client, auth: StubAuth())
+        let outgoing = draft(postToBluesky: true)
+
+        let published = await center.publish(outgoing, client: client, auth: StubAuth())
 
         XCTAssertTrue(published)
+        XCTAssertEqual(log.bodies("social.grain.gallery.getCrossPost").first?["subject"] as? String, outgoing.galleryUri)
         XCTAssertEqual(log.count("com.atproto.repo.putRecord"), 1)
-
         let record = log.bodies("com.atproto.repo.putRecord").first?["record"] as? [String: Any]
-        XCTAssertEqual((record?["tags"] as? [String]), ["grainsocial"])
-        let text = record?["text"] as? String ?? ""
-        XCTAssertTrue(text.contains("Golden hour"), "The gallery's title should carry over: \(text)")
-        XCTAssertTrue(text.contains("grain.social"), "…along with a link back")
+        XCTAssertEqual(record?["text"] as? String, "Golden hour")
+        XCTAssertEqual(record?["tags"] as? [String], ["grainsocial"])
     }
 
-    /// The cross-post is written under the key the draft assigned, so a resumed
-    /// publish overwrites its own post instead of posting a second time.
-    func testTheCrossPostUsesTheDraftsOwnRecordKey() async {
+    /// The cross-post is written under the key and timestamp the draft
+    /// assigned, so a resumed publish overwrites its own post instead of
+    /// posting a second time.
+    func testTheCrossPostUsesTheDraftsOwnRecordKeyAndTimestamp() async {
         let outgoing = draft(postToBluesky: true)
 
         _ = await center.publish(outgoing, client: client, auth: StubAuth())
@@ -178,71 +191,7 @@ final class CrossPostPublishTests: GrainTestCase {
         XCTAssertEqual(body?["rkey"] as? String, outgoing.blueskyRkey)
         XCTAssertEqual(body?["collection"] as? String, "app.bsky.feed.post")
         XCTAssertEqual(body?["repo"] as? String, "did:plc:test")
-    }
-
-    /// The already-uploaded blob is reused for the embed rather than uploaded
-    /// again — blobs are repo-scoped, so a second upload would be waste.
-    func testTheCrossPostEmbedsTheBlobTheGalleryAlreadyUploaded() async {
-        _ = await center.publish(draft(postToBluesky: true), client: client, auth: StubAuth())
-
-        let record = log.bodies("com.atproto.repo.putRecord").first?["record"] as? [String: Any]
-        let embed = record?["embed"] as? [String: Any]
-        XCTAssertEqual(embed?["$type"] as? String, "app.bsky.embed.images")
-
-        let images = embed?["images"] as? [[String: Any]]
-        XCTAssertEqual(images?.count, 1)
-        XCTAssertEqual(images?.first?["alt"] as? String, "A quiet street")
-        let image = images?.first?["image"] as? [String: Any]
-        XCTAssertEqual((image?["ref"] as? [String: Any])?["$link"] as? String, "bafyalready")
-        let ratio = images?.first?["aspectRatio"] as? [String: Any]
-        XCTAssertEqual(ratio?["width"] as? Int, 3000)
-    }
-
-    /// The post is the title and the link alone: the description and the
-    /// location stay on Grain.
-    func testTheCrossPostTextIsTheTitleAndTheLink() async {
-        let located = draft(
-            postToBluesky: true,
-            location: GalleryDraft.Location(h3: "8a2a1072b59ffff", name: "Lisboa", address: nil)
-        )
-
-        _ = await center.publish(located, client: client, auth: StubAuth())
-
-        let record = log.bodies("com.atproto.repo.putRecord").first?["record"] as? [String: Any]
-        XCTAssertEqual(
-            record?["text"] as? String,
-            "Golden hour\n\n#GrainSocial https://grain.social/profile/did:plc:test/gallery/\(located.galleryRkey)"
-        )
-    }
-
-    /// A gallery of more than four photos posts a link card to itself, its
-    /// thumb drawn from the gallery's OpenGraph card on grain.social.
-    func testALargeGalleryCrossPostsALinkCard() async {
-        let large = draft(postToBluesky: true, photoCount: 6)
-
-        _ = await center.publish(large, client: client, auth: StubAuth())
-
-        XCTAssertEqual(log.count("/og/profile/did:plc:test/gallery/\(large.galleryRkey)"), 1)
-        let record = log.bodies("com.atproto.repo.putRecord").first?["record"] as? [String: Any]
-        let embed = record?["embed"] as? [String: Any]
-        XCTAssertEqual(embed?["$type"] as? String, "app.bsky.embed.external")
-        let external = embed?["external"] as? [String: Any]
-        XCTAssertEqual(external?["uri"] as? String, "https://grain.social/profile/did:plc:test/gallery/\(large.galleryRkey)")
-        XCTAssertEqual(external?["description"] as? String, "6 photos on Grain")
-    }
-
-    /// An untitled gallery still gets a post: the hashtag and the link alone.
-    func testAnEmptyGalleryStillCrossPosts() async {
-        let bare = draft(postToBluesky: true, title: "", description: "")
-
-        _ = await center.publish(bare, client: client, auth: StubAuth())
-
-        XCTAssertEqual(log.count("com.atproto.repo.putRecord"), 1)
-        let record = log.bodies("com.atproto.repo.putRecord").first?["record"] as? [String: Any]
-        XCTAssertEqual(
-            record?["text"] as? String,
-            "#GrainSocial https://grain.social/profile/did:plc:test/gallery/\(bare.galleryRkey)"
-        )
+        XCTAssertEqual((body?["record"] as? [String: Any])?["createdAt"] as? String, outgoing.createdAt)
     }
 
     // MARK: - When Bluesky is the thing that fails

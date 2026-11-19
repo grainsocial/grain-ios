@@ -86,14 +86,8 @@ enum StoryService {
         )
 
         if draft.postToBluesky, let uri = result.uri {
-            let rkey = uri.split(separator: "/").last.map(String.init) ?? ""
-            let options = BlueskyPostOptions(
-                url: "https://grain.social/profile/\(repo)/story/\(rkey)",
-                title: nil,
-                images: [(blob: upload.blob, alt: "", width: Int(size.width), height: Int(size.height))]
-            )
             do {
-                try await BlueskyPost.create(options: options, client: client, repo: repo, auth: auth)
+                try await BlueskyPost.create(subject: uri, client: client, repo: repo, auth: auth)
             } catch {
                 // The story is live; a failed cross-post must not undo that.
             }

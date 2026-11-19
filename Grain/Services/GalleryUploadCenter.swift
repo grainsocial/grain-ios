@@ -336,18 +336,9 @@ final class GalleryUploadCenter {
     }
 
     private func crossPostToBluesky(_ draft: GalleryDraft, client: XRPCClient, authContext: AuthContext) async {
-        let images = draft.photos.compactMap { photo -> (blob: BlobRef, alt: String, width: Int, height: Int)? in
-            guard let blob = photo.blob else { return nil }
-            return (blob: blob, alt: photo.alt, width: photo.width, height: photo.height)
-        }
         do {
             try await BlueskyPost.create(
-                options: BlueskyPostOptions(
-                    url: "https://grain.social/profile/\(draft.repo)/gallery/\(draft.galleryRkey)",
-                    title: draft.title.isEmpty ? nil : draft.title,
-                    images: images,
-                    cardURL: URL(string: "https://grain.social/og/profile/\(draft.repo)/gallery/\(draft.galleryRkey)")
-                ),
+                subject: draft.galleryUri,
                 client: client,
                 repo: draft.repo,
                 auth: authContext,

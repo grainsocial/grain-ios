@@ -171,13 +171,20 @@ struct StoryPublishTests {
         let log = log
         MockURLProtocol.handler = { request in
             let path = request.url?.path ?? ""
-            let body = bodyData(of: request)
-            log.record(path: path, body: body)
-
             func respond(_ json: String, status: Int = 200) -> (Data, HTTPURLResponse) {
                 let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!
                 return (Data(json.utf8), response)
             }
+
+            if path.hasSuffix("social.grain.gallery.getCrossPost") {
+                // A GET has no body: log its query as one, to check the subject.
+                let items = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems ?? []
+                let query = Dictionary(items.map { ($0.name, $0.value ?? "") }, uniquingKeysWith: { $1 })
+                log.record(path: path, body: try? JSONSerialization.data(withJSONObject: query))
+                return respond(##"{"post":{"$type":"app.bsky.feed.post","text":"#GrainSocial https://grain.social/profile/did:plc:test/story/story1","tags":["grainsocial"],"createdAt":"2025-01-01T00:00:00.000Z"}}"##)
+            }
+            let body = bodyData(of: request)
+            log.record(path: path, body: body)
 
             if path.hasSuffix("com.atproto.repo.uploadBlob") {
                 guard uploadStatus == 200 else { return respond(#"{"error":"PayloadTooLarge"}"#, status: uploadStatus) }
@@ -244,24 +251,23 @@ struct StoryPublishTests {
         #expect(storyRecords().count == 1)
     }
 
-    @Test func crossPostingOnWritesABlueskyPostLinkingBackToTheStory() async throws {
+    @Test func crossPostingOnWritesThePostGrainServeWordsForTheStory() async throws {
         serve()
         defer { MockURLProtocol.handler = nil }
         var draft = StoryDraft(image: makeImage())
         draft.postToBluesky = true
-        draft.location = StoryDraft.Location(h3: "8a2a1072b59ffff", name: "Lisboa", address: nil)
 
         _ = try await StoryService.publish(draft, client: client, repo: "did:plc:test", auth: context)
 
+        let query = try #require(log.bodies("social.grain.gallery.getCrossPost").first)
+        #expect(query["subject"] as? String == "at://did:plc:test/social.grain.story/story1", "it asks for the story the PDS just keyed")
         let post = try #require(blueskyRecords().first)
         #expect(post["repo"] as? String == "did:plc:test")
+        #expect(post["rkey"] == nil, "a story's cross-post is created, not keyed")
         let record = try #require(post["record"] as? [String: Any])
-        #expect(record["text"] as? String == "#GrainSocial https://grain.social/profile/did:plc:test/story/story1", "the post is the link to the story the PDS just keyed, without the location")
-
-        let embed = try #require(record["embed"] as? [String: Any])
-        let images = try #require(embed["images"] as? [[String: Any]])
-        #expect(((images.first?["image"] as? [String: Any])?["ref"] as? [String: Any])?["$link"] as? String == "bafyuploaded", "the cross-post reuses the uploaded blob rather than uploading again")
-        #expect(log.count("com.atproto.repo.uploadBlob") == 1)
+        #expect(record["text"] as? String == "#GrainSocial https://grain.social/profile/did:plc:test/story/story1")
+        #expect(record["createdAt"] as? String == "2025-01-01T00:00:00.000Z")
+        #expect(log.count("com.atproto.repo.uploadBlob") == 1, "only the story's photo is uploaded")
     }
 
     /// The story is already live by the time Bluesky is asked. A failed

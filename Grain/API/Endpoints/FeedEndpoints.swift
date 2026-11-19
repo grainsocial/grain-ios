@@ -11,6 +11,12 @@ struct GetGalleryResponse: Codable, Sendable {
     let gallery: GrainGallery
 }
 
+/// `social.grain.gallery.getCrossPost`'s answer: the `app.bsky.feed.post`
+/// record that shares the subject.
+struct GetCrossPostResponse: Codable, Sendable {
+    let post: AnyCodable
+}
+
 struct GetCommentThreadResponse: Codable, Sendable {
     let comments: [GrainComment]
     var cursor: String?
@@ -265,6 +271,12 @@ extension XRPCClient {
 
     func getGallery(uri: String, auth: AuthContext? = nil) async throws -> GetGalleryResponse {
         try await query("social.grain.gallery.getGallery", params: ["gallery": uri], auth: auth, as: GetGalleryResponse.self)
+    }
+
+    /// The Bluesky post that shares a gallery or story, as grain-serve words
+    /// it. Asked without auth: it reads only what is public.
+    func getCrossPost(subject: String) async throws -> GetCrossPostResponse {
+        try await query("social.grain.gallery.getCrossPost", params: ["subject": subject], as: GetCrossPostResponse.self)
     }
 
     func getCommentThread(
