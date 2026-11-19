@@ -51,8 +51,8 @@ private final class SharedSessionLog: @unchecked Sendable {
     }
 }
 
-/// The calls the app makes outside its injected `XRPCClient` — the geocoder,
-/// the Bluesky handle resolver, and push token registration. They reach for
+/// The calls the app makes outside its injected `XRPCClient` — the geocoder
+/// and push token registration. They reach for
 /// `URLSession.shared` directly, so nothing else in the suite exercises them.
 ///
 /// `GrainTestCase` binds `NetworkEnvironment.session` to a mocked session for
@@ -172,41 +172,6 @@ final class NetworkSideEffectTests: GrainTestCase {
         let results = await LocationServices.searchLocation(query: "Lisboa")
 
         XCTAssertEqual(results.count, 1)
-    }
-
-    // MARK: - Bluesky handle resolution
-
-    /// A mention in a cross-post has to become a DID; Bluesky renders an
-    /// unresolved one as plain text.
-    func testAMentionIsResolvedToADID() async {
-        respond(#"{"did": "did:plc:resolved"}"#)
-
-        let facets = await BlueskyPost.parseTextToFacets("Thanks @alice.bsky.social!")
-
-        XCTAssertEqual(log.last?.url?.host, "public.api.bsky.app")
-        XCTAssertEqual(log.queryValue("handle"), "alice.bsky.social")
-        guard case let .mention(did) = facets.first?.features.first else {
-            return XCTFail("Expected a mention facet, got \(facets)")
-        }
-        XCTAssertEqual(did, "did:plc:resolved")
-    }
-
-    /// A handle that doesn't resolve is left as plain text rather than posted
-    /// as a link to nobody.
-    func testAnUnresolvableMentionIsLeftAsPlainText() async {
-        respond("not found", status: 404)
-
-        let facets = await BlueskyPost.parseTextToFacets("Thanks @nobody.bsky.social!")
-
-        XCTAssertTrue(facets.isEmpty)
-    }
-
-    func testAResolverThatAnswersWithGarbageIsIgnored() async {
-        respond("<html>rate limited</html>")
-
-        let facets = await BlueskyPost.parseTextToFacets("Thanks @alice.bsky.social!")
-
-        XCTAssertTrue(facets.isEmpty)
     }
 
     // MARK: - Push token registration
